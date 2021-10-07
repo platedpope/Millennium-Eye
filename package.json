@@ -1,0 +1,33 @@
+{
+  "name": "millennium-eye",
+  "version": "1.0.0",
+  "description": "The official repository for the Millennium Eye Discord bot (colloquially referred to as Eye Bot).",
+  "main": "./index.js",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/platedpope/Millennium-Eye.git"
+  },
+  "author": "platedpope",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/platedpope/Millennium-Eye/issues"
+  },
+  "homepage": "https://github.com/platedpope/Millennium-Eye#readme",
+  "dependencies": {
+    "@discordjs/builders": "^0.6.0",
+    "@discordjs/rest": "^0.1.0-canary.0",
+    "ascii-table": "^0.0.9",
+    "discord-api-types": "^0.23.1",
+    "discord.js": "^13.1.0",
+    "glob": "^7.1.7",
+    "winston": "^3.3.3"
+  },
+  "devDependencies": {
+    "eslint": "^7.32.0",
+    "eslint-config-google": "^0.14.0",
+    "eslint-config-standard": "^16.0.3",
+    "eslint-plugin-import": "^2.24.2",
+    "eslint-plugin-node": "^11.1.0",
+    "eslint-plugin-promise": "^5.1.0"
+  }
+}
