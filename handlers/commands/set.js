@@ -226,7 +226,7 @@ module.exports = new Command({
 			const filter = i => {
 				return (i.isButton() || i.isSelectMenu()) &&
 						/^guild_/.test(i.customId) &&
-						i.user.id === i.user.id
+						i.user.id === interaction.user.id
 			}
 			const collector = interaction.channel.createMessageComponentCollector({ 'filter': filter, time: 15000 })
 
@@ -285,7 +285,7 @@ module.exports = new Command({
 			const filter = i => {
 				return (i.isButton() || i.isSelectMenu()) &&
 						/^channel_/.test(i.customId) &&
-						i.user.id === i.user.id
+						i.user.id === interaction.user.id
 			}
 			const collector = interaction.channel.createMessageComponentCollector({ 'filter': filter, time: 15000 })
 

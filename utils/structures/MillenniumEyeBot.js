@@ -49,9 +49,8 @@ class MillenniumEyeBot extends Discord.Client {
 	 * @param {String | Boolean} value The value of the setting.
 	 */
 	setGuildSetting(guild, setting, value) {
-		const defaultKey = `default${setting.charAt(0).toUpperCase() + setting.slice(1)}`
-
-		if (value === config[defaultKey]) this.guildSettings.remove([guild.id, setting])
+		if (value === this.getDefaultGuildSetting(guild, setting)) 
+			this.guildSettings.remove([guild.id, setting])
 		else this.guildSettings.put([guild.id, setting], value)
 	}
 
@@ -59,39 +58,46 @@ class MillenniumEyeBot extends Discord.Client {
 	 * Helper function to set a configuration item for a channel.
 	 * If the new setting is equal to the default, thenn it will remove the setting
 	 * from the cache entirely.
-	 * @param {Discord.Channel} channel The channel.
+	 * @param {Discord.TextChannel} channel The channel.
 	 * @param {String} setting The key of the setting.
+	 * @param {String | Boolean} value The value of the setting.
 	 */
 	setChannelSetting(channel, setting, value) {
 		if (value === this.getDefaultChannelSetting(channel, setting))
-			this.channelSettings([channel.id, setting])
+			this.channelSettings.remove([channel.id, setting])
 		else this.channelSettings.put([channel.id, setting], value)
+	}
+
+	/**
+	 * Helper function to evaluate the default setting for a server (NOT necessarily its current).
+	 * @param {Discord.Guild} channel The channel to check the settings for.
+	 * @param {String} setting The key of the setting to be checked.
+	 */
+	getDefaultGuildSetting(guild, setting) {
+		const defaultKey = `default${setting.charAt(0).toUpperCase() + setting.slice(1)}`
+
+		return config[defaultKey]
 	}
 
 	/**
 	 * Helper function to evaluate the default setting for a guild.
 	 * @param {Discord.Guild} guild The guild to check the settings for. 
 	 * @param {String} setting The key of the setting to be checked.
-	 * @returns {Boolean | String} The value of the setting.
 	 */
 	getCurrentGuildSetting(guild, setting) {
-		const guildSetting = this.guildSettings.get([guild.id, setting])
-		return guildSetting !== undefined ?
-			guildSetting : config[`default${setting.charAt(0).toUpperCase() + setting.slice(1)}`]
+		return this.guildSettings.get([guild.id, setting]) ?? this.getDefaultGuildSetting(guild, setting)
 	}
 
 	/**
-	 * Helper function to evaluate the default setting for a channel,
+	 * Helper function to evaluate the default setting for a channel (NOT necessarily its current),
 	 * taking into account server overrides.
+	 * This function really is just a more specific form of getCurrentGuildSetting,
+	 * but I keep it around for code clarity's sake.
 	 * @param {Discord.TextChannel} channel The channel to check the settings for.
 	 * @param {String} setting The key of the setting to be checked.
-	 * @returns {Boolean | String} The value of the setting.
 	 */
 	getDefaultChannelSetting(channel, setting) {
-		// reference server override for default if available
-		const guildSetting = this.guildSettings.get([channel.guild.id, setting])
-		return guildSetting !== undefined ?
-			guildSetting : config[`default${setting.charAt(0).toUpperCase() + setting.slice(1)}`]
+		return this.getCurrentGuildSetting(channel.guild, setting)
 	}
 
 	/**
@@ -99,16 +105,9 @@ class MillenniumEyeBot extends Discord.Client {
 	 * taking into account server overrides.
 	 * @param {Discord.TextChannel} channel The channel to check the settings for.
 	 * @param {String} setting The key of the setting to be checked.
-	 * @returns {Boolean | String} The value of the setting.
 	 */
 	getCurrentChannelSetting(channel, setting) {
-		let currSetting = this.channelSettings.get([channel.id, setting])
-		// need to check for undefined, since some settings are boolean values
-		// and might mistakenly be evaluated as false-y
-		if (currSetting === undefined) 
-			currSetting = this.getDefaultChannelSetting(channel, setting)
-
-		return currSetting
+		return this.channelSettings.get([channel.id, setting]) ?? this.getDefaultChannelSetting(channel, setting)
 	}
 }
 
