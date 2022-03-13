@@ -33,10 +33,10 @@
     "eslint-plugin-promise": "^5.1.0"
   },
   "_moduleAliases": {
-    "config" : "data/config.json",
-		"lib/utils": "src/lib/utils",
-		"lib/models": "src/lib/models",
-		"api": "src/handlers/api",
-		"database": "src/handlers/database"
+    "config": "data/config.json",
+    "lib/utils": "src/lib/utils",
+    "lib/models": "src/lib/models",
+    "api": "src/handlers/api",
+    "database": "src/handlers/database"
   }
 }

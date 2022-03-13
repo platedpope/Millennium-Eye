@@ -1,15 +1,14 @@
 
-const config = require('config')
 const { prepareDiscordLogJsMessage } = require('lib/utils/logging')
 const Command = require('lib/models/Command')
 const Query = require('lib/models/Query')
-const { CommandTypes } = require('lib/models/Defines')
+const { CommandTypes, Languages } = require('lib/models/Defines')
 
 // convert available languages to an array of choices that can be parsed by slash commands
 const languageChoices = []
-for (const code in config.languages) {
+for (const code in Languages) {
 	languageChoices.push({
-		'name': config.languages[code],
+		'name': Languages[code],
 		'value': code
 	})
 }

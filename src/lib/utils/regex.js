@@ -1,10 +1,10 @@
-const { queryTypes, languages } = require('config')
+const { QueryTypes, Languages } = require('lib/models/Defines')
 
 function setupQueryRegex(openSymbol, closeSymbol) {
 	const open = escRegex(openSymbol)
 	const close = escRegex(closeSymbol)
-	const regexQueryTypes = `[${(Object.keys(queryTypes)).join('')}]`
-	const regexLanguages = `${(Object.keys(languages)).join('|')}`
+	const regexQueryTypes = `[${(Object.keys(QueryTypes)).join('')}]`
+	const regexLanguages = `${(Object.keys(Languages)).join('|')}`
 	
 	// if open/close are < >, special case: 
 	// !, @, #, : must be ignored to avoid conflict with plaintext discord formatting of stuff like mentions
@@ -28,5 +28,5 @@ function escRegex(string) {
 }
 
 module.exports = {
-	setupQueryRegex
+	setupQueryRegex, escRegex
 }

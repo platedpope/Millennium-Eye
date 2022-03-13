@@ -1,6 +1,7 @@
 const { Message, CommandInteraction } = require('discord.js')
 
 const MillenniumEyeBot = require('./MillenniumEyeBot')
+const { KONAMI_DB_CARD_REGEX, KONAMI_DB_QA_REGEX, YGORG_DB_CARD_REGEX, YGORG_DB_QA_REGEX } = require('./Defines')
 
 class Query {
 	/**
@@ -13,12 +14,13 @@ class Query {
 		// save off state info about where this message was sent
 		this.official = bot.getCurrentChannelSetting(qry.channel, 'official')
 		this.rulings = bot.getCurrentChannelSetting(qry.channel, 'rulings')
+		this.language = bot.getCurrentChannelSetting(qry.channel, 'language')
 		this.qry = qry
 		this.bot = bot
 		
 		// object that will contain all important details
 		// about what we need to respond to in this query
-		this.eval = {}
+		this.eval = []
 
 		this.evaluate(qry)
 	}
@@ -53,17 +55,80 @@ class Query {
 					for (const m of matches) {
 						let qType = m[1] ?? (this.rulings ? 'r' : 'i')
 						let q = m[2]
+						// try converting the query to an integer to see if it's a card or ruling ID
+						let intQ = parseInt(q, 10)
+						if (!isNaN(intQ)) {
+							// annoying special case: there is technically a card named "7"...
+							if (qType !== 'q' && q !== '7') {
+								q = intQ
+							}
+						}
 						let qLan = m[3] ?? lan
 
-						if (!(qLan in this.eval))
-							this.eval[qLan] = []
-
-						const qDetails = { 'type': qType, 'query': q }
-						this.eval[qLan]  = [ ...this.eval[qLan], qDetails ]
+						this.addQueryToEval({
+							'type': qType,
+							'content': q,
+							'lan': qLan
+						})
 					}
 				}
 			}
 		}
+
+		// also check for any particular link syntax
+		// first, card links
+		const cardLinks = [
+			...qryContent.matchAll(KONAMI_DB_CARD_REGEX), 
+			...qryContent.matchAll(YGORG_DB_CARD_REGEX)
+		]
+		if (cardLinks.length) {
+			for (const l of cardLinks) {
+				let qType = this.rulings ? 'r' : 'i'
+				let q = parseInt(l[1], 10)
+				let qLan = this.language
+
+				this.addQueryToEval({
+					'type': qType,
+					'content': q,
+					'lan': qLan
+				})
+			}
+		}
+
+		// now QA links
+		const qaLinks = [
+			...qryContent.matchAll(KONAMI_DB_QA_REGEX),
+			...qryContent.matchAll(YGORG_DB_QA_REGEX)
+		]
+		if (qaLinks.length) {
+			for (const l of qaLinks) {
+				let qType = 'q'
+				let q = parseInt(l[1], 10)
+				let qLan = this.language
+
+				this.addQueryToEval({
+					'type': qType,
+					'content': q,
+					'lan': qLan
+				})
+			}
+		}
+	}
+
+	/**
+	 * Adds a query (with type, content, and language) to the eval.
+	 * Does not add the query if one exists in the eval with the same type, content, and language.
+	 * @param {Object} qry The query to add to the eval.
+	 */
+	addQueryToEval(qry) {
+		// ignore this query if there's one in eval with the same parameters
+		const identicalQuery = this.eval.some(oldQry =>
+			qry.type === oldQry.type &&
+			qry.content === oldQry.content &&
+			qry.lan === oldQry.lan)
+
+		if (!identicalQuery)
+			this.eval.push(qry)
 	}
 }
 

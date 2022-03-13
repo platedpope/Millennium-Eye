@@ -4,13 +4,13 @@ const config = require('config')
 const { generateError } = require('lib/utils/logging')
 const Command = require('lib/models/Command')
 const MillenniumEyeBot = require('lib/models/MillenniumEyeBot')
-const { CommandTypes, ChannelTypes } = require('lib/models/Defines')
+const { CommandTypes, Languages, LanguageEmojis } = require('lib/models/Defines')
 
 // convert available languages to an array of choices that can be parsed by slash commands
 const languageChoices = []
-for (const code in config.languages) {
+for (const code in Languages) {
 	languageChoices.push({
-		'name': config.languages[code],
+		'name': Languages[code],
 		'value': code
 	})
 }
@@ -26,7 +26,7 @@ function generateServerComponents(interaction, bot, disable = false) {
 	const messageRows = []
 	const guildOfficial = bot.getCurrentGuildSetting(interaction.guild, 'official')
 	const guildRulings = bot.getCurrentGuildSetting(interaction.guild, 'rulings')
-	// const guildLanguage = bot.getCurrentGuildSetting(interaction.guild, 'language')
+	const guildLanguage = bot.getCurrentGuildSetting(interaction.guild, 'language')
 
 	const officialRow = new MessageActionRow()
 		.addComponents(
@@ -58,19 +58,18 @@ function generateServerComponents(interaction, bot, disable = false) {
 		)
 	messageRows.push(rulingsRow)
 
-	/* removing language choices for now, seem pointless since syntax always wins
 	const languageRow = new MessageActionRow()
 	const languageSelect = new MessageSelectMenu()
 		.setCustomId('guild_language_select')
 		.setPlaceholder('Select Language')
 		.setDisabled(disable)
 	const languageOptions = []
-	for (const code in config.languages) {
+	for (const code in Languages) {
 		languageOptions.push(
 			{
-				label: `Default Query Language: ${config.languages[code]}`,
+				label: `Default Query Language: ${Languages[code]}`,
 				value: code,
-				emoji: config.languageEmojis[code],
+				emoji: LanguageEmojis[code],
 				default: code === guildLanguage
 			}
 		)
@@ -78,7 +77,6 @@ function generateServerComponents(interaction, bot, disable = false) {
 	languageSelect.addOptions(languageOptions)
 	languageRow.addComponents(languageSelect)
 	messageRows.push(languageRow)
-	*/
 
 	return messageRows
 }
@@ -95,7 +93,7 @@ function generateChannelComponents(bot, target, useMenu, disable = false) {
 	const messageRows = []
 	const channelOfficial = bot.getCurrentChannelSetting(target, 'official')
 	const channelRulings = bot.getCurrentChannelSetting(target, 'rulings')
-	// const channelLanguage = bot.getCurrentChannelSetting(target, 'language')
+	const channelLanguage = bot.getCurrentChannelSetting(target, 'language')
 
 	if (useMenu) {
 		const channelRow = new MessageActionRow()
@@ -149,20 +147,19 @@ function generateChannelComponents(bot, target, useMenu, disable = false) {
 		)
 	messageRows.push(rulingsRow)
 
-	/* removing language choices for now, seem pointless since syntax always wins
 	const languageRow = new MessageActionRow()
 	const languageSelect = new MessageSelectMenu()
 		.setCustomId('channel_language_select')
 		.setPlaceholder('Select Language')
 		.setDisabled(disable)
 	const languageOptions = []
-	for (const code in config.languages) {
+	for (const code in Languages) {
 		const isCurrentLanguage = code === channelLanguage
 		languageOptions.push(
 			{
-				label: `Default Query Language: ${config.languages[code]}`,
+				label: `Default Query Language: ${Languages[code]}`,
 				value: code,
-				emoji: config.languageEmojis[code],
+				emoji: LanguageEmojis[code],
 				default: isCurrentLanguage
 			}
 		)
@@ -170,7 +167,6 @@ function generateChannelComponents(bot, target, useMenu, disable = false) {
 	languageSelect.addOptions(languageOptions)
 	languageRow.addComponents(languageSelect)
 	messageRows.push(languageRow)
-	*/
 
 	return messageRows
 }
@@ -179,15 +175,15 @@ function generateChannelComponents(bot, target, useMenu, disable = false) {
  * Helper function to generate the interactive buttons for the "print" command.
  * @param {String} selection The currently selected configuration to print (channel or server).
  */
-function generatePrintComponents(selection = undefined) {
+function generateConfigSelectComponents(selection = undefined) {
 	const messageRows = []
 
 	const selectRow = new MessageActionRow()
 		.addComponents(
 			new MessageButton()
-				.setCustomId('server_print')
+				.setCustomId('guild_print')
 				.setLabel('Server Configuration')
-				.setStyle(selection === 'server' ? 'SUCCESS' : 'SECONDARY'),
+				.setStyle(selection === 'guild' ? 'SUCCESS' : 'SECONDARY'),
 			new MessageButton()
 				.setCustomId('channel_print')
 				.setLabel('Channel Configuration')
@@ -208,27 +204,9 @@ module.exports = new Command({
 		description: 'Set configuration items to determine how the bot treats a particular server or channel.',
 		options: [
 			{
-				name: 'print',
-				description: 'Print out current server or channel configuration items.',
+				name: 'settings',
+				description: 'Print, toggle, and change server or channel configuration items.',
 				type: CommandTypes.SUB_COMMAND
-			},
-			{
-				name: 'server',
-				description: 'Set server-wide configuration items.',
-				type: CommandTypes.SUB_COMMAND
-			},
-			{
-				name: 'channel',
-				description: 'Set channel-specific configuration items.',
-				type: CommandTypes.SUB_COMMAND,
-				options: [
-					{
-						name: 'target',
-						description: 'The target channel. Omitting this option will give a list to choose from.',
-						type: CommandTypes.CHANNEL,
-						channel_types: [ ChannelTypes.GUILD_TEXT, ChannelTypes.GUILD_PUBLIC_THREAD, ChannelTypes.GUILD_PRIVATE_THREAD ]
-					}
-				]
 			},
 			{
 				name: 'query',
@@ -291,7 +269,7 @@ module.exports = new Command({
 				const qOpen = interaction.options.getString('open', true)
 				const qClose = interaction.options.getString('close', true)
 				const qLan = interaction.options.getString('language', true)
-				const fullLan = config.languages[qLan]
+				const fullLan = Languages[qLan]
 				
 				bot.setGuildQuery(interaction.guild, qOpen, qClose, qLan)
 
@@ -299,7 +277,7 @@ module.exports = new Command({
 			}
 			else if (sc === 'remove') {
 				const rLan = interaction.options.getString('language', true)
-				const fullLan = config.languages[rLan]
+				const fullLan = Languages[rLan]
 
 				const removed = bot.removeGuildQuery(interaction.guild, rLan)
 				if (removed) 
@@ -308,21 +286,37 @@ module.exports = new Command({
 					await interaction.reply({ content: `Could not find any existing query syntax associated with ${fullLan} queries, no changes were made.`, ephemeral: true })
 			}
 		}
-		else if (sc === 'server') {
-			if (!interaction.guild)
-				throw generateError(null, 'This command can only be used within a server.')
+		else if (sc === 'settings') {
+			let configSelection = undefined
+			let channelTarget = interaction.channel
+			let msgContent = 'Select which configuration to print.'
+			const useChannelMenu = interaction.guild.channels.cache.filter(c => c.isText()).size <= 25
+			let msgComps = generateConfigSelectComponents()
 
-			await interaction.reply({ content: 'Select your desired server configuration options.', components: generateServerComponents(interaction, bot), ephemeral: true })
+			await interaction.reply({ content: msgContent, components: msgComps })
 
 			const filter = i => {
 				return (i.isButton() || i.isSelectMenu()) &&
-						/^guild_/.test(i.customId) &&
+						(/^channel_/.test(i.customId) || /^guild_/.test(i.customId)) &&
 						i.user.id === interaction.user.id
 			}
 			const collector = interaction.channel.createMessageComponentCollector({ 'filter': filter, time: 15000 })
 
 			collector.on('collect', async i => {
-				if (i.customId === 'guild_official_mode') {
+				// changing which settings are being shown to be interacted with
+				if (i.customId === 'guild_print') {
+					configSelection = 'guild'
+				}
+				else if (i.customId === 'channel_print') {
+					configSelection = 'channel'
+					msgContent = `**Channel Configuration for <#${channelTarget.id}>:**`
+				}
+				else if (i.customId === 'channel_select') {
+					channelTarget = interaction.guild.channels.cache.get(i.values[0])
+					msgContent = `**Channel Configuration for <#${channelTarget.id}>:**`
+				}
+				// setting server-related configuration
+				else if (i.customId === 'guild_official_mode') {
 					const currOfficial = bot.getCurrentGuildSetting(interaction.guild, 'official')
 					bot.setGuildSetting(interaction.guild, 'official', !currOfficial)
 				}
@@ -330,128 +324,56 @@ module.exports = new Command({
 					const currRulings = bot.getCurrentGuildSetting(interaction.guild, 'rulings')
 					bot.setGuildSetting(interaction.guild, 'rulings', !currRulings)
 				}
-				/* removing language choices for now, seem pointless since syntax always wins
 				else if (i.customId === 'guild_language_select') {
 					const newLanguage = i.values[0]
 					bot.setGuildSetting(interaction.guild, 'language', newLanguage)
 				}
-				*/
-
-				await i.update({ content: 'Select your desired server configuration options.', components: generateServerComponents(interaction, bot) })
-				collector.resetTimer()
-			})
-
-			collector.on('end', async collected => {
-				await interaction.editReply({ content: '**No further selections possible.** Current server configuration:', components: generateServerComponents(interaction, bot, true) })
-			})
-			
-		}
-		else if (sc === 'channel') {
-			let target = interaction.options.getChannel('target') ?? interaction.channel
-			// determine whether we should render a select menu
-			let useMenu = interaction.guild && !(interaction.options.getChannel('target'))
-			if (useMenu) {
-				// if we're gonna use a menu, check that the number of text channels is <= 25, 
-				// since the maximum number of menu options is 25
-				const channels = interaction.guild.channels.cache.filter(c => c.isText())
-				if (channels.size > 25) {
-					var menuNote =  `(**Note:** Not rendering channel dropdown selection because there are ${channels.size()} text channels in the server, but the menu can only support 25 options.` +
-								'Specify a target channel to modify channels other than the current.)'
-					useMenu = false
-				}
-			}
-
-			let selectionPrompt = 'Select your desired channel configuration options.'
-			if (menuNote) selectionPrompt += `\n${menuNote}`
-
-			await interaction.reply({ content: selectionPrompt, components: generateChannelComponents(bot, target, useMenu), ephemeral: true })
-
-			const filter = i => {
-				return (i.isButton() || i.isSelectMenu()) &&
-						/^channel_/.test(i.customId) &&
-						i.user.id === interaction.user.id
-			}
-			const collector = interaction.channel.createMessageComponentCollector({ 'filter': filter, time: 15000 })
-
-			collector.on('collect', async i => {
-				if (i.customId === 'channel_select') {
-					target = interaction.guild.channels.cache.get(i.values[0])
-				}
+				// setting channel-related configuration
 				else if (i.customId === 'channel_official_mode') {
-					const currOfficial = bot.getCurrentChannelSetting(target, 'official')
-					bot.setChannelSetting(target, 'official', !currOfficial)
+					const currOfficial = bot.getCurrentChannelSetting(channelTarget, 'official')
+					bot.setChannelSetting(channelTarget, 'official', !currOfficial)
 				}
 				else if (i.customId === 'channel_rulings_mode') {
-					const currRulings = bot.getCurrentChannelSetting(target, 'rulings')
-					bot.setChannelSetting(target, 'rulings', !currRulings)
+					const currRulings = bot.getCurrentChannelSetting(channelTarget, 'rulings')
+					bot.setChannelSetting(channelTarget, 'rulings', !currRulings)
 				}
-				/* removing language choices for now, seem pointless since syntax always wins
 				else if (i.customId === 'channel_language_select') {
 					const newLanguage = i.values[0]
-					bot.setChannelSetting(target, 'language', newLanguage)
+					bot.setChannelSetting(channelTarget, 'language', newLanguage)
 				}
-				*/
 
-				await i.update({ content: selectionPrompt, components: generateChannelComponents(bot, target, useMenu) })
-				collector.resetTimer()
-			})
+				if (configSelection === 'guild') {
+					// gather query syntaxes
+					let queryString = ''
+					const defaultSyntax = { open: config.defaultOpen, close: config.defaultClose }
+					if (interaction.guild)
+						for (const lan in bot.getGuildQueries(interaction.guild)) {
+							let syntax = bot.guildSettings.get([interaction.guild.id, 'queries', lan])
+							// if this language is in guildQueries but not in guildSettings, it was the default addition
+							if (!syntax)
+								syntax = defaultSyntax
 
-			collector.on('end', async collected => {
-				await interaction.editReply({ content: `**No further selections possible.** Channel configuration for <#${target.id}>:`, components: generateChannelComponents(bot, target, false, true) })
-			})
-		}
-		else if (sc === 'print') {
-			// gather query syntaxes
-			let queryString = ''
-			for (const lan in bot.getGuildQueries(interaction.guild)) {
-				let syntax = bot.guildSettings.get([interaction.guild.id, 'queries', lan])
-				// if this language is in guildQueries but not in guildSettings, it was the default addition
-				if (!syntax)
-					syntax = { open: config.defaultOpen, close: config.defaultClose }
+							queryString += `${LanguageEmojis[lan]} ${Languages[lan]}: \`${syntax.open}query contents${syntax.close}\`\n`
+						}
+					// just print out the default outside of servers
+					else queryString += `${LanguageEmojis[config.defaultLanguage]} ${Languages[config.defaultLanguage]}: \`${defaultSyntax.open}query contents${defaultSyntax.close}\`\n`
 
-				queryString += `${config.languageEmojis[lan]} ${config.languages[lan]}: \`${syntax.open}query contents${syntax.close}\`\n`
-			}
-			if (queryString === '') 
-				queryString = '__Query Syntaxes__: none\n'
-			else
-				queryString = `__Query Syntaxes__\n${queryString}`
-
-			let printSelection = undefined
-			let channelTarget = interaction.channel
-			let useChannelMenu = interaction.guild.channels.cache.filter(c => c.isText()).size <= 25
-			let msgContent = 'Select which configuration to print.'
-
-			let msgComps = generatePrintComponents()
-			await interaction.reply({ content: msgContent, components: msgComps })
-
-			const filter = i => {
-				return (i.isButton() || i.isSelectMenu()) &&
-						i.user.id === interaction.user.id
-			}
-			const collector = interaction.channel.createMessageComponentCollector({ 'filter': filter, time: 15000 })
-
-			collector.on('collect', async i => {
-				if (i.customId === 'server_print') {
-					printSelection = 'server'
+					if (queryString === '') 
+						queryString = '__Query Syntaxes__: none\n'
+					else
+						queryString = `__Query Syntaxes__\n${queryString}`
+					
 					msgContent = `**Current Server Configuration:**\n${queryString}`
-					msgComps = [...generateServerComponents(interaction, bot), ...generatePrintComponents(printSelection)]
+					msgComps = [...generateServerComponents(interaction, bot), ...generateConfigSelectComponents(configSelection)]
 				}
-				else if (i.customId === 'channel_print') {
-					printSelection = 'channel'
-					msgContent = `**Channel Configuration for <#${channelTarget.id}>:**`
-					msgComps = [...generateChannelComponents(bot, channelTarget, useChannelMenu), ...generatePrintComponents(printSelection)]
-				}
-				else if (i.customId === 'channel_select') {
-					channelTarget = interaction.guild.channels.cache.get(i.values[0])
-					msgContent = `**Channel Configuration for <#${channelTarget.id}>:**`
-					msgComps = [...generateChannelComponents(bot, channelTarget, useChannelMenu), ...generatePrintComponents(printSelection)]
-				}
+				else
+					msgComps = [...generateChannelComponents(bot, channelTarget, useChannelMenu), ...generateConfigSelectComponents(configSelection)]
 
 				await i.update({ content: msgContent, components: msgComps })
 				collector.resetTimer()
 			})
 
-			collector.on('end', async collected => {
+			collector.on('end', async () => {
 				return
 			})
 		}

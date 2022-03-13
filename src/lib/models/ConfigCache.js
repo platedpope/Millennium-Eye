@@ -147,14 +147,15 @@ class ConfigCache {
 				}
 			}
 			catch (err) {
-				// key didn't exist somewhere along the way
-				return retval
+				// key probably didn't exist somewhere along the way
+				// logError(err, 'Encountered error removing from config cache.')
 			}
 		}
 
-		if (retval)
+		if (retval !== undefined) {
 			// something was removed, save
 			this.save()
+		}
 
 		return retval
 	}

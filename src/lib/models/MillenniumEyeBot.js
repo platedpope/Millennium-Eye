@@ -5,6 +5,7 @@ const { generateError } = require('lib/utils/logging')
 const { setupQueryRegex } = require('lib/utils/regex')
 const Command = require('./Command')
 const ConfigCache = require('./ConfigCache')
+const { Languages } = require('./Defines')
 
 const intents = new Discord.Intents(32767)
 
@@ -86,7 +87,7 @@ class MillenniumEyeBot extends Discord.Client {
 	 */
 	setGuildQuery(guild, open, close, language) {
 		const defaultSyntaxRemoved = this.guildSettings.get([guild.id, 'defaultSyntaxRemoved']) ?? false
-		const fullLanguage = config.languages[language]
+		const fullLanguage = Languages[language]
 		// check to make sure no other different-language syntax is using those symbols
 		// (overwriting the same language with a different syntax is fine)
 		// check default syntax overlap first if this server hasn't opted out of using it
@@ -105,7 +106,7 @@ class MillenniumEyeBot extends Discord.Client {
 				if (currQueries[qLan]['open'] === open && 
 					currQueries[qLan]['close'] === close)
 				{
-					const conflictedLanguage = config.languages[qLan]
+					const conflictedLanguage = Languages[qLan]
 					if (qLan !== language)  
 						throw generateError(
 							null,

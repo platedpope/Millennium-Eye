@@ -19,7 +19,7 @@ module.exports = new Event({
 		// construct list of properties that are important to evaluating this query
 		const qry = new Query(message, bot)
 
-		if (Object.keys(qry.eval).length !== 0) 
+		if (qry.eval.length) 
 			for (const m of prepareDiscordLogJsMessage(qry.eval)) {
 				message.channel.send(m)
 			}

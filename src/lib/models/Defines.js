@@ -1,5 +1,39 @@
+/* eslint-disable no-useless-escape */
 module.exports = {
+	KONAMI_DB_QA_REGEX: /https?:\/\/www\.db\.yugioh-card\.com\/yugiohdb\/faq_search\.action\?ope=5&fid=(\d+)/g,
+	KONAMI_DB_CARD_REGEX: /https?:\/\/www\.db\.yugioh-card\.com\/yugiohdb\/(?:card_search|faq_search)\.action\?ope=[24]&cid=(\d+)/g,
+	YGORG_DB_QA_REGEX: /https?:\/\/db\.ygorganization\.com\/qa#(\d+)/g,
+	YGORG_DB_CARD_REGEX: /https?:\/\/db\.ygorganization\.com\/card#(\d+)/g,
 	EDIT_TIMEOUT: 10,
+	QueryTypes: {
+		'r': 'ruling',
+		'a': 'art',
+		'd': 'date',
+		'p': 'yugipedia',
+		'$': 'price',
+		'f': 'faq',
+		'q': 'qna'
+	},
+	Languages: {
+		'de': 'German',
+		'en': 'English',
+		'es': 'Spanish',
+		'fr': 'French',
+		'it': 'Italian',
+		'ja': 'Japanese',
+		'ko': 'Korean',
+		'pt': 'Portuguese'
+	},
+	LanguageEmojis: {
+		'de': '🇩🇪',
+		'en': '🇬🇧',
+		'es': '🇪🇸',
+		'fr': '🇫🇷',
+		'it': '🇮🇹',
+		'ja': '🇯🇵',
+		'ko': '🇰🇷',
+		'pt': '🇵🇹'
+	},
 	CommandTypes: {
 		'SUB_COMMAND': 1,
 		'SUB_COMMAND_GROUP': 2,
