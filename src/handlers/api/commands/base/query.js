@@ -1,8 +1,8 @@
 
 const { prepareDiscordLogJsMessage } = require('lib/utils/logging')
 const Command = require('lib/models/Command')
-const Query = require('lib/models/Query')
 const { CommandTypes, Languages } = require('lib/models/Defines')
+const { processQuery } = require('user/QueryHandler')
 
 // convert available languages to an array of choices that can be parsed by slash commands
 const languageChoices = []
@@ -29,13 +29,11 @@ module.exports = new Command({
 		]
 	},
 	execute: async (interaction, bot) => {
-		// construct list of properties that are important to evaluating this query
-		const qry = new Query(interaction, bot)
+		const qry = new processQuery(bot, interaction)
 
 		if (Object.keys(qry.eval).length !== 0) 
 			for (const m of prepareDiscordLogJsMessage(qry.eval)) {
 				await interaction.reply(m)
 			}
-		
 	}
 })

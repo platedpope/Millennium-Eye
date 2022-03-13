@@ -37,6 +37,7 @@
     "lib/utils": "src/lib/utils",
     "lib/models": "src/lib/models",
     "api": "src/handlers/api",
-    "database": "src/handlers/database"
+    "database": "src/handlers/database",
+    "user": "src/handlers/user"
   }
 }

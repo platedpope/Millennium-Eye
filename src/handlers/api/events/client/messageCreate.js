@@ -3,7 +3,7 @@ const Discord = require('discord.js')
 const { prepareDiscordLogJsMessage } = require ('lib/utils/logging')
 const MillenniumEyeBot = require('lib/models/MillenniumEyeBot')
 const Event = require('lib/models/Event')
-const Query = require('lib/models/Query')
+const { processQuery } = require('user/QueryHandler')
 
 module.exports = new Event({
 	event: 'messageCreate',
@@ -16,10 +16,9 @@ module.exports = new Event({
 		if (message.author.bot) return
 		if (!message.content) return
 
-		// construct list of properties that are important to evaluating this query
-		const qry = new Query(message, bot)
+		const qry = processQuery(bot, message)
 
-		if (qry.eval.length) 
+		if (Object.keys(qry.eval).length !== 0) 
 			for (const m of prepareDiscordLogJsMessage(qry.eval)) {
 				message.channel.send(m)
 			}
