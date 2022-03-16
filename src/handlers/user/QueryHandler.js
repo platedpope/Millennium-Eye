@@ -12,7 +12,21 @@ const Query = require('lib/models/Query')
 function processQuery(bot, msg) {
 	const qry = new Query(msg, bot)
 
-	return qry
+	queryCardInfo(qry)
+}
+
+/**
+ * Wraps the logic and program flow of search evaluation.
+ * This function doesn't do any actual query work, but it defines the path
+ * that searches take through the multiple databases and APIs available to the bot.
+ * @param {Query} qry The query that needs to have its card info evaluated.
+ */
+function queryCardInfo(qry) {
+	searchSteps = [
+		
+	]
+
+	
 }
 
 module.exports = {

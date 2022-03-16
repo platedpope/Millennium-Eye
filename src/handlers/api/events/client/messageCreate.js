@@ -18,8 +18,8 @@ module.exports = new Event({
 
 		const qry = processQuery(bot, message)
 
-		if (Object.keys(qry.eval).length !== 0) 
-			for (const m of prepareDiscordLogJsMessage(qry.eval)) {
+		if (qry.searches.length !== 0) 
+			for (const m of prepareDiscordLogJsMessage(qry.searches)) {
 				message.channel.send(m)
 			}
 	}

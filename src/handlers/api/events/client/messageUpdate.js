@@ -22,7 +22,7 @@ module.exports = new Event({
 		if (newMessage.editedAt > timeout) return
 
 		const newQry = new Query(newMessage, bot)
-		let toEval = newQry.eval
+		let toEval = newQry.searches
 
 		// If both messages have content, find anything new in the new message.
 		if (oldMessage.content) {
@@ -33,7 +33,7 @@ module.exports = new Event({
 		// If the old message didn't have content, then just evaluate this as something brand new;
 		// it was probably edited to include a bot mention it didn't have before.
 
-		if (Object.keys(toEval).length !== 0) {
+		if (toEval.length !== 0) {
 			for (const m of prepareDiscordLogJsMessage(toEval)) {
 				newMessage.channel.send(m)
 			}
