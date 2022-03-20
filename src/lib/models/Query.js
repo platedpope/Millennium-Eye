@@ -25,11 +25,11 @@ class Search {
 		// as the databases/APIs find a better search term.
 		this.term = content
 		/** 
-		 * @type {Map<String,Set} Each type-language duo associated with this search.
+		 * @type {Map<String,Set} Each language-type pair associated with this search.
 		 */
-		this.types = new Map()
+		this.lanToTypesMap = new Map()
 		if (type !== undefined && language !== undefined)
-			this.types.set(type, new Set([language]))
+			this.addTypeToLan(language, type)
 		
 		// This starts as nothing, but will become actual data if this search
 		// ever gets as far as being mapped to proper data.
@@ -41,12 +41,15 @@ class Search {
 	 * @param {String} type The type of search (e.g., i, r, etc.)
 	 * @param {String} language The language of the search (e.g., en, es, etc.)
 	 */
-	addType(type, language) {
+	addTypeToLan(type, language) {
 		// If this one doesn't already exist in the map, just add it.
-		if (this.types.get(type) === undefined)
-			this.types.set(type, new Set([language]))
+		if (this.lanToTypesMap.get(language) === undefined)
+			this.lanToTypesMap.set(language, new Set([type]))
 		// Otherwise, add it and let JS Set handle conflicts.
-		else this.types.get(type).add(language)
+		else {
+			if (type instanceof Set) this.types.set(language, type) 
+			else this.lanToTypesMap.get(language).add(type)
+		}
 	}
 
 	/**
@@ -72,6 +75,10 @@ class Search {
 				// This type exists in both Searches. Add any new languages to this one, let JS Set handle conflicts.
 				thisSearchType.add(...otherLans)
 		})
+
+		// Integrate any new data this might have.
+		if (this.data === undefined && otherSearch.data !== undefined)
+			this.data = otherSearch.data
 	}
 }
 
@@ -84,22 +91,31 @@ class Query {
 	/**
 	 * Initializes the query's properties (regexes to use to parse the message, official mode, etc.)
 	 * by referencing the properties of the given qry.
-	 * @param {Message | CommandInteraction} qry The message or interaction associated with the query.
+	 * @param {Message | CommandInteraction | Query} qry The message or interaction associated with the query, or another Query to copy the data of.
 	 * @param {MillenniumEyeBot} bot The bot.
 	 */
 	constructor(qry, bot) {
-		// Save off state info about where this message was sent.
-		this.official = bot.getCurrentChannelSetting(qry.channel, 'official')
-		this.rulings = bot.getCurrentChannelSetting(qry.channel, 'rulings')
-		this.language = bot.getCurrentChannelSetting(qry.channel, 'language')
-		this.bot = bot
-		
-		/**
-		 * @type {Array{Search}} The data associated with all searches in this query.
-		 */
-		this.searches = []
-
-		this.evaluateMessage(qry)
+		if (qry instanceof Query) {
+			this.official = qry.official
+			this.rulings = qry.rulings
+			this.language = qry.language
+			this.bot = qry.bot
+			this.searches = qry.searches 
+		}
+		else {
+			// Save off state info about where this message was sent.
+			this.official = bot.getCurrentChannelSetting(qry.channel, 'official')
+			this.rulings = bot.getCurrentChannelSetting(qry.channel, 'rulings')
+			this.language = bot.getCurrentChannelSetting(qry.channel, 'language')
+			this.bot = bot
+			
+			/**
+			 * @type {Array{Search}} The data associated with all searches in this query.
+			 */
+			this.searches = []
+	
+			this.evaluateMessage(qry)
+		}
 	}
 
 	/**
@@ -130,10 +146,11 @@ class Query {
 				const matches = [...msgContent.matchAll(guildQueries[lan])]
 				if (matches.length) {
 					for (const m of matches) {
+						let sType = m[1] ?? (this.rulings ? 'r' : 'i')
 						let sContent = m[2]
-						// If the query content has a link in it, ignore it to avoid really dumb behavior.
+						// If the search content has a link in it, ignore it to avoid really dumb behavior.
 						if (IGNORE_LINKS_REGEX.test(sContent)) continue
-						// Try converting the query to an integer to see if it's a card or ruling ID.
+						// Try converting the search to an integer to see if it's a card or ruling ID.
 						let intSContent = parseInt(sContent, 10)
 						if (!isNaN(intSContent)) {
 							// Special case: there is a card named "7"...
@@ -141,7 +158,6 @@ class Query {
 								sContent = intSContent
 							}
 						}
-						let sType = m[1] ?? (this.rulings ? 'r' : 'i')
 						let sLan = m[3] ?? lan
 
 						this.addSearch(sContent, sType, sLan)
@@ -183,7 +199,7 @@ class Query {
 
 	/**
 	 * Adds a search to the search array. If the search content already exists,
-	 * then add a new type/language to it as necessary.
+	 * then add a new language-type pair to it as necessary.
 	 * @param {String | Number} content The content of the search (i.e., what is being searched for).
 	 * @param {String} type The type of search (e.g., i, r, etc.)
 	 * @param {String} language The language of the search (e.g., en, es, etc.)
@@ -192,9 +208,8 @@ class Query {
 		// Handle duplicates. If we already have a search of this content,
 		// then track any new type or language to evaluate for it.
 		const oldSearch = this.findSearch(content)
-		if (oldSearch !== undefined) {
-			oldSearch.addType(type, language)
-		}
+		if (oldSearch !== undefined)
+			oldSearch.addTypeToLan(type, language)
 		// Something new to look for...
 		else this.searches.push(new Search(content, type, language))
 	}
@@ -210,19 +225,33 @@ class Query {
 	}
 
 	/**
-	 * Returns all searches in this Query that have no resolved data.
+	 * Returns all searches in this Query that have not resolved all info relevant to them.
 	 * @returns {Array<Search>} All searches with undefined data properties.
 	 */
 	getUnresolvedSearches() {
-		return this.searches.filter(s => s.data === undefined)
+		return this.searches.filter(s => { 
+			// If this has no data at all, return immedately.
+			if (s.data === undefined) return true
+			else {
+				// Otherwise, there's a possibility this has data for some but not all languages it needs.
+				// Check the data "name" property (which is a map of language -> name in that language)
+				// to see whether it has an entry corresponding to each language.
+				for (const l in s.lanToTypesMap.keys()) {
+					if (s.data.name.get(l) === undefined) return true
+				}
+			}
+			// Otherwise, this search has everything it needs.
+			return false
+		})
 	}
 
 	/**
 	 * Updates the search term associated with the Search object that has the given original search.
-	 * If any other Search objects we know of are already using this term, they will all be
+	 * If any other searches we know of are already using this term, they will all be
 	 * consolidated into one.
-	 * @param {String} originalTerm The original term used to create the search.
-	 * @param {String} newTerm The new term to be associated with that search.
+	 * @param {String} originalTerm The current term used to refer to the search.
+	 * @param {String} newTerm The new term to be used to refer to the search.
+	 * @returns {Boolean} If the search already existed and caused a consolidation, returns true. Otherwise, false.
 	 */
 	updateSearchTerm(originalTerm, newTerm) {
 		let originalSearch = this.findSearch(originalTerm)
@@ -230,14 +259,18 @@ class Query {
 		// Does a search already exist that's using the new term?
 		let newSearch = this.findSearch(newTerm)
 		if (newSearch !== undefined) {
-			// If so, then just consolidate these two searches into one.
-			newSearch.mergeWith(originalSearch)
 			// Remove the original Search from our array.
-			this.searches.splice(this.searches.findIndex(s => s.originals.has(originalTerm)), 1)
+			this.searches.splice(this.searches.indexOf(s => s.originals.has(originalTerm)), 1)
+			// Consolidate the two.
+			newSearch.mergeWith(originalSearch)
+
+			return true
 		}
-		else
+		else {
 			// Otherwise, just update the term of the one we found originally.
 			originalSearch.term = newTerm
+			return false
+		}
 	}
 
 	/**
@@ -259,23 +292,23 @@ class Query {
 				onlyInThis.push(thisSearch)
 			else {
 				// If both have the same searches, only track any new search types.
-				thisSearch.types.forEach((thisLans, thisType) => {
-					const otherSearchLans = otherSearch.types.get(thisType)
+				thisSearch.types.forEach((thisTypes, thisLan) => {
+					const otherSearchLans = otherSearch.types.get(thisLan)
 					if (otherSearchLans === undefined) {
-						// If the new search has a type this one doesn't, just add it.
-						trimmedSearch.types.set(thisType, thisLans)
+						// If the new search has a language this one doesn't, just add it.
+						trimmedSearch.addTypeToLan(thisTypes, thisLan)
 					}
 					else {
-						// This type exists in both Searches. 
-						// Look for any languages that exist in this one but not in the other, then add them.
-						const lansOnlyInThis = new Set()
-						thisLans.forEach(lan => {
-							if (!otherSearchLans.has(lan))
-								lansOnlyInThis.add(lan)
+						// This language exists in both Searches. 
+						// Look for any search types that exist in this one but not in the other, then add them.
+						const typesOnlyInThis = new Set()
+						thisTypes.forEach(t => {
+							if (!otherSearchLans.has(t))
+								typesOnlyInThis.add(t)
 						})
 
-						if (lansOnlyInThis.size)
-							trimmedSearch.types.set(thisType, lansOnlyInThis)
+						if (typesOnlyInThis.size)
+							trimmedSearch.addTypeToLan(typesOnlyInThis, thisLan)
 					}
 				})
 
@@ -289,4 +322,6 @@ class Query {
 	}
 }
 
-module.exports = Query
+module.exports = { 
+	Query, Search 
+}

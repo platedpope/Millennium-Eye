@@ -77,7 +77,7 @@ function generateError(logMessage, channelResponse) {
  */
 function prepareDiscordLogJsMessage(obj) {
 	const formattedMsgs = []
-	const objString = inspect(obj, {depth: null})
+	const objString = inspect(obj, { depth: null })
 	
 	const objMsgs = breakUpDiscordMessage(objString)
 	for (const m of objMsgs)

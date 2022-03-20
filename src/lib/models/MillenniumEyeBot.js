@@ -1,11 +1,12 @@
 const Discord = require('discord.js')
+const Cache = require('timed-cache')
 
 const config = require('config')
 const { generateError } = require('lib/utils/logging')
 const { setupQueryRegex } = require('lib/utils/regex')
 const Command = require('./Command')
 const ConfigCache = require('./ConfigCache')
-const { Languages } = require('./Defines')
+const { Languages, MESSAGE_TIMEOUT } = require('./Defines')
 
 const intents = new Discord.Intents(32767)
 
@@ -20,15 +21,30 @@ class MillenniumEyeBot extends Discord.Client {
 
 		this.guildSettings = new ConfigCache('guildSettings', true)
 		this.channelSettings = new ConfigCache('channelSettings', true)
-		// track regexes separately, no need to dump them to JSON files since we want to re-init them every time
+		// Track regexes separately, no need to dump them to JSON files since we want to re-init them every time.
 		this.guildQueries = new ConfigCache('guildQueries', false)
+
+		/* Keep a cache of messages we've replied to so we can easily delete replies if necessary.
+		 * Each entry in the cache is a map:
+		 * - key: the ID of the original message that we replied to
+		 * - value: an object with properties:
+		 * 	- user: the ID of the user who sent the original message
+		 * 	- replies: array of message IDs that the bot sent as a reply
+		 * 	- query: the query data we originally produced for that message.
+		 * Data is deleted from this cache 15 seconds after being inserted, since it's only used for
+		 * time-sensitive checks on edits and message deletions.
+		 */
+		this.replyCache = new Cache({ defaultTtl: MESSAGE_TIMEOUT * 1000 })
+
+		// Flag to turn off responses to commands and messages until the bot is ready.
+		this.isReady = false
 	}
 
 	start(token) {
 		const defRegex = setupQueryRegex(config.defaultOpen, config.defaultClose)
-		// track default regex for use outside of guilds or in newly joined guilds
+		// Track default regex for use outside of guilds or in newly joined guilds.
 		this.guildQueries.put(['default', config.defaultLanguage], defRegex)
-		// repopulate server regexes based on language + open/close symbols saved in JSON
+		// Repopulate server regexes based on language + open/close symbols saved in JSON config.
 		for (const [sid, settings] of this.guildSettings.entries()) {
 			if ('queries' in settings && settings.queries) {
 				for (const [lan, symbols] of Object.entries(settings.queries))
@@ -36,7 +52,7 @@ class MillenniumEyeBot extends Discord.Client {
 			}
 			
 			const defaultSyntaxRemoved = this.guildSettings.get([sid, 'defaultSyntaxRemoved']) ?? false
-			// add default regex if necessary (not removed, and no custom syntax to conflict with)
+			// Add default regex if necessary (not removed, and no custom syntax to conflict with).
 			if (!defaultSyntaxRemoved && 
 				(!('queries' in settings) || 
 				('queries' in settings && !(config.defaultLanguage in settings.queries))))
@@ -88,9 +104,9 @@ class MillenniumEyeBot extends Discord.Client {
 	setGuildQuery(guild, open, close, language) {
 		const defaultSyntaxRemoved = this.guildSettings.get([guild.id, 'defaultSyntaxRemoved']) ?? false
 		const fullLanguage = Languages[language]
-		// check to make sure no other different-language syntax is using those symbols
-		// (overwriting the same language with a different syntax is fine)
-		// check default syntax overlap first if this server hasn't opted out of using it
+		// Check to make sure no other different-language syntax is using those symbols.
+		// Overwriting the same language with a different syntax is fine.
+		// Check default syntax overlap first if this server hasn't opted out of using it.
 		if (!defaultSyntaxRemoved && language !== config.defaultLanguage && 
 			open === config.defaultOpen && close === config.defaultClose) 
 		{
@@ -123,15 +139,15 @@ class MillenniumEyeBot extends Discord.Client {
 
 		const queryRegex = setupQueryRegex(open, close)
 		this.guildQueries.put([guild.id, language], queryRegex)
-		// incidentally, if this is the default query syntax + language again and they've previously removed it,
-		// then just reflect they no longer want it removed and stop at quietly adding it back
+		// If this is the default query syntax + language again and they've previously removed it,
+		// then just reflect they no longer want it removed and stop at quietly adding it back.
 		if (defaultSyntaxRemoved && language === config.defaultLanguage &&
 			open === config.defaultOpen && close == config.defaultClose)
 		{
 			this.guildSettings.remove([guild.id, 'defaultSyntaxRemoved'])
 		}
 		else {
-			// otherwise save to config as well
+			// Otherwise save to config as well.
 			this.guildSettings.put([guild.id, 'queries', language], { 'open': open, 'close': close })
 		}
 	}
@@ -147,8 +163,8 @@ class MillenniumEyeBot extends Discord.Client {
 
 		let removed = this.guildSettings.remove([guild.id, 'queries', language])
 		this.guildQueries.remove([guild.id, language])
-		// if nothing was removed at first blush, check whether this is the default,
-		// and if so, track that they no longer want it
+		// If nothing was removed at first blush, check whether this is the default,
+		// and if so, track that they no longer want it.
 		if (!removed && !defaultSyntaxRemoved &&
 			language === config.defaultLanguage) 
 		{
@@ -186,7 +202,7 @@ class MillenniumEyeBot extends Discord.Client {
 	 * @returns {String | Boolean} The string or boolean value associated with the setting.
 	 */
 	getCurrentGuildSetting(guild, setting) {
-		// make sure the guild exists (might not in DM cases)
+		// Make sure the guild exists (might not in DM cases)
 		if (guild) 
 			return this.guildSettings.get([guild.id, setting]) ?? this.getDefaultGuildSetting(setting)
 		else return this.getDefaultGuildSetting(setting)

@@ -3,6 +3,8 @@ const { logger, logError } = require ('lib/utils/logging')
 const { updateCommandPermissions } = require('lib/utils/permissions')
 const MillenniumEyeBot = require('lib/models/MillenniumEyeBot')
 const Event = require('lib/models/Event')
+const { clearBotCache } = require('database/BotDBHandler')
+const { cacheNameToIdIndex, cacheLocaleMetadata } = require('database/YGOrgDBHandler')
 
 module.exports = new Event({
 	event: 'ready', 
@@ -11,16 +13,16 @@ module.exports = new Event({
 	 * @param {MillenniumEyeBot} bot 
 	 */
 	execute: async bot => {
-		// cache log channel
+		// Cache log channel.
 		bot.logChannel = bot.channels.cache.get(config.logChannel)
 		
-		// refresh slash commands
+		// Refresh slash commands.
 		try {
 			const applicationGuildCommands = []
 			const applicationGlobalCommands = []
 			for (const cmd of bot.commands.values()) {
-				// if it requires specific permissions, make it a guild command
-				// because slash command permissions are only configurable by user/role ID, which has to be guild specific
+				// If it requires specific permissions, make it a guild command
+				// because slash command permissions are only configurable by user/role ID, which has to be guild specific.
 				if (config.testMode || cmd.permissions) 
 					applicationGuildCommands.push(cmd.options)
 				else 
@@ -36,13 +38,13 @@ module.exports = new Event({
 					logger.info('Test mode is enabled, only refreshing in test server.')
 					const testGuild = bot.guilds.cache.get(config.testGuild)
 					await testGuild.commands.set(applicationGuildCommands)
-					// update permissions as well
+					// Update permissions as well.
 					await updateCommandPermissions(bot, testGuild)
 				}
 				else {
 					bot.guilds.cache.each(async guild => {
 						await guild.commands.set(applicationGuildCommands)
-						// update permissions as well
+						// Update permissions as well.
 						await updateCommandPermissions(bot, guild)
 					})
 				}
@@ -59,9 +61,20 @@ module.exports = new Event({
 			logError(err, 'Failed to refresh application commands.', bot)
 		}
 
-		// set bot presence
+		// Clear all our caches, repopulate them, set up periodics.
+		// Bot cache clear: once per week.
+		clearBotCache()
+		setInterval(clearBotCache, 7 * 24 * 60 * 60 * 1000)
+		// YGOrg name->ID search index. Set this up on launch, but doesn't need a periodic, 
+		// will be refreshed as necessary during runtime.
+		await cacheNameToIdIndex()
+		// YGOrg locale property metadata. Set this up on launch, but it's static, don't need to update periodically.
+		await cacheLocaleMetadata()
+
+		// Set bot presence.
 		bot.user.setActivity('/help for info!', { type: 'WATCHING' })
 
 		logger.info('Bot has finished initialization!')
+		bot.isReady = true
 	}
 })

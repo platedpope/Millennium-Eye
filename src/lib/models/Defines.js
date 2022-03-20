@@ -1,11 +1,19 @@
 /* eslint-disable no-useless-escape */
 module.exports = {
+	// Regexes.
 	KONAMI_DB_QA_REGEX: /https?:\/\/www\.db\.yugioh-card\.com\/yugiohdb\/faq_search\.action\?ope=5&fid=(\d+)/g,
 	KONAMI_DB_CARD_REGEX: /https?:\/\/www\.db\.yugioh-card\.com\/yugiohdb\/(?:card_search|faq_search)\.action\?ope=[24]&cid=(\d+)/g,
 	YGORG_DB_QA_REGEX: /https?:\/\/db\.ygorganization\.com\/qa#(\d+)/g,
 	YGORG_DB_CARD_REGEX: /https?:\/\/db\.ygorganization\.com\/card#(\d+)/g,
 	IGNORE_LINKS_REGEX: /(?:https?|www\.)/g,
-	EDIT_TIMEOUT: 10,
+	// Constant values.
+	MESSAGE_TIMEOUT: 15,
+	BOT_DB_PATH: `${process.cwd()}/data/bot.db`,
+	KONAMI_DB_PATH: `${process.cwd()}/data/carddata.db`,
+	// Seed URLs.
+	YGORG_NAME_ID_INDEX: 'https://db.ygorganization.com/data/idx/card/name',
+	YGORG_LOCALE_METADATA: 'https://db.ygorganization.com/data/meta/mprop',
+	// Bot data type definitions for easy reference.
 	QueryTypes: {
 		'r': 'ruling',
 		'a': 'art',
@@ -35,6 +43,64 @@ module.exports = {
 		'ko': '🇰🇷',
 		'pt': '🇵🇹'
 	},
+	EmbedIcons: {
+		'Continuous': 'https://cdn.discordapp.com/attachments/551534945454260265/557607309010927626/continuous.png',
+		'Counter': 'https://cdn.discordapp.com/attachments/551534945454260265/557607317126774825/counter.png',
+		'dark': 'https://cdn.discordapp.com/attachments/551534945454260265/557607325913841687/dark.png',
+		'divine': 'https://cdn.discordapp.com/attachments/551534945454260265/557607334092996641/divine.png',
+		'earth': 'https://cdn.discordapp.com/attachments/551534945454260265/557607413105295360/earth.png',
+		'Equip': 'https://cdn.discordapp.com/attachments/551534945454260265/557607414430433281/equip.png',
+		'Field': 'https://cdn.discordapp.com/attachments/551534945454260265/557607417546801202/field.png',
+		'fire': 'https://cdn.discordapp.com/attachments/551534945454260265/557605564847226903/fire.png',
+		'laugh': 'https://cdn.discordapp.com/attachments/549781799484522518/635807829122351125/LAUGH.png',
+		'Level': '<:level_star:550008695652614144>',
+		'light': 'https://cdn.discordapp.com/attachments/551534945454260265/557607396810424343/light.png',
+		'Pendulum Scales': '<:pend_scales:549862459142569994>',
+		'Quick-Play': 'https://cdn.discordapp.com/attachments/551534945454260265/557607404196331531/quickplay.png',
+		'Rank': '<:rank_star:549859884460408842>',
+		'Ritual': 'https://cdn.discordapp.com/attachments/551534945454260265/557607407174418475/ritual.png',
+		'spell': 'https://cdn.discordapp.com/attachments/551534945454260265/557607407853895690/spell.png',
+		'trap': 'https://cdn.discordapp.com/attachments/551534945454260265/557607408910860288/trap.png',
+		'water': 'https://cdn.discordapp.com/attachments/551534945454260265/557607411616055306/water.png',
+		'wind': 'https://cdn.discordapp.com/attachments/551534945454260265/557607411930628126/wind.png',
+		'3': '↘', 
+		'2': '⬇',
+		'1': '↙', 
+		'4': '⬅', 
+		'7': '↖',
+		'8': '⬆',
+		'9': '↗', 
+		'6': '➡',
+		'Yugipedia Logo': 'https://cdn.discordapp.com/attachments/558000214087172101/558021639607156746/Wiki_2x.png',
+		'Skill': 'https://cdn.discordapp.com/attachments/558000214087172101/558117295252176916/nKigv6X.png',
+		'Konami DB Logo': 'https://cdn.discordapp.com/attachments/549781799484522518/627857980389589002/yugioh.png',
+	},
+	EmbedColors: {
+		'Effect': '0xFF8B53',
+		'Fusion': '0xA086B7',
+		'Xyz': '0x111111',
+		'Synchro': '0xFEFEFE',
+		'Ritual': '0x9DB5CC',
+		'Link': '0x00008B',
+		'Normal': '0xFDE68A',
+		'spell': '0x1D9E74',
+		'trap': '0xBC5A84',
+		'None': '0x000000'
+	},
+	//																		7 8 9
+	// Link markers are stored by the konami DB in the following format:	4   6
+	//																		1 2 3
+	LinkMarkersIndexMap: {
+		'Bottom-Left': 1,
+		'Bottom-Center': 2,
+		'Bottom-Right': 3,
+		'Middle-Left': 4,
+		'Middle-Right': 6,
+		'Top-Left': 7,
+		'Top-Center': 8,
+		'Top-Right': 9
+	},
+	// Discord API value verification.
 	CommandTypes: {
 		'SUB_COMMAND': 1,
 		'SUB_COMMAND_GROUP': 2,
