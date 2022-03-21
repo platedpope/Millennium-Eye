@@ -19,11 +19,20 @@ module.exports = new Event({
 
 		const qry = await processMessage(bot, message)
 
-		if (qry.searches.length !== 0) 
+		if (qry.searches.length !== 0)  {
+			const embeds = qry.getDataEmbeds()
+			if (embeds)
+				sendReply(bot, message, '', qry, {
+					allowedMentions: { repliedUser: false },
+					embeds: embeds
+				})
+			/*
 			for (const m of prepareDiscordLogJsMessage(qry.searches)) {
 				sendReply(bot, message, m, qry, { 
 					allowedMentions: { repliedUser: false } 
 				})
 			}
+			*/
+		}
 	}
 })

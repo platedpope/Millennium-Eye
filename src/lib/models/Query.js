@@ -1,4 +1,4 @@
-const { Message, CommandInteraction } = require('discord.js')
+const { Message, CommandInteraction, MessageEmbed } = require('discord.js')
 
 const MillenniumEyeBot = require('./MillenniumEyeBot')
 const { KONAMI_DB_CARD_REGEX, KONAMI_DB_QA_REGEX, YGORG_DB_CARD_REGEX, YGORG_DB_QA_REGEX, IGNORE_LINKS_REGEX } = require('./Defines')
@@ -29,7 +29,7 @@ class Search {
 		 */
 		this.lanToTypesMap = new Map()
 		if (type !== undefined && language !== undefined)
-			this.addTypeToLan(language, type)
+			this.addTypeToLan(type, language)
 		
 		// This starts as nothing, but will become actual data if this search
 		// ever gets as far as being mapped to proper data.
@@ -66,14 +66,14 @@ class Search {
 		// In other words, this object already has the correct search term.
 
 		// Add any new search types to associate with this search.
-		otherSearch.types.forEach((otherLans, otherType) => {
-			const thisSearchType = this.types.get(otherType)
-			if (thisSearchType === undefined)
+		otherSearch.lanToTypesMap.forEach((otherTypes, otherLan) => {
+			const thisSearchLan = this.lanToTypesMap(otherLan)
+			if (thisSearchLan === undefined)
 				// If the other search has a type this one doesn't, just add it.
-				this.types.set(otherType, otherLans)
+				this.lanToTypesMap.set(otherLan, otherTypes)
 			else
 				// This type exists in both Searches. Add any new languages to this one, let JS Set handle conflicts.
-				thisSearchType.add(...otherLans)
+				thisSearchLan.add(...otherTypes)
 		})
 
 		// Integrate any new data this might have.
@@ -100,6 +100,9 @@ class Query {
 			this.rulings = qry.rulings
 			this.language = qry.language
 			this.bot = qry.bot
+			/**
+			 * @type {Array<Search>}
+			 */
 			this.searches = qry.searches 
 		}
 		else {
@@ -110,7 +113,7 @@ class Query {
 			this.bot = bot
 			
 			/**
-			 * @type {Array{Search}} The data associated with all searches in this query.
+			 * @type {Array<Search>}
 			 */
 			this.searches = []
 	
@@ -320,6 +323,26 @@ class Query {
 
 		return onlyInThis
 	}
+
+	/**
+	 * Gets all embeds formed from the search types used for each search in this query.
+	 * @returns {Array<MessageEmbed>} The array of embeds.
+	 */
+	 getDataEmbeds() {
+		const embeds = []
+
+		for (const s of this.searches) {
+			if (!s.data) continue
+			s.lanToTypesMap.forEach((searchTypes, searchLan) => {
+				for (const t of searchTypes) {
+					const newEmbed = s.data.generateEmbed(t, searchLan, this.official)
+					embeds.push(newEmbed)
+				}
+			})
+		}
+
+		return embeds
+	 }
 }
 
 module.exports = { 

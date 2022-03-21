@@ -11,26 +11,40 @@ class Card {
 	constructor() {
 		// Main values that define a card.
 		this.name = new Map()			// Card name. Each key is a language, with value as the name in that language.
-		this.dbId = undefined			// Database ID. Unique.
-		this.passcode = undefined		// Passcode. Unique.
-		this.cardType = undefined		// Card type (Monster/Spell/Trap).
-		this.property = undefined		// Property of Spell/Trap Cards (e.g., Quickplay, Continuous, etc.)
+		this.dbId = null				// Database ID. Unique.
+		this.passcode = null			// Passcode. Unique.
+		this.cardType = null			// Card type (Monster/Spell/Trap).
+		this.property = null			// Property of Spell/Trap Cards (e.g., Quickplay, Continuous, etc.)
 		this.types = []					// List of types that compose a monster's typeline (e.g., Spellcaster / Tuner / Pendulum / Effect)
-		this.attribute = undefined		// Monster Attribute (e.g., DARK, WIND, etc.)
-		this.levelRank = undefined		// Monster Level or Rank (only ever one or the other, ? = -1, only relevant for manga/anime cards)
-		this.attack = undefined			// Monster ATK (? = -1)
-		this.defense = undefined		// Monster DEF (? = -1)
+		this.attribute = null			// Monster Attribute (e.g., DARK, WIND, etc.)
+		this.levelRank = null			// Monster Level or Rank (only ever one or the other, ? = -1, only relevant for manga/anime cards)
+		this.attack = null				// Monster ATK (? = -1)
+		this.defense = null				// Monster DEF (? = -1)
 		this.effect = new Map()			// Effect text. For Normal Monsters, this is their flavor text instead. Each key is a language, with value as the effect text in that language.
 		this.pendEffect = new Map()		// Monster Pendulum Effect text. Each key is a language, with value as the effect text in that language.							
-		this.pendScale = undefined		// Monster Pendulum Scale value.
+		this.pendScale = null			// Monster Pendulum Scale value.
 		this.linkMarkers = []			// List of Link Monster arrows.
 
 		// Ancillary data about the card.
-		this.tcgList = undefined		// Status on the TCG F/L list (-1 = unreleased, 0 = forbidden, 1 = limited, 2 = semi-limited, anything else = unlimited)
-		this.ocgList = undefined		// Status on the OCG F/L list (same values as above).
-		this.notInCg = undefined		// True if the card isn't from the TCG or OCG; from anime/manga/game instead.
+		this.tcgList = null				// Status on the TCG F/L list (-1 = unreleased, 0 = forbidden, 1 = limited, 2 = semi-limited, anything else = unlimited)
+		this.ocgList = null				// Status on the OCG F/L list (same values as above).
+		this.notInCg = null				// True if the card isn't from the TCG or OCG; from anime/manga/game instead.
 		this.printData = new Map()		// Data about when this card was printed and in which sets. Each key is a language, with value a further map of print code -> print date.
 		this.imageData = {}				// Image(s) associated with the card. Either BLOB data or links.
+	}
+
+	/**
+	 * Generic wrapper for generating any type of embed.
+	 * @param {String} type The search type used to map to this embed, i.e., r, i, d, etc.
+	 * @param {String} language Which language to use when generating the embed.
+	 * @param {Boolean} official Whether to only include official Konami information. This overrides any inclusion from rulings mode being true.
+	 */
+	generateEmbed(type, language, official) {
+		if (type === 'i' || type === 'r') {
+			var embed = this.generateInfoEmbed(language, type === 'r' ? true : false, official)
+		}
+
+		return embed
 	}
 
 	/**
@@ -42,18 +56,16 @@ class Card {
 	generateInfoEmbed(language, rulings, official) {
 		const finalEmbed = new MessageEmbed()
 
-		// TODO: Embed (author) URL.
+		const cardName = this.name.get(language)
 		const colorIcon = this.getEmbedColorAndIcon()
+		// TODO: Embed (author) URL.
 
-		finalEmbed.setAuthor({
-			'name': this.name.get(language),
-			'iconUrl': colorIcon[1]
-		})
+		finalEmbed.setAuthor(cardName, colorIcon[1])
 		finalEmbed.setColor(colorIcon[0])
 
 		// Generate stat description.
 		// Level/Rank
-		if (this.levelRank !== undefined) {
+		if (this.levelRank !== null) {
 			const lrString = this.levelRank >= 1 ? `${this.levelRank}` : '?'
 			if (this.types.includes('Xyz'))
 				var stats = `${EmbedIcons['Rank']} **Rank**: ${lrString}`
@@ -68,7 +80,7 @@ class Card {
 			stats += '**)**'
 		}
 		// Pendulum Scale
-		if (this.pendScale !== undefined)
+		if (this.pendScale !== null)
 			stats += ` | ${EmbedIcons['Pendulum Scales']} **Scale**: ${this.pendScale}`
 		// Monster Types
 		if (this.types.length) {
@@ -81,7 +93,7 @@ class Card {
 				stats += `\n**[** ${newLanTypes.join(' **/** ')} **]**`
 		}
 		// ATK/DEF (value of -1 means ?)
-		if (this.attack !== undefined || this.defense !== undefined) {
+		if (this.attack !== null || this.defense !== null) {
 			stats += '\n\n'
 			const atkStr = this.attack >= 0 ? `${this.attack}` : '?'
 			const defStr = this.defense >= 0 ? `${this.defense}` : '?'
@@ -98,7 +110,7 @@ class Card {
 		let monsterEffect = this.effect.get(language)
 		if (monsterEffect) {
 			if (this.types.includes('Normal'))
-				monsterEffect = `*${monsterEffect}`
+				monsterEffect = `*${monsterEffect}*`
 			if (hasPendEffect)
 				finalEmbed.addField('Monster Effect:', monsterEffect, false)
 			else
@@ -148,6 +160,18 @@ class Card {
 		}
 
 		return [color, icon]
+	}
+
+	/**
+	 * Prints this object as a string. Uses DB ID, passcode, and EN name if available.
+	 */
+	toString() {
+		let str = ''
+		if (this.dbId) str += `ID(${this.dbId}) `
+		if (this.passcode) str += `passcode(${this.passcode}) `
+		if (this.name.get('en')) str  += `EN name(${this.name.get('en')})`
+
+		return str
 	}
 }
 

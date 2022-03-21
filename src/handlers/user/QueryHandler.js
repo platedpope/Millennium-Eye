@@ -4,6 +4,7 @@ const MillenniumEyeBot = require('lib/models/MillenniumEyeBot')
 const { Query } = require('lib/models/Query')
 const { searchTermCache } = require('database/BotDBHandler')
 const { searchKonamiDb } = require('database/KonamiDBHandler')
+const { logger } = require('lib/utils/logging')
 
 /**
  * Takes an incoming Discord message and performs all necessary processing to evaluate and build a response to the message.
@@ -29,6 +30,22 @@ async function processMessage(bot, msg) {
 			break
 
 		step(searchesToEval, qry)
+
+		// Log out our new successes.
+		for (const s of searchesToEval) {
+			if (s.data !== undefined) {
+				let hasAllLanguages = true
+				// Make sure it has all its languages before saying we're done with it.
+				for (const l in s.lanToTypesMap.keys())
+					if (s.data.name.get(l) === undefined) {
+						hasAllLanguages = false
+						break
+					}
+				
+				if (hasAllLanguages)
+					logger.info(`Step ${step.name} successfully mapped original search(es) [${[...s.originals].join(', ')}] to ${s.data}.`)
+			}
+		}
 	}
 
 	return qry
@@ -45,7 +62,7 @@ async function processMessage(bot, msg) {
 async function sendReply(bot, origMessage, replyContent, qry, replyOptions) {
 	// Build the message and its options.
 	const fullReply = {}
-	if (replyContent !== undefined)
+	if (replyContent)
 		fullReply.content = replyContent
 	if (replyOptions !== undefined)
 		for (const o in replyOptions)

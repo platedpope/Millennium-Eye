@@ -3,6 +3,8 @@ const Card = require('lib/models/Card')
 
 const { KONAMI_DB_PATH } = require('lib/models/Defines')
 const { Search, Query } = require('lib/models/Query')
+// const { addToTermCache } = require('./BotDBHandler')
+const { searchNameToIdIndex } = require('./YGOrgDBHandler')
 
 /**
  * Search the Konami (i.e., official) database to resolve our card data.
@@ -80,17 +82,44 @@ function searchKonamiDb(searches, qry, db) {
 		return card
 	}
 
-	const getDbId = 'SELECT * FROM card_data WHERE id = ?'
+	const getDbId = db.prepare('SELECT * FROM card_data WHERE id = ?')
 	// Iterate through the array backwards because we might modify it as we go.
 	for (let i = searches.length - 1; i >= 0; i--) {
 		const currSearch = searches[i]
 		// If the search term is a number, then it's a database ID.
 		if (Number.isInteger(currSearch.term)) {
-			const dataRows = db.prepare(getDbId).all(currSearch.term)
+			const dataRows = getDbId.all(currSearch.term)
 			if (dataRows.length) currSearch.data = formCard(dataRows)
 		}
 		else {
-			// TODO: name matching
+			// Otherwise, try to match based on the name index.
+			// Always search the EN index. If this search has any other languages, use them too.
+			const lansToSearch = ['en']
+			currSearch.lanToTypesMap.forEach((types, lan) => {
+				if (!lansToSearch.includes(lan)) lansToSearch.push(lan)
+			})
+
+			const termsToUpdate = []
+
+			const bestMatch = searchNameToIdIndex(currSearch.term, lansToSearch)
+			for (const id in bestMatch) {
+				const dataRows = getDbId.all(id)
+				if (dataRows.length) {
+					currSearch.data = formCard(dataRows)
+					// We should have a better search term now.
+					if (currSearch.data.dbId) {
+						const mergedSearch = qry.updateSearchTerm(currSearch.term, currSearch.data.dbId)
+						if (!mergedSearch)
+							termsToUpdate.push(currSearch)
+					}
+				}
+			}
+
+			if (termsToUpdate.length) {
+				// Down here to avoid circular dependency. Not very pretty...
+				const { addToTermCache } = require('./BotDBHandler')
+				addToTermCache(termsToUpdate, 'konami')
+			}
 		}
 	}
 }

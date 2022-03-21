@@ -2,9 +2,10 @@ const axios = require('axios')
 
 const { Languages, YGORG_NAME_ID_INDEX, YGORG_LOCALE_METADATA } = require('lib/models/Defines')
 const { logError, logger } = require('lib/utils/logging')
+const { CardDataFilter } = require('lib/utils/search')
 
 const nameToIdIndex = {}
-let localePropertyMetadata = undefined
+const localePropertyMetadata = {}
 
 /**
  * Saves off the YGORG card name -> ID search index for all languages.
@@ -18,7 +19,6 @@ async function cacheNameToIdIndex(lans = Object.keys(Languages)) {
 			'timeout': 3 * 1000
 		}).then(r => {
 			if (r.status === 200) return r
-			throw new Error(`Something went wrong (status code ${r.status}) querying YGOrg DB's name index for language ${l}`)
 		})
 
 		apiRequests.push(lanIndex)
@@ -48,6 +48,45 @@ async function cacheNameToIdIndex(lans = Object.keys(Languages)) {
 }
 
 /**
+ * Searches the name to ID index for the best match among all languages.
+ * @param {String} search The value to search for. 
+ * @param {Array<String>} lans The array of languages to search for.
+ * @param {Number} returnMatches The number of matches to return, sorted in descending order (better matches first).
+ * @returns {Object} All relevant matches.
+ */
+function searchNameToIdIndex(search, lans, returnMatches = 1) {
+	let matches = {}
+
+	for (const l of lans) {
+		const searchFilter = new CardDataFilter(nameToIdIndex[l], search, 'CARD_NAME')
+
+		const lanMatches = searchFilter.filterIndex(returnMatches)
+		for (const id in lanMatches) {
+			const score = lanMatches[id]
+			if (score > 0) 
+				matches[id] = Math.max(score, matches[id] || 0)
+		}
+	}
+
+	// If we had more than one language, we need to re-sort our matches in case each language added some.
+	if (lans.length > 1) {
+		// If scores are diffeerent, descending sort by score (i.e., higher scores first).
+		// If scores are the same, ascending sort by ID (i.e., lower IDs first).
+		const sortedResult = Object.entries(matches).sort(([idA, scoreA], [idB, scoreB]) => {
+			return (scoreA !== scoreB) ? (scoreB - scoreA) : (idA - idB)
+		})
+		// Splice the array to only include the number of requested matches.
+		sortedResult.splice(returnMatches)
+
+		matches = {}
+		for (const r of sortedResult)
+			matches[r[0]] = r[1]
+	}
+
+	return matches
+}
+
+/**
  * Saves off the YGOrg localization metadata for properties and types.
  */
 async function cacheLocaleMetadata() {
@@ -55,7 +94,6 @@ async function cacheLocaleMetadata() {
 		'timeout': 3 * 1000
 	}).then(r => {
 		if (r.status === 200) {
-			localePropertyMetadata = {}
 			// Rejig this metadata, it comes in as an array but I want to pull out the EN values
 			// to make them keys in a map for easy future lookups.
 			for (const prop of r.data) {
@@ -73,7 +111,6 @@ async function cacheLocaleMetadata() {
 			}
 			logger.info('Successfully cached YGOrg DB locale property metadata.')
 		}
-		// throw new Error(`Something went wrong (status code ${r.status}) querying YGOrg DB's localization metadata.`)
 	}).catch(e => {
 		logError(e, 'Failed getting locale metadata.')
 	})
@@ -86,9 +123,6 @@ async function cacheLocaleMetadata() {
  * @returns {String | Array<String>} The type(s) in the given language.
  */
 function searchLocalePropertyMetadata(type, language) {
-	// Not cached for some reason, nothing we can do.
-	if (localePropertyMetadata === undefined) return
-
 	let types = []
 
 	// If we're just converting the one type, return immediately once we find it.
@@ -106,5 +140,5 @@ function searchLocalePropertyMetadata(type, language) {
 }
 
 module.exports = {
-	cacheNameToIdIndex, cacheLocaleMetadata, searchLocalePropertyMetadata
+	cacheNameToIdIndex, cacheLocaleMetadata, searchLocalePropertyMetadata, searchNameToIdIndex
 }

@@ -4,6 +4,7 @@ const Card = require('lib/models/Card')
 const { BOT_DB_PATH } = require('lib/models/Defines')
 const { Search, Query } = require('lib/models/Query')
 const { logger } = require('lib/utils/logging')
+const { searchKonamiDb } = require('database/KonamiDBHandler')
 
 /**
  * Search within the search term cache to find any matches for the given searches.
@@ -23,7 +24,7 @@ function searchTermCache(searches, qry, db) {
 	const cachedPriceData = []
 	*/
 
-	const sqlQry = `SELECT dbId, passcode, fullName, location 
+	const sqlQry = `SELECT dbId, passcode, fullName, location, language
 					FROM termCache 
 					WHERE term = ?`
 	// Iterate through the array backwards because we might modify it as we go.
@@ -31,25 +32,35 @@ function searchTermCache(searches, qry, db) {
 		const currSearch = searches[i]
 		const currTerm = currSearch.term
 
-		const dbData = db.prepare(sqlQry).get(currTerm)
-		if (dbData) {
+		const dbRows = db.prepare(sqlQry).all(currTerm)
+		// Find a representative row. Prioritize any EN language one.
+		let repRow = dbRows.filter(r => r.language === 'en')
+		if (!repRow) {
+			// Otherwise, get one with a language we need.
+			repRow = dbRows.filter(r => currSearch.lanToTypesMap.has(r.language))
+			if (!repRow)
+				// If still nothing, just pick the first one and call it good enough.
+				repRow = dbRows
+		}
+		if (repRow.length) {
+			repRow = repRow[0]
 			// The cache will give us a better search term to use. Update it accordingly:
 			// - prioritize using DB ID if we have it,
 			// - if no DB ID but we have passcode, use that,
 			// - use full name as a last resort.
-			if (dbData.dbId)
-				var updateMerged = qry.updateSearchTerm(currTerm, dbData.dbId)
-			else if (dbData.passcode)
-				updateMerged = qry.updateSearchTerm(currTerm, dbData.passcode)
+			if (repRow.dbId)
+				var updateMerged = qry.updateSearchTerm(currTerm, repRow.dbId)
+			else if (repRow.passcode)
+				updateMerged = qry.updateSearchTerm(currTerm, repRow.passcode)
 			else
-				updateMerged = qry.updateSearchTerm(currTerm, dbData.fullName)
+				updateMerged = qry.updateSearchTerm(currTerm, repRow.fullName)
 			// If updating the search term resulted in a consolidation (i.e., another search is the same),
 			// then just skip passing this one along, it's no longer relevant.
 			if (updateMerged) continue
 
-			if (dbData.location === 'bot')
+			if (repRow.location === 'bot')
 				cachedBotData.push(currSearch)
-			else if (dbData.location === 'konami')
+			else if (repRow.location === 'konami')
 				cachedKonamiData.push(currSearch)
 		}
 		// If there's nothing in the cache, nothing more to do with this search for now.
@@ -58,8 +69,9 @@ function searchTermCache(searches, qry, db) {
 	// Resolve bot and konami database before trying to fill out price data.
 	if (cachedBotData.length)
 		searchBotDb(cachedBotData, qry, db)
-	/* TODO
 	if (cachedKonamiData.length)
+		searchKonamiDb(cachedKonamiData, qry)
+	/* TODO
 	if (cachedPriceData.length)
 	*/
 
@@ -76,15 +88,14 @@ function addToTermCache(newData, fromLoc, db) {
 	if (db === undefined)
 		db = new Database(BOT_DB_PATH)
 
-	const insertTerm = db.prepare(`INSERT OR REPLACE INTO termCache(term, dbId, passcode, fullName, location)
-								   VALUES(?, ?, ?, ?, ?)`)
+	const insertTerm = db.prepare(`INSERT OR REPLACE INTO termCache(term, dbId, passcode, fullName, location, language)
+								   VALUES(?, ?, ?, ?, ?, ?)`)
 
 	const insertMany = db.transaction(searchData => {
 		for (const s of searchData) {
-			s.data.name.forEach(n => {
+			s.data.name.forEach((n, l) => {
 				// Capture any "original" searches that ended up mapping to this.
-				for (const o of s.originals) insertTerm.run(o, s.data.dbId, s.data.passcode, n, fromLoc)
-				insertTerm.run(s.term, s.data.dbId, s.data.passcode, n, fromLoc)
+				for (const o of s.originals) insertTerm.run(o, s.data.dbId, s.data.passcode, n, fromLoc, l)
 			})
 		}
 	})
@@ -198,6 +209,7 @@ function searchBotDb(searches, qry, db) {
 					}
 				}
 			}
+			
 		}
 		else {
 			const dataRows = db.prepare(getDataName).all(currSearch.term)
