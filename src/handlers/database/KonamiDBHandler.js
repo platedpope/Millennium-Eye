@@ -3,8 +3,7 @@ const Card = require('lib/models/Card')
 
 const { KONAMI_DB_PATH } = require('lib/models/Defines')
 const { Search, Query } = require('lib/models/Query')
-// const { addToTermCache } = require('./BotDBHandler')
-const { searchNameToIdIndex } = require('./YGOrgDBHandler')
+const { searchNameToIdIndex } = require('database/YGOrgDBHandler')
 
 /**
  * Search the Konami (i.e., official) database to resolve our card data.
@@ -86,6 +85,9 @@ function searchKonamiDb(searches, qry, db) {
 	// Iterate through the array backwards because we might modify it as we go.
 	for (let i = searches.length - 1; i >= 0; i--) {
 		const currSearch = searches[i]
+		// Skip QA searches, their terms aren't card database IDs.
+		if (currSearch.hasType('q')) continue
+		
 		// If the search term is a number, then it's a database ID.
 		if (Number.isInteger(currSearch.term)) {
 			const dataRows = getDbId.all(currSearch.term)
@@ -110,13 +112,15 @@ function searchKonamiDb(searches, qry, db) {
 					if (currSearch.data.dbId) {
 						const mergedSearch = qry.updateSearchTerm(currSearch.term, currSearch.data.dbId)
 						if (!mergedSearch)
-							termsToUpdate.push(currSearch)
+							// Only update search terms at >= 0.5 score. Any less and we really weren't sure, this was just the least bad result.
+							if (bestMatch[id] >= 0.5)
+								termsToUpdate.push(currSearch)
 					}
 				}
 			}
 
 			if (termsToUpdate.length) {
-				// Down here to avoid circular dependency. Not very pretty...
+				// This import is in here to avoid circular dependency. Not very pretty...
 				const { addToTermCache } = require('./BotDBHandler')
 				addToTermCache(termsToUpdate, 'konami')
 			}

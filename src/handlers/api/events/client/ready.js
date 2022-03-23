@@ -4,7 +4,7 @@ const { updateCommandPermissions } = require('lib/utils/permissions')
 const MillenniumEyeBot = require('lib/models/MillenniumEyeBot')
 const Event = require('lib/models/Event')
 const { clearBotCache } = require('database/BotDBHandler')
-const { cacheNameToIdIndex, cacheLocaleMetadata } = require('database/YGOrgDBHandler')
+const { cacheNameToIdIndex, cacheLocaleMetadata, cacheManifestRevision } = require('database/YGOrgDBHandler')
 
 module.exports = new Event({
 	event: 'ready', 
@@ -61,7 +61,8 @@ module.exports = new Event({
 			logError(err, 'Failed to refresh application commands.', bot)
 		}
 
-		// Clear all our caches, repopulate them, set up periodics.
+		// Set up all our caches and periodics updates.
+		cacheManifestRevision()
 		// Bot cache clear: once per week.
 		clearBotCache()
 		setInterval(clearBotCache, 7 * 24 * 60 * 60 * 1000)

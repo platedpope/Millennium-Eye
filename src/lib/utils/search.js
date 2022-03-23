@@ -37,11 +37,9 @@ class CardDataFilter {
 			if (score > 0)
 				// Save this, and if it's a better score than one we got for that ID previously, overwrite.
 				for (const id of this.idx[k]) {
-					filteredResult[id] = Math.max(score, filteredResult[id] || 0)
-					if (score >= bestScore) {
-						bestScore = score 
-						// console.log(`Name ${k} produced new best score of ${score}!`)
-					}
+					// Ignore negative IDs, they're used for Skills on YGOrg DB.
+					if (id > 0)
+						filteredResult[id] = Math.max(score, filteredResult[id] || 0)
 				}
 		}
 
@@ -66,7 +64,7 @@ class CardDataFilter {
 	 * @returns {Number} The distance score.
 	 */
 	fuzzyTokenFilter(val) {
-		// Tokenize the value.
+		// Tokenize the value we're comparing to.
 		const hayWords = val.match(CardDataFilter.tokenRegex)
 		const nWords = Math.max(hayWords.length, this.ref.length)
 

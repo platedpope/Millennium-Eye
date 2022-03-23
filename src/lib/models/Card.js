@@ -1,6 +1,6 @@
 const { searchLocalePropertyMetadata } = require('database/YGOrgDBHandler')
 const { MessageEmbed } = require('discord.js')
-const { EmbedColors, EmbedIcons } = require('./Defines')
+const { EmbedColors, EmbedIcons, Languages } = require('./Defines')
 
 class Card {
 	/**
@@ -68,9 +68,9 @@ class Card {
 		if (this.levelRank !== null) {
 			const lrString = this.levelRank >= 1 ? `${this.levelRank}` : '?'
 			if (this.types.includes('Xyz'))
-				var stats = `${EmbedIcons['Rank']} **Rank**: ${lrString}`
+				var stats = `${EmbedIcons['Rank']} **${searchLocalePropertyMetadata('Rank', language)}**: ${lrString}`
 			else
-				stats = `${EmbedIcons['Level']} **Level**: ${lrString}`  
+				stats = `${EmbedIcons['Level']} **${searchLocalePropertyMetadata('Level', language)}**: ${lrString}`
 		}
 		// Link Markers
 		else if (this.linkMarkers.length) {
@@ -81,9 +81,10 @@ class Card {
 		}
 		// Pendulum Scale
 		if (this.pendScale !== null)
-			stats += ` | ${EmbedIcons['Pendulum Scales']} **Scale**: ${this.pendScale}`
+			stats += ` | ${EmbedIcons['Pendulum Scales']} **${searchLocalePropertyMetadata('Pendulum Scale', language)}**: ${this.pendScale}`
 		// Monster Types
 		if (this.types.length) {
+			stats += '\n'
 			if (language !== 'en')
 				var newLanTypes = searchLocalePropertyMetadata(this.types, language)
 			
@@ -93,31 +94,32 @@ class Card {
 				stats += `\n**[** ${newLanTypes.join(' **/** ')} **]**`
 		}
 		// ATK/DEF (value of -1 means ?)
-		if (this.attack !== null || this.defense !== null) {
+		if (this.attack !== null) {
 			stats += '\n\n'
 			const atkStr = this.attack >= 0 ? `${this.attack}` : '?'
+			stats += `**ATK** ${atkStr}`
+		}
+		if (this.defense !== null) {
 			const defStr = this.defense >= 0 ? `${this.defense}` : '?'
-			stats += `**ATK** ${atkStr} / **DEF** ${defStr}`
+			stats += ` / **DEF** ${defStr}`
 		}
 
-		finalEmbed.setDescription(stats)
+		if (stats)
+			finalEmbed.setDescription(stats)
 
 		// Pendulum Effect
-		const hasPendEffect = this.pendEffect.get(language)
-		if (hasPendEffect)
-			finalEmbed.addField('Pendulum Effect:', this.pendEffect.get(language), false)
-		// Monster Effect
-		let monsterEffect = this.effect.get(language)
-		if (monsterEffect) {
+		const pendEffect = this.pendEffect.get(language)
+		if (pendEffect)
+			finalEmbed.addField(searchLocalePropertyMetadata('Pendulum Effect', language), pendEffect, false)
+		// Effect
+		let effect = this.effect.get(language)
+		if (effect) {
 			if (this.types.includes('Normal'))
-				monsterEffect = `*${monsterEffect}*`
-			if (hasPendEffect)
-				finalEmbed.addField('Monster Effect:', monsterEffect, false)
-			else
-				finalEmbed.addField('Effect:', monsterEffect, false)
+				effect = `*${effect}*`
+			finalEmbed.addField(searchLocalePropertyMetadata('Effect', language), effect, false)
 		}
 
-		// TODO: Banlist data
+		// TODO: Banlist data (footer)
 
 		return finalEmbed
 	}
@@ -137,7 +139,7 @@ class Card {
 			// Spells and Traps only have one color each, and icons are either based on their property
 			// or, if they have no special property (e.g., Normal Spell), just their card type.
 			if (lowerType === 'spell' || lowerType === 'trap') {
-				color = EmbedColors(lowerType)
+				color = EmbedColors[lowerType]
 				if (this.property in EmbedIcons)
 					icon = EmbedIcons[this.property]
 				else

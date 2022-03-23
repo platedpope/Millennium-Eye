@@ -23,27 +23,33 @@ async function processMessage(bot, msg) {
 		searchTermCache,
 		searchKonamiDb
 	]
-	for (const step of processSteps) {
-		const searchesToEval = qry.getUnresolvedSearches()
-		if (!searchesToEval.length)
-			// Nothing left to evaluate.
-			break
+	
+	let searchesToEval = qry.getUnresolvedSearches()
+	if (searchesToEval.length) {
+		await msg.channel.sendTyping()
+		for (const step of processSteps) {
+			if (!searchesToEval.length)
+				// Nothing left to evaluate.
+				break
 
-		step(searchesToEval, qry)
+			step(searchesToEval, qry)
+			// Update for any searches that remain.
+			searchesToEval = qry.getUnresolvedSearches()
 
-		// Log out our new successes.
-		for (const s of searchesToEval) {
-			if (s.data !== undefined) {
-				let hasAllLanguages = true
-				// Make sure it has all its languages before saying we're done with it.
-				for (const l in s.lanToTypesMap.keys())
-					if (s.data.name.get(l) === undefined) {
-						hasAllLanguages = false
-						break
-					}
-				
-				if (hasAllLanguages)
-					logger.info(`Step ${step.name} successfully mapped original search(es) [${[...s.originals].join(', ')}] to ${s.data}.`)
+			// Log out our new successes.
+			for (const s of searchesToEval) {
+				if (s.data !== undefined) {
+					let hasAllLanguages = true
+					// Make sure it has all its languages before saying we're done with it.
+					for (const l in s.lanToTypesMap.keys())
+						if (s.data.name.get(l) === undefined) {
+							hasAllLanguages = false
+							break
+						}
+					
+					if (hasAllLanguages)
+						logger.info(`Step ${step.name} successfully mapped original search(es) [${[...s.originals].join(', ')}] to ${s.data}.`)
+				}
 			}
 		}
 	}

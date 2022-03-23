@@ -10,7 +10,11 @@ module.exports = {
 	MESSAGE_TIMEOUT: 15,
 	BOT_DB_PATH: `${process.cwd()}/data/bot.db`,
 	KONAMI_DB_PATH: `${process.cwd()}/data/carddata.db`,
+	YGORG_DB_PATH: `${process.cwd()}/data/ygorg.db`,
 	// Seed URLs.
+	YGORG_MANIFEST: `https://db.ygorganization.com/manifest`,
+	YGORG_CARD_DATA_API: 'https://db.ygorganization.com/data/card/',
+	YGORG_QA_DATA_API: 'https://db.ygorganization.com/data/qa/',
 	YGORG_NAME_ID_INDEX: 'https://db.ygorganization.com/data/idx/card/name',
 	YGORG_LOCALE_METADATA: 'https://db.ygorganization.com/data/meta/mprop',
 	// Bot data type definitions for easy reference.

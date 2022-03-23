@@ -1,20 +1,120 @@
 const axios = require('axios')
+const Database = require('better-sqlite3')
 
-const { Languages, YGORG_NAME_ID_INDEX, YGORG_LOCALE_METADATA } = require('lib/models/Defines')
+const { Languages, YGORG_NAME_ID_INDEX, YGORG_LOCALE_METADATA, YGORG_DB_PATH, YGORG_MANIFEST } = require('lib/models/Defines')
 const { logError, logger } = require('lib/utils/logging')
 const { CardDataFilter } = require('lib/utils/search')
 
+let cachedRevision = undefined
 const nameToIdIndex = {}
 const localePropertyMetadata = {}
+
+/**
+ * Caches the most recent manifest revision we know about.
+ * @param {Number} newRevision The new revision number. 
+ */
+function cacheManifestRevision(newRevision) {
+	db = new Database(YGORG_DB_PATH)
+	// First time, have to load this from the DB.
+	if (newRevision === undefined && cachedRevision === undefined) {
+		const dbData = db.prepare('SELECT * FROM manifest').get()
+		if (dbData)
+			cachedRevision = dbData.lastKnownRevision
+	}
+	else {
+		db.prepare('DELETE FROM manifest').run()
+		db.prepare('INSERT OR REPLACE INTO manifest(lastKnownRevision) VALUES (?)').run(newRevision)
+		cachedRevision = newRevision
+	}
+
+	db.close()
+
+	if (cachedRevision)
+		logger.info(`Cached YGOrg manifest revision ${cachedRevision}.`)
+}
+
+/**
+ * Processes a manifest revision returned by a YGOrg DB query.
+ * Invalidates all necessary cached values based on what the changes report.
+ * NOTE: nothing is re-cached afterward, that will only happen on future requests for that data.
+ * @param {Number} revision The revision number to compare to our cached one.
+ * @param {Array<String>} ignoreEvict Ignore evicting from these places, likely because their handlers called this function after an API query and already updated.
+ */
+async function processManifest(newRevision, ignoreEvict) {
+	// If we've cached something more recent or as recent, nothing to do.
+	if (cachedRevision >= newRevision) return
+
+	// Otherwise, get manifest data to see if we need to make any changes.
+	await axios.get(`${YGORG_MANIFEST}/${cachedRevision}`, {
+		'timeout': 3 * 1000
+	}).then(r => {
+		if (r.status === 200) {
+			logger.info(`Processing new manifest revision ${newRevision}...`)
+			const changes = r.data.data 
+			const ygorgDb = new Database(YGORG_DB_PATH)
+			if (ignoreEvict) {
+				var ignoreIdx = ignoreEvict.includes('idx')		// Only one that matters for now. More might come.
+			}
+
+			// Card data updates: no way to tell what exactly has changed,
+			// so just invalidate any data stored in the bot or YGOrg databases.
+			// (Don't invalidate anything from the Konami database.)
+			if ('card' in changes) {
+				const evictIds = Object.keys(changes.card)
+				// Delete any FAQ data from YGOrg DB.
+				const delFaq = ygorgDb.prepare('DELETE FROM faqData WHERE dbId = ?')
+				const delMany = ygorgDb.transaction(ids => {
+					for (const id of ids) delFaq.run(id)
+				})
+				delMany(evictIds)
+				// Delete any bot-specific data.
+				// This is here to avoid circular dependency. Not pretty...
+				const { evictFromBotCache } = require('database/BotDBHandler')
+				evictFromBotCache(evictIds)
+
+				logger.info(`Evicted all FAQ and cached bot data associated with database IDs: ${evictIds.join(', ')}`)
+			}
+			// Invalidate cached QA data.
+			if ('qa' in changes) {
+				const evictQas = Object.keys(changes.qa)
+
+				const delQa = ygorgDb.prepare('DELETE FROM qaData WHERE qaId = ?')
+				const delMany = ygorgDb.transaction(ids => {
+					for (const id of ids) delQa.run(id)
+				})
+				delMany(evictQas)
+
+				logger.info(`Evicted all QA data for QA IDs: ${evictQas.join(', ')}`)
+			}
+			// Invalidate any cached indices we care about.
+			if (!ignoreIdx && 'idx' in changes) {
+				const idxChanges = changes.idx
+				if ('name' in idxChanges) {
+					logger.info(`Evicted languages ${Object.keys(idxChanges).join(', ')} from name index.`)
+					for (l in idxChanges.name) delete nameToIdIndex[l]
+				}
+			}
+
+			ygorgDb.close()
+			cacheManifestRevision(newRevision)
+		}
+		else throw new Error(`YGOrg DB returned bad status (${r.status}) when trying to update manifest.`)
+	}).catch(err => {
+		logError(err, '')
+	})
+}
 
 /**
  * Saves off the YGORG card name -> ID search index for all languages.
  * @param {Array<String>} language An array of languages to query the search index for.
  */
 async function cacheNameToIdIndex(lans = Object.keys(Languages)) {
-	const apiRequests = []
+	// Only request the languages that we don't have cached.
+	const lansNotCached = lans.filter(l => !(l in nameToIdIndex))
+	if (!lansNotCached.length) return
 
-	for (const l of lans) {
+	const apiRequests = []
+	for (const l of lansNotCached) {
 		const lanIndex = axios.get(`${YGORG_NAME_ID_INDEX}/${l}`, {
 			'timeout': 3 * 1000
 		}).then(r => {
@@ -24,27 +124,38 @@ async function cacheNameToIdIndex(lans = Object.keys(Languages)) {
 		apiRequests.push(lanIndex)
 	}
 
+	let manifestRevsion = cachedRevision
 	// Track results for logging.
 	const successfulRequests = []
 
 	const indices = await Promise.allSettled(apiRequests)
 	for (let i = 0; i < indices.length; i++) {
 		const index = indices[i]
-		// These promises are returned in the same order as they were in the given lans parameter.
+		// These promises in the same order we sent the requests in.
 		// Use that to map each response to a given language.
-		const indexLanguage = lans[i]
+		const indexLanguage = lansNotCached[i]
 
 		if (index.status === 'rejected') {
 			logError(index.reason, `Failed to refresh cached YGORG name->ID index for language ${indexLanguage}.`)
 			continue
 		}
 
-		nameToIdIndex[indexLanguage] = index.value.data
+		// While we're here, take a look at the manifest revision.
+		manifestRevsion = index.value.headers['x-cache-revision']
+
+		nameToIdIndex[indexLanguage] = {}
+		// Make all the names lowercase for case-insensitive lookups.
+		for (const n of Object.keys(index.value.data)) {
+			const lcName = n.toLowerCase()
+			nameToIdIndex[indexLanguage][lcName] = index.value.data[n]
+		}
 		successfulRequests.push(indexLanguage)
 	}
 
 	if (successfulRequests.length)
 		logger.info(`Refreshed cached YGOrg name->ID index for language(s): ${successfulRequests.join(', ')}`)
+
+	processManifest(manifestRevsion, ['idx'])
 }
 
 /**
@@ -55,11 +166,15 @@ async function cacheNameToIdIndex(lans = Object.keys(Languages)) {
  * @returns {Object} All relevant matches.
  */
 function searchNameToIdIndex(search, lans, returnMatches = 1) {
+	// First make sure we've got everything cached.
+	cacheNameToIdIndex(lans)
+
 	let matches = {}
 
 	for (const l of lans) {
-		const searchFilter = new CardDataFilter(nameToIdIndex[l], search, 'CARD_NAME')
+		if (!(l in nameToIdIndex)) continue
 
+		const searchFilter = new CardDataFilter(nameToIdIndex[l], search, 'CARD_NAME')
 		const lanMatches = searchFilter.filterIndex(returnMatches)
 		for (const id in lanMatches) {
 			const score = lanMatches[id]
@@ -68,9 +183,9 @@ function searchNameToIdIndex(search, lans, returnMatches = 1) {
 		}
 	}
 
-	// If we had more than one language, we need to re-sort our matches in case each language added some.
-	if (lans.length > 1) {
-		// If scores are diffeerent, descending sort by score (i.e., higher scores first).
+	// If we had more than one language and more than one match, we need to re-sort our matches in case each language added some.
+	if (lans.length > 1 && Object.keys(matches).length > 1) {
+		// If scores are different, descending sort by score (i.e., higher scores first).
 		// If scores are the same, ascending sort by ID (i.e., lower IDs first).
 		const sortedResult = Object.entries(matches).sort(([idA, scoreA], [idB, scoreB]) => {
 			return (scoreA !== scoreB) ? (scoreB - scoreA) : (idA - idB)
@@ -104,41 +219,84 @@ async function cacheLocaleMetadata() {
 				const enProp = prop['en']
 				localePropertyMetadata[enProp] = {}
 				for (const lan in prop) {
-					if (lan === 'en') continue
-					// Make the other language property names their own keys under EN.
+					// Make each language a key under EN that maps to the translation of that property.
 					localePropertyMetadata[enProp][lan] = prop[lan]
 				}
 			}
+
+			// Also load some hardcoded ones the bot tracks for itself (not given by YGOrg DB since it doesn't have any use for them).
+			localePropertyMetadata['Level'] = {
+				'de': 'Stufe',
+				'en': 'Level',
+				'es': 'Nivel',
+				'fr': 'Niveau',
+				'it': 'Livello',
+				'ja': 'レベル',
+				'ko': '레벨',
+				'pt': 'Nível'
+			}
+			localePropertyMetadata['Rank'] = {
+				'de': 'Rang',
+				'en': 'Rank',
+				'es': 'Rango',
+				'fr': 'Rang',
+				'it': 'Rango',
+				'ja': 'ランク',
+				'ko': '랭크',
+				'pt': 'Classe'
+			}
+			localePropertyMetadata['Pendulum Effect'] = {
+				'de': 'Pendeleffekt',
+				'en': 'Pendulum Effect',
+				'es': 'Efecto de Péndulo',
+				'fr': 'Effet Pendule',
+				'it': 'Effetto Pendulum',
+				'ja': 'ペンデュラム効果',
+				'ko': '펜듈럼 효과',
+				'pt': 'Efeito de Pêndulo'
+			}
+			localePropertyMetadata['Pendulum Scale'] = {
+				'de': 'Pendelbereich',
+				'en': 'Pendulum Scale',
+				'es': 'Escala de Péndulo',
+				'fr': 'Échelle Pendule',
+				'it': 'Valore Pendulum',
+				'ja': 'ペンデュラムスケール',
+				'ko': '펜듈럼 스케일',
+				'pt': 'Escala de Pêndulo'
+			}
+
 			logger.info('Successfully cached YGOrg DB locale property metadata.')
 		}
+		else throw new Error(`YGOrg DB returned bad status (${r.status}) when trying to update locale property metadata.`)
 	}).catch(e => {
 		logError(e, 'Failed getting locale metadata.')
 	})
 }
 
 /**
- * Searches the locale property metadata to map an English type(s) to its version in another language.
- * @param {String | Array<String>} type The type(s) in English.
- * @param {String} language The language's version of the type to search for.
- * @returns {String | Array<String>} The type(s) in the given language.
+ * Searches the locale property metadata to map an English property(s) to its version in another language.
+ * @param {String | Array<String>} type The property(s) in English.
+ * @param {String} language The language's version of the property to search for.
+ * @returns {String | Array<String>} The property(s) in the given language.
  */
-function searchLocalePropertyMetadata(type, language) {
-	let types = []
+function searchLocalePropertyMetadata(prop, language) {
+	let props = []
 
-	// If we're just converting the one type, return immediately once we find it.
-	if (typeof type === 'string' && type in localePropertyMetadata)
-		return localePropertyMetadata[type][language]
+	// If we're just converting the one property, return immediately once we find it.
+	if (typeof prop === 'string' && prop in localePropertyMetadata)
+		return localePropertyMetadata[prop][language]
 	else {
-		// Otherwise, loop through our types to map each of them to the proper value.
-		for (const t of type) {
-			if (t in localePropertyMetadata)
-				types.push(localePropertyMetadata[t][language])
+		// Otherwise, loop through our properties to map each of them to the proper value.
+		for (const p of prop) {
+			if (p in localePropertyMetadata)
+				props.push(localePropertyMetadata[p][language])
 		}
 	}
 
-	return types
+	return props
 }
 
 module.exports = {
-	cacheNameToIdIndex, cacheLocaleMetadata, searchLocalePropertyMetadata, searchNameToIdIndex
+	cacheManifestRevision, cacheNameToIdIndex, searchNameToIdIndex, cacheLocaleMetadata, searchLocalePropertyMetadata
 }

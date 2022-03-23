@@ -30,6 +30,9 @@ function searchTermCache(searches, qry, db) {
 	// Iterate through the array backwards because we might modify it as we go.
 	for (let i = searches.length - 1; i >= 0; i--) {
 		const currSearch = searches[i]
+		// Skip QA searches, their terms aren't card database IDs.
+		if (currSearch.hasType('q')) continue
+
 		const currTerm = currSearch.term
 
 		const dbRows = db.prepare(sqlQry).all(currTerm)
@@ -269,6 +272,27 @@ function addToBotDb(searchData) {
 }
 
 /**
+ * Evicts any values matching the given IDs from the bot database.
+ * @param {Array<Number>} ids The set of IDs to evict.
+ */
+function evictFromBotCache(ids) {
+	const db = new Database(BOT_DB_PATH)
+
+	const delTerms = db.prepare('DELETE FROM termCache WHERE dbId = ? AND location = \'bot\'')
+	const delData = db.prepare('DELETE FROM dataCache WHERE dbId = ?')
+
+	const delMany = db.transaction(vals => {
+		for (const v of vals) {
+			delTerms.run(v)
+			delData.run(v)
+		}
+	})
+	delMany(ids)
+
+	db.close()
+}
+
+/**
  * Clears the bot cache by removing all cached search terms and data.
  */
 function clearBotCache() {
@@ -287,5 +311,5 @@ function clearBotCache() {
 }
 
 module.exports = {
-	searchTermCache, addToTermCache, searchBotDb, addToBotDb, clearBotCache
+	searchTermCache, addToTermCache, searchBotDb, addToBotDb, evictFromBotCache, clearBotCache
 }

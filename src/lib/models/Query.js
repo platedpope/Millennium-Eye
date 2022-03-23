@@ -53,6 +53,16 @@ class Search {
 	}
 
 	/**
+	 * Checks whether this Search has a given type.
+	 * @param {String} type The type of search to check for.
+	 * @returns {Boolean} Whether or not this search has the given type.
+	 */
+	hasType(type) {
+		for (const l of this.lanToTypesMap.keys()) 
+			return this.lanToTypesMap.get(l).has(type)
+	}
+
+	/**
 	 * Merges the values of this search with another Search object.
 	 * @param {Search} otherSearch The other Search object to be merged into this one.
 	 */
