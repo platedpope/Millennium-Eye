@@ -23,7 +23,7 @@ function cacheManifestRevision(newRevision) {
 	}
 	else {
 		db.prepare('DELETE FROM manifest').run()
-		db.prepare('INSERT OR REPLACE INTO manifest(lastKnownRevision) VALUES (?)').run(newRevision)
+		db.prepare('INSERT INTO manifest(lastKnownRevision) VALUES (?)').run(newRevision)
 		cachedRevision = newRevision
 	}
 
@@ -38,9 +38,8 @@ function cacheManifestRevision(newRevision) {
  * Invalidates all necessary cached values based on what the changes report.
  * NOTE: nothing is re-cached afterward, that will only happen on future requests for that data.
  * @param {Number} revision The revision number to compare to our cached one.
- * @param {Array<String>} ignoreEvict Ignore evicting from these places, likely because their handlers called this function after an API query and already updated.
  */
-async function processManifest(newRevision, ignoreEvict) {
+async function processManifest(newRevision) {
 	// If we've cached something more recent or as recent, nothing to do.
 	if (cachedRevision >= newRevision) return
 
@@ -52,9 +51,6 @@ async function processManifest(newRevision, ignoreEvict) {
 			logger.info(`Processing new manifest revision ${newRevision}...`)
 			const changes = r.data.data 
 			const ygorgDb = new Database(YGORG_DB_PATH)
-			if (ignoreEvict) {
-				var ignoreIdx = ignoreEvict.includes('idx')		// Only one that matters for now. More might come.
-			}
 
 			// Card data updates: no way to tell what exactly has changed,
 			// so just invalidate any data stored in the bot or YGOrg databases.
@@ -87,7 +83,7 @@ async function processManifest(newRevision, ignoreEvict) {
 				logger.info(`Evicted all QA data for QA IDs: ${evictQas.join(', ')}`)
 			}
 			// Invalidate any cached indices we care about.
-			if (!ignoreIdx && 'idx' in changes) {
+			if ('idx' in changes) {
 				const idxChanges = changes.idx
 				if ('name' in idxChanges) {
 					logger.info(`Evicted languages ${Object.keys(idxChanges).join(', ')} from name index.`)
@@ -154,8 +150,8 @@ async function cacheNameToIdIndex(lans = Object.keys(Languages)) {
 
 	if (successfulRequests.length)
 		logger.info(`Refreshed cached YGOrg name->ID index for language(s): ${successfulRequests.join(', ')}`)
-
-	processManifest(manifestRevsion, ['idx'])
+		
+	await processManifest(manifestRevsion)
 }
 
 /**
@@ -168,6 +164,9 @@ async function cacheNameToIdIndex(lans = Object.keys(Languages)) {
 function searchNameToIdIndex(search, lans, returnMatches = 1) {
 	// First make sure we've got everything cached.
 	cacheNameToIdIndex(lans)
+	// Note: in rare scenarios this can cache something but evict another (if a manifest revision demands it),
+	// leaving us with nothing for a given language. This will cause this function to find no matches for the given search's language index,
+	// which is unfortunate, but the logic will fail gracefully and I'm hoping it's rare enough that it won't be a practical issue.
 
 	let matches = {}
 

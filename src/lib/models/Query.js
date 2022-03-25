@@ -2,6 +2,8 @@ const { Message, CommandInteraction, MessageEmbed } = require('discord.js')
 
 const MillenniumEyeBot = require('./MillenniumEyeBot')
 const { KONAMI_DB_CARD_REGEX, KONAMI_DB_QA_REGEX, YGORG_DB_CARD_REGEX, YGORG_DB_QA_REGEX, IGNORE_LINKS_REGEX } = require('./Defines')
+const { LEFT } = require('ascii-table')
+const { logError } = require('lib/utils/logging')
 
 /**
  * Container class for a single search. It tracks any original terms used to map to its data,
@@ -63,6 +65,56 @@ class Search {
 	}
 
 	/**
+	 * Checks whether a search has resolved all necessary data related to its search types.
+	 * i.e., does it have data for all the languages and types it searched?
+	 * @returns {Boolean} True if all types/languages have corresponding data.
+	 */
+	isDataFullyResolved() {
+		if (this.data === undefined) return false
+
+		// Go through our language/types map and check what we need to see for each.
+		for (const lan of this.lanToTypesMap.keys()) {
+			const types = this.lanToTypesMap.get(lan)
+
+			// If this has 'r' or 'i'-type search, it needs name + effect text for this language at a minimum.
+			if (types.has('i') || types.has('r'))
+				if ( !(this.data.name.has(lan)) || !(this.data.effect.has(lan)) )
+					return false
+			// If this has 'a'-type search, it needs image data (language independent).
+			if (types.has('a'))
+				if (!this.data.imageData.size)
+					return false
+			// If this has 'd'-type search, it needs print data for this language.
+			if (types.has('d'))
+				if (!(this.data.printData.has(lan)))
+					return false
+			// If this has 'p'-type search... honestly these are nonstandard, just check for name in this language for now.
+			if (types.has('p'))
+				if (!(this.data.name.has(lan)))
+					return false
+			const usPrice = types.has('$')
+			const euPrice = types.has('€')
+			// If this has '$' or '€'-type search, it needs corresponding price data.
+			if (usPrice || euPrice)
+				if (usPrice && !(this.data.priceData.has('us')))
+					return false
+				if (euPrice && !(this.data.priceData.has('eu')))
+					return false
+			// If this has 'f'-type search, it needs FAQ data for this language.
+			if (types.has('f'))
+				if (!(this.data.faqData.has(lan)))
+					return false
+			// If this has 'q'-type search, it needs QA data for this language.
+			if (types.has('q'))
+				if ( !(this.data.title.has(lan)) || !(this.data.question.has(lan)) || !(this.data.answer.has(lan)) )
+					return false
+		}
+
+		// If we got this far, everything looks good.
+		return true
+	}
+
+	/**
 	 * Merges the values of this search with another Search object.
 	 * @param {Search} otherSearch The other Search object to be merged into this one.
 	 */
@@ -77,7 +129,7 @@ class Search {
 
 		// Add any new search types to associate with this search.
 		otherSearch.lanToTypesMap.forEach((otherTypes, otherLan) => {
-			const thisSearchLan = this.lanToTypesMap(otherLan)
+			const thisSearchLan = this.lanToTypesMap.get(otherLan)
 			if (thisSearchLan === undefined)
 				// If the other search has a type this one doesn't, just add it.
 				this.lanToTypesMap.set(otherLan, otherTypes)
@@ -109,6 +161,7 @@ class Query {
 			this.official = qry.official
 			this.rulings = qry.rulings
 			this.language = qry.language
+			this.rawSearchData = qry.rawSearchData
 			this.bot = qry.bot
 			/**
 			 * @type {Array<Search>}
@@ -121,26 +174,25 @@ class Query {
 			this.rulings = bot.getCurrentChannelSetting(qry.channel, 'rulings')
 			this.language = bot.getCurrentChannelSetting(qry.channel, 'language')
 			this.bot = bot
+			this.rawSearchData = this.evaluateMessage(qry)
 			
 			/**
 			 * @type {Array<Search>}
 			 */
 			this.searches = []
-	
-			this.evaluateMessage(qry)
+			for (const s of this.rawSearchData)
+				this.addSearch(s[0], s[1], s[2])
 		}
 	}
 
 	/**
-	 * Evaluates the contents of a message to determine what to query, 
-	 * and what types those queries are.
-	 * @param {Message | CommandInteraction} msg The message to evaluate. 
+	 * Evaluates the contents of a message to extract the raw search data 
+	 * (i.e., the content and types to query) from it.
+	 * @param {Message | CommandInteraction} msg The message to evaluate.
+	 * @returns {Array} An array of raw search data, each member is an array of [search content, type, language].
 	 */
 	evaluateMessage(msg) {
-		if (msg instanceof CommandInteraction)
-			var msgContent = msg.options.getString('content', true)
-		else
-			msgContent = msg.content
+		let msgContent = msg instanceof CommandInteraction ? msg.options.getString('content', true) : msg.content
 
 		/* Strip text we want to ignore from the message content:
 		* - characters between `` (code tags)
@@ -153,16 +205,18 @@ class Query {
 			.replace(/^\s*> .*$/gm, '')
 			.toLowerCase()
 
+		const searchData = []
+		
 		const guildQueries = this.bot.getGuildQueries(msg.guild)
 		if (guildQueries) {
 			for (const lan in guildQueries) {
 				const matches = [...msgContent.matchAll(guildQueries[lan])]
 				if (matches.length) {
 					for (const m of matches) {
-						let sType = m[1] ?? (this.rulings ? 'r' : 'i')
 						let sContent = m[2]
 						// If the search content has a link in it, ignore it to avoid really dumb behavior.
 						if (IGNORE_LINKS_REGEX.test(sContent)) continue
+						let sType = m[1] ?? (this.rulings ? 'r' : 'i')
 						// Try converting the search to an integer to see if it's a card or ruling ID.
 						let intSContent = parseInt(sContent, 10)
 						if (!isNaN(intSContent)) {
@@ -173,7 +227,7 @@ class Query {
 						}
 						let sLan = m[3] ?? lan
 
-						this.addSearch(sContent, sType, sLan)
+						searchData.push([sContent, sType, sLan])
 					}
 				}
 			}
@@ -191,7 +245,7 @@ class Query {
 				let sContent = parseInt(l[1], 10)
 				let sLan = this.language
 
-				this.addSearch(sContent, sType, sLan)
+				searchData.push([sContent, sType, sLan])
 			}
 		}
 
@@ -205,9 +259,52 @@ class Query {
 				let sContent = parseInt(l[1], 10)
 				let sLan = this.language
 
-				this.addSearch(sContent, sType, sLan)
+				searchData.push([sContent, sType, sLan])
 			}
 		}
+
+		return searchData
+	}
+
+	/**
+	 * Updates the query's content and searches array to correspond to the contents of a new message.
+	 * This will add or remove searches that are new or no longer present (respectively),
+	 * and update existing searches that may have new types or languages based on the new message.
+	 * @param {Message | CommandInteraction} msg The new message from which to update the search data. 
+	 */
+	updateSearchData(msg) {
+		const newSearchData = this.evaluateMessage(msg)
+
+		// First, just insert everything to add or update existing searches as necessary.
+		for (const s of newSearchData)
+			this.addSearch(s[0], s[1], s[2])
+		// Now remove any searches that were in the old query but not in the new one.
+		const onlyInOldSearch = 
+			this.rawSearchData.filter(os => 
+				!newSearchData.some(ns => os[0] === ns[0] && os[1] === ns[1] && os[2] === ns[2]))
+		for (const oldS of onlyInOldSearch) {
+			const sContent = oldS[0]
+			const sType = oldS[1]
+			const sLan = oldS[2]
+
+			const currSearch = this.findSearch(sContent)
+			if (currSearch) {
+				// Remove this search's language -> type pair from the map.
+				const currTypes = currSearch.lanToTypesMap.get(sLan)
+				currTypes.delete(sType)
+				// If this left no types for this language, delete the language from the map.
+				if (!currTypes.size) {
+					currSearch.lanToTypesMap.delete(sLan)
+					// If deleting this language left no languages for this search,
+					// then this search isn't being used anymore. Delete it entirely.
+					if (!currSearch.lanToTypesMap.size) 
+						this.searches.splice(this.searches.indexOf(s => s.originals.has(originalTerm)), 1)
+				} 
+			}
+		}
+
+		// Last, update our raw search data.
+		this.rawSearchData = newSearchData
 	}
 
 	/**
@@ -241,21 +338,8 @@ class Query {
 	 * Returns all searches in this Query that have not resolved all info relevant to them.
 	 * @returns {Array<Search>} All searches with undefined data properties.
 	 */
-	getUnresolvedSearches() {
-		return this.searches.filter(s => { 
-			// If this has no data at all, return immedately.
-			if (s.data === undefined) return true
-			else {
-				// Otherwise, there's a possibility this has data for some but not all languages it needs.
-				// Check the data "name" property (which is a map of language -> name in that language)
-				// to see whether it has an entry corresponding to each language.
-				for (const l in s.lanToTypesMap.keys()) {
-					if (s.data.name.get(l) === undefined) return true
-				}
-			}
-			// Otherwise, this search has everything it needs.
-			return false
-		})
+	findUnresolvedSearches() {
+		return this.searches.filter(s => !s.isDataFullyResolved())
 	}
 
 	/**
@@ -284,54 +368,6 @@ class Query {
 			originalSearch.term = newTerm
 			return false
 		}
-	}
-
-	/**
-	 * Find the difference between two queries. More precisely, this function evaluates searches
-	 * that ONLY exist in the object this function is called on, and NOT in the other query it is being diffed from.
-	 * Essentially, it treats this as the "new" object and the other query as the "old" object.
-	 * @param {Query} otherQuery The other Query object to diff from.
-	 * @returns {Array<Search>} All Searches of terms and types that did not exist in the other query.
-	 */
-	diffFrom(otherQuery) {
-		const onlyInThis = []
-
-		for (const thisSearch of this.searches) {
-			const trimmedSearch = new Search(thisSearch.term)
-
-			// If there's a search in this Query that's not in the other, then just add it to our trimmed search.
-			const otherSearch = otherQuery.findSearch(thisSearch.term)
-			if (otherSearch === undefined)
-				onlyInThis.push(thisSearch)
-			else {
-				// If both have the same searches, only track any new search types.
-				thisSearch.types.forEach((thisTypes, thisLan) => {
-					const otherSearchLans = otherSearch.types.get(thisLan)
-					if (otherSearchLans === undefined) {
-						// If the new search has a language this one doesn't, just add it.
-						trimmedSearch.addTypeToLan(thisTypes, thisLan)
-					}
-					else {
-						// This language exists in both Searches. 
-						// Look for any search types that exist in this one but not in the other, then add them.
-						const typesOnlyInThis = new Set()
-						thisTypes.forEach(t => {
-							if (!otherSearchLans.has(t))
-								typesOnlyInThis.add(t)
-						})
-
-						if (typesOnlyInThis.size)
-							trimmedSearch.addTypeToLan(typesOnlyInThis, thisLan)
-					}
-				})
-
-				// If we found any unique search types, add our trimmed search to the return.
-				if (trimmedSearch.types.size)
-					onlyInThis.push(trimmedSearch)
-			}
-		}
-
-		return onlyInThis
 	}
 
 	/**

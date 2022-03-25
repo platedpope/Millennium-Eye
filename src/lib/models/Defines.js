@@ -19,11 +19,13 @@ module.exports = {
 	YGORG_LOCALE_METADATA: 'https://db.ygorganization.com/data/meta/mprop',
 	// Bot data type definitions for easy reference.
 	QueryTypes: {
+		'i': 'info',
 		'r': 'ruling',
 		'a': 'art',
 		'd': 'date',
 		'p': 'yugipedia',
-		'$': 'price',
+		'$': 'usprice',
+		'€': 'euprice',
 		'f': 'faq',
 		'q': 'qna'
 	},

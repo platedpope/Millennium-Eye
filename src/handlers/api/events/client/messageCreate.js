@@ -1,9 +1,9 @@
 const Discord = require('discord.js')
 
-const { prepareDiscordLogJsMessage } = require ('lib/utils/logging')
 const MillenniumEyeBot = require('lib/models/MillenniumEyeBot')
 const Event = require('lib/models/Event')
-const { processMessage, sendReply } = require('user/QueryHandler')
+const { processQuery, sendReply } = require('user/QueryHandler')
+const { Query } = require('lib/models/Query')
 
 module.exports = new Event({
 	event: 'messageCreate',
@@ -17,9 +17,12 @@ module.exports = new Event({
 		if (message.author.bot) return
 		if (!message.content) return
 
-		const qry = await processMessage(bot, message)
+		const qry = new Query(message, bot)
 
 		if (qry.searches.length !== 0)  {
+			await message.channel.sendTyping()
+			
+			await processQuery(qry)
 			const embeds = qry.getDataEmbeds()
 			if (embeds)
 				await sendReply(bot, message, '', qry, {

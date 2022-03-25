@@ -30,7 +30,9 @@ class Card {
 		this.ocgList = null				// Status on the OCG F/L list (same values as above).
 		this.notInCg = null				// True if the card isn't from the TCG or OCG; from anime/manga/game instead.
 		this.printData = new Map()		// Data about when this card was printed and in which sets. Each key is a language, with value a further map of print code -> print date.
-		this.imageData = {}				// Image(s) associated with the card. Either BLOB data or links.
+		this.imageData = new Map()		// Image(s) associated with the card. Each key is a language, with value a further map of art ID -> image data (either BLOB or link).
+		this.priceData = new Map()		// Any price data for this card. Valid keys are 'us' or 'eu', with values being the price data in that region.
+		this.faqData = new Map()		// Any FAQ data for this card. Each key is a language, with value being the FAQ data for that language.
 	}
 
 	/**
