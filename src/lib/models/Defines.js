@@ -8,6 +8,8 @@ module.exports = {
 	IGNORE_LINKS_REGEX: /(?:https?|www\.)/g,
 	// Constant values.
 	MESSAGE_TIMEOUT: 15,
+	USER_TIMEOUT: 60,
+	SEARCH_TIMEOUT_TRIGGER: 15,
 	BOT_DB_PATH: `${process.cwd()}/data/bot.db`,
 	KONAMI_DB_PATH: `${process.cwd()}/data/carddata.db`,
 	NEURON_DB_PATH: `${process.cwd()}/data/neuron_name_rainbow`,

@@ -23,6 +23,15 @@ module.exports = new Command({
 		const qry = new Query(interaction, bot)
 
 		if (qry.searches.length !== 0) {
+			// Let the user know they're timed out.
+			if (updateUserTimeout(interaction.user.id, qry.searches.length)) {
+				await interaction.reply({
+					content: 'Sorry, you\'ve requested too many searches recently. Please slow down and try again in a minute.',
+					allowedMentions: { repliedUser: false }
+				})
+				return
+			}
+
 			await interaction.channel.sendTyping()
 
 			await processQuery(qry)

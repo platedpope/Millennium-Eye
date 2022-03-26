@@ -4,7 +4,6 @@ const Cache = require('timed-cache')
 const config = require('config')
 const { generateError } = require('lib/utils/logging')
 const { setupQueryRegex } = require('lib/utils/regex')
-const Command = require('./Command')
 const ConfigCache = require('./ConfigCache')
 const { Languages, MESSAGE_TIMEOUT } = require('./Defines')
 

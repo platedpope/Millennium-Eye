@@ -1,10 +1,16 @@
-const { Message, CommandInteraction } = require('discord.js')
+const { Message } = require('discord.js')
+const Cache = require('timed-cache')
 
 const { MillenniumEyeBot } = require('lib/models/MillenniumEyeBot')
 const { Query } = require('lib/models/Query')
 const { searchTermCache } = require('database/BotDBHandler')
 const { searchKonamiDb } = require('database/KonamiDBHandler')
-const { logger } = require('lib/utils/logging')
+const { logger, logError } = require('lib/utils/logging')
+const { SEARCH_TIMEOUT_TRIGGER } = require('lib/models/Defines')
+
+// Used to monitor how many searches a user has queried the bot over a period of time (default 1 min).
+// If a user passes the acceptable number over the course of that minute, no future searches within that minute are allowed.
+const userSearchCounter = new Cache({ defaultTtl: 60 * 1000 })
 
 /**
  * Takes an incoming Query and performs all necessary processing to evaluate its searches.
@@ -27,7 +33,12 @@ async function processQuery(qry) {
 			// Nothing left to evaluate.
 			break
 
-		step(searchesToEval, qry)
+		try {
+			step(searchesToEval, qry)
+		}
+		catch (err) {
+			logError(err, `Process query step ${step.name} failed.`)
+		}
 
 		// Log out our new successes.
 		for (const s of searchesToEval)
@@ -36,6 +47,29 @@ async function processQuery(qry) {
 	}
 
 	return qry
+}
+
+/**
+ * Updates a user's cached timeout value given their number of searches, or indicates
+ * whether they have been timed out.
+ * @param {Number} userId The ID of the user.
+ * @param {Number} numSearches The number of searches to update and check.
+ * @returns {Boolean} True if the user has reached their limit, false if not.
+ */
+function updateUserTimeout(userId, numSearches) {
+	const userSearches = userSearchCounter.get(userId)
+	if (userSearches === undefined)
+		// User's first search this minute, just start tracking them.
+		userSearchCounter.put(userId, numSearches)
+	else {
+		if (userSearches >= SEARCH_TIMEOUT_TRIGGER)
+			return true
+		
+		// This user has searches in the past minute, update their value.
+		userSearchCounter.put(userId, userSearches + numSearches)
+	}
+
+	return false
 }
 
 /**
@@ -70,5 +104,5 @@ async function sendReply(bot, origMessage, replyContent, qry, replyOptions) {
 }
 
 module.exports = {
-	processQuery, sendReply
+	processQuery, sendReply, updateUserTimeout
 }
