@@ -1,9 +1,7 @@
 const { Message, CommandInteraction, MessageEmbed } = require('discord.js')
 
-const MillenniumEyeBot = require('./MillenniumEyeBot')
+const { MillenniumEyeBot } = require('./MillenniumEyeBot')
 const { KONAMI_DB_CARD_REGEX, KONAMI_DB_QA_REGEX, YGORG_DB_CARD_REGEX, YGORG_DB_QA_REGEX, IGNORE_LINKS_REGEX } = require('./Defines')
-const { LEFT } = require('ascii-table')
-const { logError } = require('lib/utils/logging')
 
 /**
  * Container class for a single search. It tracks any original terms used to map to its data,

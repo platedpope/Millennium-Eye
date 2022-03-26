@@ -1,7 +1,7 @@
 /* eslint-disable no-unused-vars */
 const Discord = require('discord.js')
 
-const MillenniumEyeBot = require('./MillenniumEyeBot')
+const { MillenniumEyeBot } = require('./MillenniumEyeBot')
 
 /**
  * @template {keyof Discord.ClientEvents} K

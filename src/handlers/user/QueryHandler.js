@@ -1,6 +1,6 @@
 const { Message, CommandInteraction } = require('discord.js')
 
-const MillenniumEyeBot = require('lib/models/MillenniumEyeBot')
+const { MillenniumEyeBot } = require('lib/models/MillenniumEyeBot')
 const { Query } = require('lib/models/Query')
 const { searchTermCache } = require('database/BotDBHandler')
 const { searchKonamiDb } = require('database/KonamiDBHandler')
@@ -19,7 +19,6 @@ async function processQuery(qry) {
 		searchTermCache,
 		searchKonamiDb
 	]
-	
 
 	for (const step of processSteps) {
 		// Update for any searches that remain.

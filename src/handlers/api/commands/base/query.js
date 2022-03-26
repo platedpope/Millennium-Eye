@@ -1,17 +1,8 @@
 
 const Command = require('lib/models/Command')
-const { CommandTypes, Languages } = require('lib/models/Defines')
+const { CommandTypes } = require('lib/models/Defines')
 const { processQuery } = require('user/QueryHandler')
 const { Query } = require('lib/models/Query')
-
-// convert available languages to an array of choices that can be parsed by slash commands
-const languageChoices = []
-for (const code in Languages) {
-	languageChoices.push({
-		'name': Languages[code],
-		'value': code
-	})
-}
 
 module.exports = new Command({
 	name: 'query',

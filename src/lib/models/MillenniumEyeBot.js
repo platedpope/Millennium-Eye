@@ -19,6 +19,8 @@ class MillenniumEyeBot extends Discord.Client {
 		 */
 		this.commands = new Discord.Collection()
 
+		this.logChannel = config.logChannel
+
 		this.guildSettings = new ConfigCache('guildSettings', true)
 		this.channelSettings = new ConfigCache('channelSettings', true)
 		// Track regexes separately, no need to dump them to JSON files since we want to re-init them every time.
@@ -233,4 +235,8 @@ class MillenniumEyeBot extends Discord.Client {
 	}
 }
 
-module.exports = MillenniumEyeBot
+const meInstance = new MillenniumEyeBot()
+
+module.exports =  { 
+	MillenniumEyeBot, meInstance
+}

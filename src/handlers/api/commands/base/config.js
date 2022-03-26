@@ -3,7 +3,7 @@ const { MessageActionRow, MessageButton, MessageSelectMenu, Interaction, TextCha
 const config = require('config')
 const { generateError } = require('lib/utils/logging')
 const Command = require('lib/models/Command')
-const MillenniumEyeBot = require('lib/models/MillenniumEyeBot')
+const { MillenniumEyeBot } = require('lib/models/MillenniumEyeBot')
 const { CommandTypes, Languages, LanguageEmojis } = require('lib/models/Defines')
 
 // convert available languages to an array of choices that can be parsed by slash commands

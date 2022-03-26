@@ -294,16 +294,22 @@ function evictFromBotCache(ids) {
 
 /**
  * Clears the bot cache by removing all cached search terms and data.
+ * @param {Boolean} clearKonamiTerms Whether to remove search terms that reference the Konami database too.
  */
-function clearBotCache() {
+function clearBotCache(clearKonamiTerms = false) {
 	const db = new Database(BOT_DB_PATH)
 
 	db.prepare('PRAGMA foreign_keys = 1').run()
 	db.prepare('DELETE FROM dataCache').run()
 	db.prepare('VACUUM').run()
 
-	// Remove any search terms from the cache that reference the bot data cache.
-	db.prepare('DELETE FROM termCache WHERE location = \'bot\'').run()
+	// Default behavior is to only remove search terms that reference the bot data cache,
+	// and leave cached Konami terms untouched. But every now and again we want to fully reset
+	// the search term cache for sanity's sake.
+	if (clearKonamiTerms)
+		db.prepare('DELETE FROM termCache').run()
+	else
+		db.prepare('DELETE FROM termCache WHERE location = \'bot\'').run()
 
 	db.close()
 

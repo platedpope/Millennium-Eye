@@ -10,6 +10,7 @@ module.exports = {
 	MESSAGE_TIMEOUT: 15,
 	BOT_DB_PATH: `${process.cwd()}/data/bot.db`,
 	KONAMI_DB_PATH: `${process.cwd()}/data/carddata.db`,
+	NEURON_DB_PATH: `${process.cwd()}/data/neuron_name_rainbow`,
 	YGORG_DB_PATH: `${process.cwd()}/data/ygorg.db`,
 	// Seed URLs.
 	YGORG_MANIFEST: `https://db.ygorganization.com/manifest`,

@@ -1,9 +1,11 @@
 const Database = require('better-sqlite3')
-const Card = require('lib/models/Card')
+const PythonShell = require('python-shell').PythonShell
 
-const { KONAMI_DB_PATH } = require('lib/models/Defines')
+const Card = require('lib/models/Card')
+const { KONAMI_DB_PATH, NEURON_DB_PATH } = require('lib/models/Defines')
 const { Search, Query } = require('lib/models/Query')
 const { searchNameToIdIndex } = require('database/YGOrgDBHandler')
+const { logger, logError } = require('lib/utils/logging')
 
 /**
  * Search the Konami (i.e., official) database to resolve our card data.
@@ -128,6 +130,43 @@ function searchKonamiDb(searches, qry, db) {
 	}
 }
 
+/**
+ * Runs the Python scripts to update our local cached Konami database.
+ */
+async function updateKonamiDb() {
+	const updateKonami = new PythonShell(`${process.cwd()}/data/carddata.py`, { pythonOptions: '-u', args: KONAMI_DB_PATH })
+	updateKonami.on('message', msg => console.log(msg))
+
+	const konamiPromise = await new Promise((resolve, reject) => {
+		updateKonami.end((err, code, signal) => {
+			if (err) reject(err)
+
+			logger.info('Updated Konami database.')
+
+			logger.info('Regenerating Konami DB FTS index...')
+			const db = new Database(KONAMI_DB_PATH)
+			db.prepare('INSERT INTO cards_idx(cards_idx) VALUES (\'rebuild\')').run()
+			db.close()
+			logger.info('Done regenerating FTS index.')
+
+			resolve()
+		})
+	}).catch(err => logError(err, 'Failed to update Konami database.'))
+
+	const updateNeuron = new PythonShell(`${process.cwd()}/data/neuron_crawler.py`, { pythonOptions: '-u', args: [ NEURON_DB_PATH, KONAMI_DB_PATH ] })
+	updateNeuron.on('message', msg => console.log(msg))
+
+	await new Promise((resolve, reject) => {
+		updateNeuron.end((err, code, signal) => {
+			if (err) reject(err)
+
+			logger.info('Updated Neuron artwork data.')
+			
+			resolve()
+		})
+	}).catch(err => logError(err, 'Failed to update Neuron data.'))
+}
+
 module.exports = {
-	searchKonamiDb
+	searchKonamiDb, updateKonamiDb
 }

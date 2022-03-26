@@ -1,7 +1,7 @@
 
 const { Guild } = require('discord.js')
 
-const MillenniumEyeBot = require('lib/models/MillenniumEyeBot')
+const { MillenniumEyeBot } = require('lib/models/MillenniumEyeBot')
 
 /**
  * Bulk updates the permissions associated with every command in the server.

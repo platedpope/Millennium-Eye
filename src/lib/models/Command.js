@@ -1,6 +1,6 @@
 const { CommandInteraction }= require('discord.js')
 
-const MillenniumEyeBot = require('./MillenniumEyeBot')
+const { MillenniumEyeBot } = require('./MillenniumEyeBot')
 
 /**
  * @param {CommandInteraction} interaction

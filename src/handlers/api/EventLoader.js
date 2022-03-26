@@ -3,7 +3,7 @@ const { glob } = require('glob')
 const Table = require('ascii-table')
 
 const { logger } = require('lib/utils/logging')
-const MillenniumEyeBot = require('lib/models/MillenniumEyeBot')
+const { MillenniumEyeBot } = require('lib/models/MillenniumEyeBot')
 const Event = require('lib/models/Event')
 const { EventTypes } = require('lib/models/Defines')
 

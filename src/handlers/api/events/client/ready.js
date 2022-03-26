@@ -1,10 +1,11 @@
 const config = require('config')
 const { logger, logError } = require ('lib/utils/logging')
 const { updateCommandPermissions } = require('lib/utils/permissions')
-const MillenniumEyeBot = require('lib/models/MillenniumEyeBot')
+const { MillenniumEyeBot } = require('lib/models/MillenniumEyeBot')
 const Event = require('lib/models/Event')
 const { clearBotCache } = require('database/BotDBHandler')
 const { cacheNameToIdIndex, cacheLocaleMetadata, cacheManifestRevision } = require('database/YGOrgDBHandler')
+const { updateKonamiDb } = require('database/KonamiDBHandler')
 
 module.exports = new Event({
 	event: 'ready', 
@@ -14,7 +15,7 @@ module.exports = new Event({
 	 */
 	execute: async bot => {
 		// Cache log channel.
-		bot.logChannel = bot.channels.cache.get(config.logChannel)
+		bot.logChannel = bot.channels.cache.get(bot.logChannel)
 		
 		// Refresh slash commands.
 		try {
@@ -58,14 +59,21 @@ module.exports = new Event({
 			logger.info('Successfully refreshed application commands.')
 		}
 		catch (err) {
-			logError(err, 'Failed to refresh application commands.', bot)
+			logError(err, 'Failed to refresh application commands.')
 		}
 
 		// Set up all our caches and periodics updates.
-		cacheManifestRevision()
+		
 		// Bot cache clear: once per week.
-		clearBotCache()
-		setInterval(clearBotCache, 7 * 24 * 60 * 60 * 1000)
+		clearBotCache(true)
+		setInterval(clearBotCache, 7 * 24 * 60 * 60 * 1000, true)
+		if (!config.testMode) {
+			// Konami database update: once per day.
+			await updateKonamiDb()
+			setInterval(updateKonamiDb, 24 * 60 * 60 * 1000)
+		}
+
+		cacheManifestRevision()
 		// YGOrg name->ID search index. Set this up on launch, but doesn't need a periodic, 
 		// will be refreshed as necessary during runtime.
 		await cacheNameToIdIndex()

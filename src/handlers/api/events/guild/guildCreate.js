@@ -4,7 +4,7 @@ const config = require('config')
 const { logger, logError } = require('lib/utils/logging')
 const { updateCommandPermissions } = require('lib/utils/permissions')
 const { setupQueryRegex } = require('lib/utils/regex')
-const MillenniumEyeBot = require('lib/models/MillenniumEyeBot')
+const { MillenniumEyeBot } = require('lib/models/MillenniumEyeBot')
 const Event = require('lib/models/Event')
 
 module.exports = new Event({
@@ -31,7 +31,7 @@ module.exports = new Event({
 			}
 		}
 		catch (err) {
-			logError(err, 'Could not set guild commands.', bot, guild)
+			logError(err, 'Could not set guild commands.', guild)
 		}
 
 		// set up default query syntax

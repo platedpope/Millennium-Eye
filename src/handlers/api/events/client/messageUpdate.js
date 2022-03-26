@@ -1,7 +1,6 @@
 const Discord = require('discord.js')
 
-const { prepareDiscordLogJsMessage, logError } = require ('lib/utils/logging')
-const MillenniumEyeBot = require('lib/models/MillenniumEyeBot')
+const { MillenniumEyeBot } = require('lib/models/MillenniumEyeBot')
 const Event = require('lib/models/Event')
 const { Query } = require('lib/models/Query')
 const { MESSAGE_TIMEOUT } = require('lib/models/Defines')

@@ -1,7 +1,7 @@
 const Discord = require('discord.js')
 
 const { logError } = require ('lib/utils/logging')
-const MillenniumEyeBot = require('lib/models/MillenniumEyeBot')
+const { MillenniumEyeBot } = require('lib/models/MillenniumEyeBot')
 const Event = require('lib/models/Event')
 
 module.exports = new Event({
@@ -24,8 +24,8 @@ module.exports = new Event({
 			try { await command.execute(interaction, bot) }
 			catch (err) {
 				if ('logMessage' in err && err.logMessage)
-					logError(err, err.logMessage, bot, interaction)
-				else logError(err, `Failed to execute command ${command.name}!`, bot, interaction)
+					logError(err, err.logMessage, interaction)
+				else logError(err, `Failed to execute command ${command.name}!`, interaction)
 
 				if ('channelResponse' in err && err.channelResponse)
 					interaction.reply(`${err.channelResponse}`)

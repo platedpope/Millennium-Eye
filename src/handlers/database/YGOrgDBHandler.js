@@ -96,7 +96,7 @@ async function processManifest(newRevision) {
 		}
 		else throw new Error(`YGOrg DB returned bad status (${r.status}) when trying to update manifest.`)
 	}).catch(err => {
-		logError(err, '')
+		logError(err, 'Failed processing YGOrg DB manifest.')
 	})
 }
 
@@ -120,11 +120,18 @@ async function cacheNameToIdIndex(lans = Object.keys(Languages)) {
 		apiRequests.push(lanIndex)
 	}
 
-	let manifestRevsion = cachedRevision
 	// Track results for logging.
 	const successfulRequests = []
 
 	const indices = await Promise.allSettled(apiRequests)
+
+	// Look at the manifest revision first so we evict anything before repopulating.
+	const goodReq = indices.find(i => i.status === 'fulfilled')
+	if (goodReq) {
+		const manifestRevsion = goodReq.value.headers['x-cache-revision']
+		await processManifest(manifestRevsion)
+	}
+
 	for (let i = 0; i < indices.length; i++) {
 		const index = indices[i]
 		// These promises in the same order we sent the requests in.
@@ -135,9 +142,6 @@ async function cacheNameToIdIndex(lans = Object.keys(Languages)) {
 			logError(index.reason, `Failed to refresh cached YGORG name->ID index for language ${indexLanguage}.`)
 			continue
 		}
-
-		// While we're here, take a look at the manifest revision.
-		manifestRevsion = index.value.headers['x-cache-revision']
 
 		nameToIdIndex[indexLanguage] = {}
 		// Make all the names lowercase for case-insensitive lookups.
@@ -150,8 +154,6 @@ async function cacheNameToIdIndex(lans = Object.keys(Languages)) {
 
 	if (successfulRequests.length)
 		logger.info(`Refreshed cached YGOrg name->ID index for language(s): ${successfulRequests.join(', ')}`)
-		
-	await processManifest(manifestRevsion)
 }
 
 /**

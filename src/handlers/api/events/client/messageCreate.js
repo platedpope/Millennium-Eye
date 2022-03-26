@@ -1,6 +1,6 @@
 const Discord = require('discord.js')
 
-const MillenniumEyeBot = require('lib/models/MillenniumEyeBot')
+const { MillenniumEyeBot } = require('lib/models/MillenniumEyeBot')
 const Event = require('lib/models/Event')
 const { processQuery, sendReply } = require('user/QueryHandler')
 const { Query } = require('lib/models/Query')

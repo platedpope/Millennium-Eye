@@ -1,16 +1,15 @@
 require('module-alias/register')
 
 const config = require('config')
-const MillenniumEyeBot = require('lib/models/MillenniumEyeBot')
+const { meInstance } = require('lib/models/MillenniumEyeBot')
 
-// change which bot we log in as based on whether we're in test mode
+// Change which bot we log in as based on whether we're in test mode.
 const loginToken = config.testMode ? config.testToken : config.mainToken
-const bot = new MillenniumEyeBot()
 
-// load event handlers
-require('api/EventLoader')(bot)
+// Load event handlers.
+require('api/EventLoader')(meInstance)
 
-// load command handlers
-require('api/CommandLoader')(bot)
+// Load command handlers.
+require('api/CommandLoader')(meInstance)
 
-bot.start(loginToken)
+meInstance.start(loginToken)

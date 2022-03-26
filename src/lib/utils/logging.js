@@ -2,7 +2,6 @@ const { createLogger, format, transports } = require('winston')
 const { inspect } = require('util')
 
 const { testMode } = require('config')
-const MillenniumEyeBot = require('lib/models/MillenniumEyeBot')
 
 const logger = createLogger({
 	transports: [
@@ -28,10 +27,10 @@ const logger = createLogger({
  * Helper function for logging errors to both the console, file log, and pre-defined Discord channel.
  * @param {any} error The error to log.
  * @param {String} desc A brief description of the error.
- * @param {MillenniumEyeBot} bot The bot.
  * @param  {...any} more Other details (typically objects) to include in the error log.
  */
-async function logError(error, desc, bot, ...more) {
+async function logError(error, desc, ...more) {
+	const { meInstance } = require('lib/models/MillenniumEyeBot')
 	// log to console and file first, they don't have any length restrictions to check
 	let logString = `${desc}\n${inspect(error)}`
 	if (more.length) {
@@ -42,7 +41,7 @@ async function logError(error, desc, bot, ...more) {
 	logger.error(logString)
 
 	// now log to discord channel if possible
-	if (bot) {
+	if (meInstance) {
 		const msgs = [desc]
 		msgs.push(...prepareDiscordLogJsMessage(error))
 		if (more.length) {
@@ -52,7 +51,7 @@ async function logError(error, desc, bot, ...more) {
 			
 		}
 		for (const m of msgs) {
-			await bot.logChannel.send(m)
+			await meInstance.logChannel.send(m)
 		}
 	}
 }
