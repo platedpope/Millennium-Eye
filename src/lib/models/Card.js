@@ -1,6 +1,12 @@
+const fs = require('fs')
+const path = require('path')
+const sharp = require('sharp')
+const sanitize = require('sanitize-filename')
+
 const { searchLocalePropertyMetadata } = require('database/YGOrgDBHandler')
 const { MessageEmbed } = require('discord.js')
-const { EmbedColors, EmbedIcons, Languages } = require('./Defines')
+const { EmbedColors, EmbedIcons } = require('./Defines')
+const { logError } = require('lib/utils/logging')
 
 class Card {
 	/**
@@ -30,7 +36,7 @@ class Card {
 		this.ocgList = null				// Status on the OCG F/L list (same values as above).
 		this.notInCg = null				// True if the card isn't from the TCG or OCG; from anime/manga/game instead.
 		this.printData = new Map()		// Data about when this card was printed and in which sets. Each key is a language, with value a further map of print code -> print date.
-		this.imageData = new Map()		// Image(s) associated with the card. Each key is a language, with value a further map of art ID -> image data (either BLOB or link).
+		this.imageData = new Map()		// Image(s) associated with the card. Each key is an ID, with value a link to that image (either local file or on the web).
 		this.priceData = new Map()		// Any price data for this card. Valid keys are 'us' or 'eu', with values being the price data in that region.
 		this.faqData = new Map()		// Any FAQ data for this card. Each key is a language, with value being the FAQ data for that language.
 	}
@@ -43,10 +49,10 @@ class Card {
 	 */
 	generateEmbed(type, language, official) {
 		if (type === 'i' || type === 'r') {
-			var embed = this.generateInfoEmbed(language, type === 'r' ? true : false, official)
+			var embedData = this.generateInfoEmbed(language, type === 'r' ? true : false, official)
 		}
 
-		return embed
+		return embedData
 	}
 
 	/**
@@ -64,6 +70,7 @@ class Card {
 
 		finalEmbed.setAuthor(cardName, colorIcon[1])
 		finalEmbed.setColor(colorIcon[0])
+		const imageAttach = this.setEmbedImage(finalEmbed, 1)
 
 		// Generate stat description.
 		// Level/Rank
@@ -86,7 +93,6 @@ class Card {
 			stats += ` | ${EmbedIcons['Pendulum Scales']} **${searchLocalePropertyMetadata('Pendulum Scale', language)}**: ${this.pendScale}`
 		// Monster Types
 		if (this.types.length) {
-			stats += '\n'
 			if (language !== 'en')
 				var newLanTypes = searchLocalePropertyMetadata(this.types, language)
 			
@@ -123,7 +129,10 @@ class Card {
 
 		// TODO: Banlist data (footer)
 
-		return finalEmbed
+		return {
+			'embed': finalEmbed,
+			'attachment': imageAttach
+		}
 	}
 
 	/**
@@ -164,6 +173,65 @@ class Card {
 		}
 
 		return [color, icon]
+	}
+
+	/**
+	 * Sets the given embed's image to this image ID and returns
+	 * the corresponding attachment (if any) that is necessary to attach with the message.
+	 * @param {MessageEmbed} embed The embed to set the image for.
+	 * @param {Number} id The ID of the image.
+	 * @param {Boolean} thumbnail Whether to set the thumbnail rather than the actual image. Defaults to true.
+	 * @returns The URL for the attachment, if any (null if no attachment).
+	 */
+	setEmbedImage(embed, id, thumbnail = true) {
+		let attach = null
+		const imagePath = this.imageData.get(id)
+		// If this path is in data/card_images, it's local and needs an attachment.
+		if (imagePath.includes('data/card_images')) {
+			attach = imagePath
+			const imageName = path.basename(imagePath)
+			if (thumbnail)
+				embed.setThumbnail(`attachment://${imageName}`)
+			else
+				embed.setImage(`attachment://${imageName}`)
+		}
+		else {
+			// Otherwise just assume it's a URL to somewhere and use it as the image.
+			if (thumbnail)
+				embed.setThumbnail(imagePath)
+			else
+				embed.setImage(imagePath)
+		}
+
+		return attach
+	}
+	
+	/**
+	 * Adds a given image to this card's image data. If it doesn't exist on the file system,
+	 * it will save the image. If it's from Neuron, it will also crop the image to include just the art.
+	 * @param {Number} id The ID of the image.
+	 * @param img The raw image data. 
+	 * @param {Boolean} fromNeuron Whether this image comes from Neuron.
+	 */
+	addImageData(id, img, fromNeuron) {
+		const artPath = `${process.cwd()}/data/card_images`
+		if (this.dbId)
+			var artFilename = `${this.dbId}_${id}`
+		else if (this.passcode)
+			artFilename = `${this.passcode}_${id}`
+		else
+			artFilename = `${sanitize(this.name.get('en'))}_${id}`
+
+		const fullArtPath = `${artPath}/${artFilename}.png`
+		if (!fs.existsSync(fullArtPath)) {
+			if (fromNeuron)
+				sharp(img).extract({ top: 69, left: 32, width: 193, height: 191 }).toFile(fullArtPath)
+				.catch(err => logError(err, 'Failed to save card cropped image.'))
+			else
+				fs.writeFileSync(fullArtPath, img)
+		}
+
+		this.imageData.set(id, fullArtPath)
 	}
 
 	/**

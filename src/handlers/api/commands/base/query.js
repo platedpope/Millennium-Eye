@@ -27,7 +27,8 @@ module.exports = new Command({
 			if (updateUserTimeout(interaction.user.id, qry.searches.length)) {
 				await interaction.reply({
 					content: 'Sorry, you\'ve requested too many searches recently. Please slow down and try again in a minute.',
-					allowedMentions: { repliedUser: false }
+					allowedMentions: { repliedUser: false },
+					ephemeral: true
 				})
 				return
 			}
@@ -35,11 +36,13 @@ module.exports = new Command({
 			await interaction.channel.sendTyping()
 
 			await processQuery(qry)
-			const embeds = qry.getDataEmbeds()
-			if (embeds)
+			const embedData = qry.getDataEmbeds()
+			if (embedData) {
 				await interaction.reply({
-					embeds: embeds
+					embeds: embedData.embeds,
+					files: embedData.attachments
 				})
+			}
 		}
 	}
 })

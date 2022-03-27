@@ -1,3 +1,5 @@
+const fs = require('fs')
+const sharp = require('sharp')
 const Database = require('better-sqlite3')
 const PythonShell = require('python-shell').PythonShell
 
@@ -18,7 +20,7 @@ function searchKonamiDb(searches, qry, db) {
 		db = new Database(KONAMI_DB_PATH, { readonly: true })
 
 	// Function to fill out card info using the columns returned from the database.
-	const formCard = dbRows => {
+	const formCardFromDb = dbRows => {
 		const card = new Card()
 
 		// Just use the first row as a representative for all the stats that aren't language-sensitive.
@@ -76,7 +78,10 @@ function searchKonamiDb(searches, qry, db) {
 			else if (r.cg === 'ocg') card.ocgList = r.copies
 		}
 
-		// TODO: Gather image data.
+		const getArtData = 'SELECT artId, artwork FROM card_artwork WHERE cardId = ?'
+		const artRows = db.prepare(getArtData).all(card.dbId)
+		for (const r of artRows) 
+			card.addImageData(r.artId, r.artwork, true)
 
 		// TODO: Gather pricing data.
 
@@ -93,7 +98,7 @@ function searchKonamiDb(searches, qry, db) {
 		// If the search term is a number, then it's a database ID.
 		if (Number.isInteger(currSearch.term)) {
 			const dataRows = getDbId.all(currSearch.term)
-			if (dataRows.length) currSearch.data = formCard(dataRows)
+			if (dataRows.length) currSearch.data = formCardFromDb(dataRows)
 		}
 		else {
 			// Otherwise, try to match based on the name index.
@@ -109,7 +114,7 @@ function searchKonamiDb(searches, qry, db) {
 			for (const id in bestMatch) {
 				const dataRows = getDbId.all(id)
 				if (dataRows.length) {
-					currSearch.data = formCard(dataRows)
+					currSearch.data = formCardFromDb(dataRows)
 					// We should have a better search term now.
 					if (currSearch.data.dbId) {
 						const mergedSearch = qry.updateSearchTerm(currSearch.term, currSearch.data.dbId)
@@ -137,8 +142,8 @@ async function updateKonamiDb() {
 	const updateKonami = new PythonShell(`${process.cwd()}/data/carddata.py`, { pythonOptions: '-u', args: KONAMI_DB_PATH })
 	updateKonami.on('message', msg => console.log(msg))
 
-	const konamiPromise = await new Promise((resolve, reject) => {
-		updateKonami.end((err, code, signal) => {
+	await new Promise((resolve, reject) => {
+		updateKonami.end(err => {
 			if (err) reject(err)
 
 			logger.info('Updated Konami database.')
@@ -157,7 +162,7 @@ async function updateKonamiDb() {
 	updateNeuron.on('message', msg => console.log(msg))
 
 	await new Promise((resolve, reject) => {
-		updateNeuron.end((err, code, signal) => {
+		updateNeuron.end(err => {
 			if (err) reject(err)
 
 			logger.info('Updated Neuron artwork data.')

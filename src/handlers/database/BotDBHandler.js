@@ -1,4 +1,5 @@
 const Database = require('better-sqlite3')
+const fs = require('fs')
 
 const Card = require('lib/models/Card')
 const { BOT_DB_PATH } = require('lib/models/Defines')
@@ -312,6 +313,12 @@ function clearBotCache(clearKonamiTerms = false) {
 		db.prepare('DELETE FROM termCache WHERE location = \'bot\'').run()
 
 	db.close()
+
+	// Delete our cached card images too.
+	const imagesPath = `${process.cwd()}/data/card_images`
+	const files = fs.readdirSync(imagesPath)
+	for (const f of files)
+		fs.unlinkSync(`${imagesPath}/${f}`)
 
 	logger.info('The bot database cache has been reset.')
 }

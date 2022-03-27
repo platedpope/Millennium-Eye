@@ -4,7 +4,8 @@ const { MillenniumEyeBot } = require('lib/models/MillenniumEyeBot')
 const Event = require('lib/models/Event')
 const { Query } = require('lib/models/Query')
 const { MESSAGE_TIMEOUT } = require('lib/models/Defines')
-const { processQuery, sendReply } = require('user/QueryHandler')
+const { processQuery, sendReply, updateUserTimeout } = require('user/QueryHandler')
+const { logError } = require('lib/utils/logging')
 
 module.exports = new Event({
 	event: 'messageUpdate',
@@ -40,36 +41,46 @@ module.exports = new Event({
 			// Let the user know they're timed out.
 			// For edits this is a bit imperfect because it will count searches that have already happened...
 			// but honestly, people shouldn't be tripping this limit with normal use regardless.
-			if (updateUserTimeout(newMessage.author.id, qry.searches.length)) {
+			if (updateUserTimeout(newMessage.author.id, newQry.searches.length)) {
 				await newMessage.reply({
 					content: 'Sorry, you\'ve requested too many searches recently. Please slow down and try again in a minute.',
-					ephemeral: true
+					allowedMentions: { repliedUser: false }
 				})
 				return
 			}
 
-			const embeds = newQry.getDataEmbeds()
-			// If we have a single reply to edit, do that.
-			if (cachedReply && cachedReply.replies.length == 1) {
-				const replyToEdit = cachedReply.replies[0]
-				await replyToEdit.edit({
-					embeds: embeds,
-					allowedMentions: { repliedUser: false }
-				})
-			}
-			else {
-				// Otherwise, just send new replies.
-				await sendReply(bot, newMessage, '', newQry, {
-					allowedMentions: { repliedUser: false },
-					embeds: embeds
-				})
+			const embedData = newQry.getDataEmbeds()
+			if (embedData) {
+				// If we have a single reply to edit, do that.
+				if (cachedReply && cachedReply.replies.length == 1) {
+					const replyToEdit = cachedReply.replies[0]
+					await replyToEdit.removeAttachments()
+					await replyToEdit.edit({
+						embeds: embedData.embeds,
+						files: embedData.attachments,
+						allowedMentions: { repliedUser: false }
+					})
+					bot.replyCache.put(newMessage.id, {
+						'author': newMessage.author,
+						'replies': [replyToEdit],
+						'qry': newQry
+					})
+				}
+				else {
+					// Otherwise, just send new replies.
+					await sendReply(bot, newMessage, '', newQry, {
+						embeds: embedData.embeds,
+						files: embedData.attachments,
+						allowedMentions: { repliedUser: false },
+					})
+				}
 			}
 		}
 		else {
 			// If the new query has nothing and we had any cached replies, just delete 'em.
 			for (const cr of cachedReply.replies)
 				await cr.delete()
-			cachedReply.replies = []
+			bot.replyCache.remove(oldMessage.id)
 		}
 		
 	}

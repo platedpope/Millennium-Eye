@@ -369,23 +369,27 @@ class Query {
 	}
 
 	/**
-	 * Gets all embeds formed from the search types used for each search in this query.
-	 * @returns {Array<MessageEmbed>} The array of embeds.
+	 * Gets all embed data (embeds and associated attachments) formed from these searches.
+	 * @returns {Object} Every embed and attachment for this Query.
 	 */
 	 getDataEmbeds() {
-		const embeds = []
+		const embedData = {
+			'embeds': [],
+			'attachments': []
+		}
 
 		for (const s of this.searches) {
 			if (!s.data) continue
 			s.lanToTypesMap.forEach((searchTypes, searchLan) => {
 				for (const t of searchTypes) {
-					const newEmbed = s.data.generateEmbed(t, searchLan, this.official)
-					embeds.push(newEmbed)
+					const newData = s.data.generateEmbed(t, searchLan, this.official)
+					if (newData.embed) embedData.embeds.push(newData.embed)
+					if (newData.attachment) embedData.attachments.push(newData.attachment)
 				}
 			})
 		}
-
-		return embeds
+		
+		return embedData
 	 }
 }
 

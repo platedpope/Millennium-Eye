@@ -32,12 +32,14 @@ module.exports = new Event({
 			await message.channel.sendTyping()
 			
 			await processQuery(qry)
-			const embeds = qry.getDataEmbeds()
-			if (embeds)
+			const embedData = qry.getDataEmbeds()
+			if (embedData) {
 				await sendReply(bot, message, '', qry, {
 					allowedMentions: { repliedUser: false },
-					embeds: embeds
+					embeds: embedData.embeds,
+					files: embedData.attachments
 				})
+			}
 		}
 	}
 })
