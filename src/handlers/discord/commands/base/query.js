@@ -38,12 +38,18 @@ module.exports = new Command({
 			processQuery(qry)
 			
 			const embedData = qry.getDataEmbeds()
-			if (Object.keys(embedData).length) {
-				await interaction.reply({
-					embeds: embedData.embeds,
-					files: embedData.attachments
-				})
+
+			// Build message data.
+			const replyOptions = { 
+				allowedMentions: { repliedUser: false }
 			}
+			if ('embeds' in embedData)
+				replyOptions.embeds = embedData.embeds
+			if ('attachments' in embedData)
+				replyOptions.files = embedData.attachments
+			const report = qry.reportResolution()
+
+			await sendReply(bot, message, report, qry, replyOptions)
 		}
 	}
 })

@@ -47,16 +47,17 @@ function convertKonamiDataToSearchData(resolvedSearches, termUpdates) {
 function convertYgorgDataToSearchData(qaSearches, cardSearches = []) {
 	for (const s of qaSearches.db) {
 		const convertedRuling = Ruling.fromYgorgDb(s.data, ygorgDb)
-		convertRulingAssociatedCardsToCards(convertedRuling)
+		convertRulingAssociatedCardsToCards(convertedRuling, s.lanToTypesMap.keys())
 		s.data = convertedRuling
 	}
 	for (const s of qaSearches.api) {
 		const convertedRuling = Ruling.fromYgorgQaApi(s.data)
-		convertRulingAssociatedCardsToCards(convertedRuling)
+		convertRulingAssociatedCardsToCards(convertedRuling, s.lanToTypesMap.keys())
 		s.data = convertedRuling
 	}
 	for (const s of cardSearches) {
-		const convertedCard = Card.fromYgorgCardApi(s.data)
+		const convertedCard = s.data instanceof Card ? s.data : new Card()
+		Card.fromYgorgCardApi(s.data, convertedCard)
 		s.data = convertedCard
 	}
 
@@ -67,17 +68,23 @@ function convertYgorgDataToSearchData(qaSearches, cardSearches = []) {
 
 /**
  * Converts a ruling's associated cards to actual cards.
- * @param {Ruling} ruling The ruling with cards to convert. 
+ * @param {Ruling} ruling The ruling with cards to convert.
+ * @param {Array<String>} languages The languages that the ruling was queried in, so we can attempt to match these for the cards as well.
  */
-function convertRulingAssociatedCardsToCards(ruling) {
+async function convertRulingAssociatedCardsToCards(ruling, languages) {
 	// This is in here to avoid a circular dependency. Not ideal, but easy.
 	const { processSearches } = require('handlers/QueryHandler')
 	
 	const cardSearches = []
-	for (const cid of ruling.cards)
-		cardSearches.push(new Search(cid, 'i', 'en'))
+	for (const cid of ruling.cards) {
+		const newSearch = new Search(cid)
+		for (const l of languages)
+			// Type doesn't matter, but we need to track the important languages for this search.
+			newSearch.addTypeToLan('i', l)
+		cardSearches.push(newSearch)
+	}
 
-	processSearches(cardSearches)
+	await processSearches(cardSearches)
 
 	const convertedCardData = []
 	for (const s of cardSearches) 

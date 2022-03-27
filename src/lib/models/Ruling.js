@@ -1,4 +1,5 @@
 const { MessageEmbed } = require('discord.js')
+const { logError, breakUpDiscordMessage } = require('lib/utils/logging')
 
 const { LanguageEmojis, KONAMI_QA_LINK, KONAMI_REQUEST_LOCALE, YGORG_QA_LINK  } = require('./Defines')
 
@@ -80,12 +81,16 @@ class Ruling {
 	 * @param {Object} options Relevant options (type, language, etc.) that are passed on to more specific embed functions.
 	 */
 	 generateEmbed(options) {
+		let embedData = {}
+		// Do not send any of these in "Official" mode.
+		if ('official' in options && options.official)
+			return embedData
 		if ('language' in options)
 			var language = options.language
 		if ('random' in options)
 			var random = options.random
 			
-		var embedData = this.generateRulingEmbed(language, random)
+		embedData = this.generateRulingEmbed(language, random)
 
 		return embedData
 	}
@@ -113,9 +118,10 @@ class Ruling {
 		if (random)
 			replacedAnswer = `||${replacedAnswer}||`
 		// Add translation info to the answer field.
-		replacedAnswer = `${replacedAnswer}
-		
-		**Translated**: ${this.date.get(language)} | **View**: ${LanguageEmojis.ja} [ja](${konamiDbLink}) **·** ${LanguageEmojis[language]} [${language}](${ygorgDbLink})`
+		let dateView = `**Translated**: ${this.date.get(language)} | **View**: ${LanguageEmojis.ja} [ja](${konamiDbLink})`
+		if (language !== 'ja')
+			dateView += ` **·** ${LanguageEmojis[language]} [${language}](${ygorgDbLink})`
+		replacedAnswer = `${replacedAnswer}\n\n${dateView}`
 
 		// Some QAs have the same title and question. In those cases, just make the title the ID.
 		if (replacedTitle === replacedQuestion)
@@ -162,11 +168,15 @@ class Ruling {
 	replaceIdsWithNames(text, language, bold = true) {
 		const idMatches = [...text.matchAll(/<<\s*(\d+)\s*>>/g)]
 		if (idMatches.length) {
-			// Convert to a set to eliminate dupes, then make them into integers.
-			const idSet = new Set(...idMatches)
 			const ids = []
+			// Convert to a set to eliminate dupes and convert them to integers.
+			const idSet = new Set()
+			for (const match of idMatches) {
+				const idMatch = match[1]
+				idSet.add(parseInt(idMatch.trim(), 10))
+			}
 			for (const id of idSet)
-				ids.push(parseInt(id, 10))
+				ids.push(id)
 
 			// All of these IDs should be in our associated cards.
 			for (const id of ids) {
@@ -175,6 +185,7 @@ class Ruling {
 					if (bold) text = text.replace(new RegExp(`<<\s*${id}\s*>>`, 'g'), `**${card.name.get(language)}**`)
 					else text = text.replace(new RegExp(`<<\s*${id}\s*>>`, 'g'), card.name.get(language))
 				// This shouldn't happen, but I guess this ID isn't among our associated cards?
+				// else { logError(this.cards, `Could not find ID ${id} among associated cards for ruling ${this.id}.`) }
 			}
 		}
 

@@ -4,7 +4,8 @@ const Search = require('./Search')
 const Card = require('./Card')
 const Ruling = require('./Ruling')
 const { MillenniumEyeBot } = require('./MillenniumEyeBot')
-const { KONAMI_DB_CARD_REGEX, KONAMI_DB_QA_REGEX, YGORG_DB_CARD_REGEX, YGORG_DB_QA_REGEX, IGNORE_LINKS_REGEX } = require('./Defines')
+const { KONAMI_DB_CARD_REGEX, KONAMI_DB_QA_REGEX, YGORG_DB_CARD_REGEX, YGORG_DB_QA_REGEX, IGNORE_LINKS_REGEX, Languages } = require('./Defines')
+const { logError } = require('lib/utils/logging')
 
 /**
  * Container class that tracks the results of an entire query (which can contain multiple searches).
@@ -234,7 +235,7 @@ class Query {
 	 * Gets all embed data (embeds and associated attachments) formed from these searches.
 	 * @returns {Object} Every embed and attachment for this Query.
 	 */
-	 getDataEmbeds() {
+	getDataEmbeds() {
 		const embedData = {}
 
 		for (const s of this.searches) {
@@ -263,7 +264,47 @@ class Query {
 		}
 
 		return embedData
-	 }
+	}
+
+	/**
+	 * Returns a string that reports any quirks of this Query's resolution that would cause
+	 * any of its search data to not show.
+	 * @returns {String} A report string indicating what data is unresolved in this query.
+	 */
+	reportResolution() {
+		let str = ''
+		const unresolvedLanData = new Map()
+		const officialModeBlocks = new Set()
+
+		for (const s of this.searches) {
+			const unresolvedLanTypes = s.getUnresolvedData()
+
+			// If this had unresolved data, report it.
+			if (unresolvedLanTypes.size) {
+				for (const lan of unresolvedLanTypes.keys()) {
+					if (!unresolvedLanData.has(lan))
+						unresolvedLanData.set(lan, new Set)
+					unresolvedLanData.get(lan).add(...s.originals)
+				}
+			}
+
+			// If this was an FAQ or QA-type query in an official-mode channel, report an issue regardless of whether they're resolved.
+			if (this.official && (s.hasType('f') || s.hasType('q'))) {
+				officialModeBlocks.add(...s.originals)
+			}
+		}
+
+		if (unresolvedLanData.size) {
+			unresolvedLanData.forEach((searches, lan) => {
+				str += `Could not resolve ${Languages[lan]} data for searches: ${[...searches].join(', ')}\n`
+			})
+		}
+		if (officialModeBlocks.size) {
+			str += `Not reporting QA or FAQ data in official mode for searches: ${[...officialModeBlocks].join(', ')}\n`
+		}
+
+		return str
+	}
 }
 
 module.exports = Query

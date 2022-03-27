@@ -37,7 +37,7 @@ const processSteps = [
  * This function doesn't do any of the actual processing.
  * @param {Query} qry The query to process.
  */
-function processQuery(qry) {
+async function processQuery(qry) {
 	for (const step of processSteps) {
 		// Update for any searches that remain.
 		let searchesToEval = qry.findUnresolvedSearches()
@@ -48,7 +48,7 @@ function processQuery(qry) {
 		const stepSearch = step.searchFunction
 		const stepHandlerCallback = step.dataHandler
 		try {
-			stepSearch(searchesToEval, qry, stepHandlerCallback)
+			await stepSearch(searchesToEval, qry, stepHandlerCallback)
 		}
 		catch (err) {
 			logError(err, `Process query step ${stepSearch.name} failed.`)
@@ -68,7 +68,7 @@ function processQuery(qry) {
  * logic whenever a message is sent.
  * @param {Array<Search>} searches The searches to process. 
  */
-function processSearches(searches) {
+async function processSearches(searches) {
 	for (const step of processSteps) {
 		// Update for any searches that remain.
 		let searchesToEval = searches.filter(s => !s.isDataFullyResolved())
@@ -80,6 +80,7 @@ function processSearches(searches) {
 		const stepHandlerCallback = step.dataHandler
 		try {
 			stepSearch(searchesToEval, null, stepHandlerCallback)
+			console.log(`Finished search step ${stepSearch.name}!`)
 		}
 		catch (err) {
 			logError(err, `Process search step ${stepSearch.name} failed.`)
@@ -130,7 +131,7 @@ async function sendReply(bot, origMessage, replyContent, qry, replyOptions) {
 			fullReply[o] = replyOptions[o]
 
 	// Empty reply, why are we here?
-	if (!Object.keys(fullReply).length) return
+	if (!('content' in fullReply) && !('embeds' in fullReply)) return
 
 	await origMessage.reply(fullReply)
 		.then(reply => {

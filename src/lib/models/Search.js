@@ -113,6 +113,69 @@
 	}
 
 	/**
+	 * Gets all the unresolved data of this search. Returns the same format as the lanToTypes map
+	 * to indicate which languages and types did not get resolved.
+	 * This is basically a more specific form of isDataFullyResolved, but more comprehensive, since it will
+	 * return ALL data unresolved rather than just a true/false as soon as it finds something bad.
+	 * @returns {Map} The map of languages -> types that did not have resolved data.
+	 */
+	getUnresolvedData() {
+		const unresolvedLanTypes = new Map()
+
+		this.lanToTypesMap.forEach((types, lan) => {
+			for (const t of types) {
+				let unresolvedType = false
+				// Any 'r' or 'i'-type search should have name + effect text in this language.
+				if (t === 'i' || t === 'r') {
+					if ( !(this.data.name.has(lan)) || !(this.data.effect.has(lan)) )
+						unresolvedType = true
+				}
+				// Any 'a'-type search should have image data.
+				else if (t === 'a') {
+					if (!this.data.imageData.size())
+						unresolvedType = true
+				}
+				// Any 'd'-type search should have print data in this language.
+				else if (t === 'd') {
+					if (!this.data.printData.has(lan))
+						unresolvedType = true
+				}
+				// Any 'p'-type search should have... honestly these are nonstandard, just check for name in this language for now.
+				else if (t === 'p') {
+					if (!this.data.name.has(lan))
+						unresolvedType = true
+				}
+				// Any '$' or '€'-type search should have corresponding price data.
+				else if (t === '$') {
+					if (!this.data.priceData.has('us'))
+						unresolvedType = true
+				else if (t === '€')
+					if (!this.data.priceData.has('eu'))
+						unresolvedType = true
+				}
+				// Any 'f'-type search should have FAQ data in this language.
+				else if (t === 'f') {
+					if (!this.data.faqData.has(lan))
+						unresolvedType = true
+				}
+				// Any 'q'-type search should have QA data in this language.
+				else if (t === 'q') {
+					if (!this.data.title.has(lan) || !this.data.question.has(lan) || !this.data.answer.has(lan))
+						unresolvedType = true
+				}
+
+				if (unresolvedType) {
+					if (!unresolvedLanTypes.has(lan))
+						unresolvedLanTypes.set(lan, new Set())
+					unresolvedLanTypes.get(lan).add(t)
+				}
+			}
+		})
+
+		return unresolvedLanTypes
+	}
+
+	/**
 	 * Merges the values of this search with another Search object.
 	 * @param {Search} otherSearch The other Search object to be merged into this one.
 	 */

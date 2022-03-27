@@ -16,7 +16,7 @@ module.exports = {
 	NEURON_DB_PATH: `${process.cwd()}/data/neuron_name_rainbow`,
 	YGORG_DB_PATH: `${process.cwd()}/data/ygorg.db`,
 	// Seed URLs.
-	KONAMI_REQUEST_LOCALE: `?request_locale=`,
+	KONAMI_REQUEST_LOCALE: `&request_locale=`,
 	KONAMI_CARD_LINK: `https://www.db.yugioh-card.com/yugiohdb/card_search.action?ope=2&cid=`,
 	KONAMI_QA_LINK: `https://www.db.yugioh-card.com/yugiohdb/faq_search.action?ope=5&fid=`,
 	YGORG_MANIFEST: `https://db.ygorganization.com/manifest`,
@@ -32,11 +32,11 @@ module.exports = {
 		'r': 'ruling',
 		'a': 'art',
 		'd': 'date',
-		'p': 'yugipedia',
-		'$': 'usprice',
-		'€': 'euprice',
-		'f': 'faq',
-		'q': 'qna'
+		'p': 'Yugipedia',
+		'$': 'US price',
+		'€': 'EU price',
+		'f': 'FAQ',
+		'q': 'QA'
 	},
 	Languages: {
 		'de': 'German',

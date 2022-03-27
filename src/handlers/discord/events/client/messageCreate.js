@@ -20,7 +20,7 @@ module.exports = new Event({
 		const qry = new Query(message, bot)
 
 		if (qry.searches.length !== 0)  {
-			// Let the user know they're timed out.
+			// Let the user know if they're timed out.
 			if (updateUserTimeout(message.author.id, qry.searches.length)) {
 				await message.reply({
 					content: 'Sorry, you\'ve requested too many searches recently. Please slow down and try again in a minute.',
@@ -31,17 +31,21 @@ module.exports = new Event({
 			
 			await message.channel.sendTyping()
 			
-			processQuery(qry)
-
+			await processQuery(qry)
+			
 			const embedData = qry.getDataEmbeds()
 
-			if (Object.keys(embedData).length) {
-				await sendReply(bot, message, '', qry, {
-					allowedMentions: { repliedUser: false },
-					embeds: embedData.embeds,
-					files: embedData.attachments
-				})
+			// Build message data.
+			const replyOptions = { 
+				allowedMentions: { repliedUser: false }
 			}
+			if ('embeds' in embedData)
+				replyOptions.embeds = embedData.embeds
+			if ('attachments' in embedData)
+				replyOptions.files = embedData.attachments
+			const report = qry.reportResolution()
+
+			await sendReply(bot, message, report, qry, replyOptions)
 		}
 	}
 })
