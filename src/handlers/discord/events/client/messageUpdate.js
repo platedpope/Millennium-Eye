@@ -2,10 +2,9 @@ const Discord = require('discord.js')
 
 const { MillenniumEyeBot } = require('lib/models/MillenniumEyeBot')
 const Event = require('lib/models/Event')
-const { Query } = require('lib/models/Query')
+const Query = require('lib/models/Query')
 const { MESSAGE_TIMEOUT } = require('lib/models/Defines')
-const { processQuery, sendReply, updateUserTimeout } = require('user/QueryHandler')
-const { logError } = require('lib/utils/logging')
+const { processQuery, sendReply, updateUserTimeout } = require('handlers/QueryHandler')
 
 module.exports = new Event({
 	event: 'messageUpdate',
@@ -35,7 +34,7 @@ module.exports = new Event({
 		else 
 			newQry = new Query(newMessage, bot)
 
-		await processQuery(newQry)
+		processQuery(newQry)
 
 		if (newQry.searches.length) {
 			// Let the user know they're timed out.
@@ -50,7 +49,7 @@ module.exports = new Event({
 			}
 
 			const embedData = newQry.getDataEmbeds()
-			if (embedData) {
+			if (Object.keys(embedData).length) {
 				// If we have a single reply to edit, do that.
 				if (cachedReply && cachedReply.replies.length == 1) {
 					const replyToEdit = cachedReply.replies[0]
@@ -75,13 +74,21 @@ module.exports = new Event({
 					})
 				}
 			}
+			else 
+				// There were still searches but we didn't find anything for them. If we had a response, delete it.
+				if (cachedReply) {
+					for (const cr of cachedReply.replies)
+						await cr.delete()
+					bot.replyCache.remove(oldMessage.id)
+				}
 		}
-		else {
+		else
 			// If the new query has nothing and we had any cached replies, just delete 'em.
-			for (const cr of cachedReply.replies)
-				await cr.delete()
-			bot.replyCache.remove(oldMessage.id)
-		}
+			if (cachedReply) {
+				for (const cr of cachedReply.replies)
+					await cr.delete()
+				bot.replyCache.remove(oldMessage.id)
+			}
 		
 	}
 })

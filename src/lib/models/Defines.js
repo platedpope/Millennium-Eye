@@ -7,6 +7,7 @@ module.exports = {
 	YGORG_DB_CARD_REGEX: /https?:\/\/db\.ygorganization\.com\/card#(\d+)/g,
 	IGNORE_LINKS_REGEX: /(?:https?|www\.)/g,
 	// Constant values.
+	API_TIMEOUT: 3,
 	MESSAGE_TIMEOUT: 15,
 	USER_TIMEOUT: 60,
 	SEARCH_TIMEOUT_TRIGGER: 15,
@@ -15,11 +16,16 @@ module.exports = {
 	NEURON_DB_PATH: `${process.cwd()}/data/neuron_name_rainbow`,
 	YGORG_DB_PATH: `${process.cwd()}/data/ygorg.db`,
 	// Seed URLs.
+	KONAMI_REQUEST_LOCALE: `?request_locale=`,
+	KONAMI_CARD_LINK: `https://www.db.yugioh-card.com/yugiohdb/card_search.action?ope=2&cid=`,
+	KONAMI_QA_LINK: `https://www.db.yugioh-card.com/yugiohdb/faq_search.action?ope=5&fid=`,
 	YGORG_MANIFEST: `https://db.ygorganization.com/manifest`,
-	YGORG_CARD_DATA_API: 'https://db.ygorganization.com/data/card/',
-	YGORG_QA_DATA_API: 'https://db.ygorganization.com/data/qa/',
+	YGORG_CARD_LINK: `https://db.ygorganization.com/card#`,
+	YGORG_QA_LINK: `https://db.ygorganization.com/qa#`,
+	YGORG_CARD_DATA_API: 'https://db.ygorganization.com/data/card',
+	YGORG_QA_DATA_API: 'https://db.ygorganization.com/data/qa',
 	YGORG_NAME_ID_INDEX: 'https://db.ygorganization.com/data/idx/card/name',
-	YGORG_LOCALE_METADATA: 'https://db.ygorganization.com/data/meta/mprop',
+	YGORG_PROPERTY_METADATA: 'https://db.ygorganization.com/data/meta/mprop',
 	// Bot data type definitions for easy reference.
 	QueryTypes: {
 		'i': 'info',

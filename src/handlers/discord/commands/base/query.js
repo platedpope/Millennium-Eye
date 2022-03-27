@@ -1,8 +1,8 @@
 
 const Command = require('lib/models/Command')
 const { CommandTypes } = require('lib/models/Defines')
-const { processQuery } = require('user/QueryHandler')
-const { Query } = require('lib/models/Query')
+const Query = require('lib/models/Query')
+const { processQuery } = require('handlers/QueryHandler')
 
 module.exports = new Command({
 	name: 'query',
@@ -35,9 +35,10 @@ module.exports = new Command({
 
 			await interaction.channel.sendTyping()
 
-			await processQuery(qry)
+			processQuery(qry)
+			
 			const embedData = qry.getDataEmbeds()
-			if (embedData) {
+			if (Object.keys(embedData).length) {
 				await interaction.reply({
 					embeds: embedData.embeds,
 					files: embedData.attachments

@@ -3,9 +3,9 @@ const { logger, logError } = require ('lib/utils/logging')
 const { updateCommandPermissions } = require('lib/utils/permissions')
 const { MillenniumEyeBot } = require('lib/models/MillenniumEyeBot')
 const Event = require('lib/models/Event')
-const { clearBotCache } = require('database/BotDBHandler')
-const { cacheNameToIdIndex, cacheLocaleMetadata, cacheManifestRevision } = require('database/YGOrgDBHandler')
-const { updateKonamiDb } = require('database/KonamiDBHandler')
+const { clearBotCache } = require('handlers/BotDBHandler')
+const { cacheNameToIdIndex, cacheManifestRevision, cachePropertyMetadata } = require('handlers/YGOrgDBHandler')
+const { updateKonamiDb } = require('handlers/KonamiDBHandler')
 
 module.exports = new Event({
 	event: 'ready', 
@@ -78,7 +78,7 @@ module.exports = new Event({
 		// will be refreshed as necessary during runtime.
 		await cacheNameToIdIndex()
 		// YGOrg locale property metadata. Set this up on launch, but it's static, don't need to update periodically.
-		await cacheLocaleMetadata()
+		await cachePropertyMetadata()
 
 		// Set bot presence.
 		bot.user.setActivity('/help for info!', { type: 'WATCHING' })

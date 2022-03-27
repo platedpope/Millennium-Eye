@@ -90,15 +90,16 @@ function prepareDiscordLogJsMessage(obj) {
  * messages that are too long into smaller chunks.
  * @param {String} str The message string to break up.
  * @param {Number} maxLength The maximum length of an individual message.
+ * @param {String} delimiter The character to break up the string on.
  * @returns {String[]} The array of messages constructed from the broken up message.
  */
-function breakUpDiscordMessage(str, maxLength = 1990) {
+function breakUpDiscordMessage(str, maxLength = 1990, delimiter = '\n') {
 	const msgs = []
 	while (str.length > maxLength) {
-		let idx = str.lastIndexOf('\n', maxLength)
+		let idx = str.lastIndexOf(delimiter, maxLength)
 		if (idx === -1) {
 			// holy crap this is long, just abandon ship
-			msgs.push(`${str.substring(0, maxLength - 40)}\n --- truncated very long message`)
+			msgs.push(`${str.substring(0, maxLength - 40)}\n... (truncated)`)
 			return
 		}
 		msgs.push(`${str.substring(0, idx)}`)

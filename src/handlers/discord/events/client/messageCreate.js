@@ -2,8 +2,8 @@ const Discord = require('discord.js')
 
 const { MillenniumEyeBot } = require('lib/models/MillenniumEyeBot')
 const Event = require('lib/models/Event')
-const { processQuery, sendReply, updateUserTimeout } = require('user/QueryHandler')
-const { Query } = require('lib/models/Query')
+const Query = require('lib/models/Query')
+const { processQuery, sendReply, updateUserTimeout } = require('handlers/QueryHandler')
 
 module.exports = new Event({
 	event: 'messageCreate',
@@ -31,9 +31,11 @@ module.exports = new Event({
 			
 			await message.channel.sendTyping()
 			
-			await processQuery(qry)
+			processQuery(qry)
+
 			const embedData = qry.getDataEmbeds()
-			if (embedData) {
+
+			if (Object.keys(embedData).length) {
 				await sendReply(bot, message, '', qry, {
 					allowedMentions: { repliedUser: false },
 					embeds: embedData.embeds,
