@@ -24,6 +24,7 @@ module.exports = {
 	YGORG_QA_LINK: `https://db.ygorganization.com/qa#`,
 	YGORG_CARD_DATA_API: 'https://db.ygorganization.com/data/card',
 	YGORG_QA_DATA_API: 'https://db.ygorganization.com/data/qa',
+	YGORG_ARTWORK_API: `https://artworks.ygorganization.com`,
 	YGORG_NAME_ID_INDEX: 'https://db.ygorganization.com/data/idx/card/name',
 	YGORG_PROPERTY_METADATA: 'https://db.ygorganization.com/data/meta/mprop',
 	// Bot data type definitions for easy reference.

@@ -3,7 +3,7 @@ const fs = require('fs')
 
 const Search = require('lib/models/Search')
 const { BOT_DB_PATH } = require('lib/models/Defines')
-const { logger } = require('lib/utils/logging')
+const { logger, logError } = require('lib/utils/logging')
 
 const botDb = new Database(BOT_DB_PATH)
 
@@ -98,7 +98,6 @@ function searchBotDb(searches, qry) {
 	// Iterate through the array backwards because we might modify it as we go.
 	for (let i = searches.length - 1; i >= 0; i--) {
 		const currSearch = searches[i]
-		let foundData = false
 		// If the search term is a number, then it's a database ID or passcode.
 		if (Number.isInteger(currSearch.term)) {
 			const dataRows = botDb.prepare(getDbId).all(currSearch.term)
@@ -175,29 +174,55 @@ function addToTermCache(searchData, fromLoc) {
 function addToBotDb(searchData) {
 	if (!searchData.length) return
 	
-	const insertDataCache = botDb.prepare(`INSERT OR REPLACE INTO dataCache(dataName, language, dbId, passcode, cardType, property, attribute, levelRank, attack, defense, effect, pendEffect, pendScale, requirement, image, notInCg)
-							 		  VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
-	const insertCardTypes = botDb.prepare(`INSERT OR REPLACE INTO cardDataTypes(dbId, passcode, fullName, type)
-									  VALUES(?, ?, ?, ?)`)
-	const insertLinkMarkers = botDb.prepare(`INSERT OR REPLACE INTO cardDataLinkMarkers(dbId, passcode, fullName, marker)
-										VALUES(?, ?, ?, ?)`)
+	const insertDataCache = botDb.prepare(`
+		INSERT OR REPLACE INTO dataCache(dataName, language, dbId, passcode, cardType, property, attribute, levelRank, attack, defense, effect, pendEffect, pendScale, requirement, notInCg)
+		VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+	`)
+	const insertCardTypes = botDb.prepare(`
+		INSERT OR REPLACE INTO cardDataTypes(dbId, passcode, fullName, type)
+		VALUES(?, ?, ?, ?)
+	`)
+	const insertLinkMarkers = botDb.prepare(`
+		INSERT OR REPLACE INTO cardDataLinkMarkers(dbId, passcode, fullName, marker)
+		VALUES(?, ?, ?, ?)
+	`)
+	const insertImageData = botDb.prepare(`
+		INSERT INTO cardDataImages(dbId, passcode, fullName, artId, artPath)
+		VALUES(?, ?, ?, ?, ?)
+	`)
 	// TODO: Check and update pricing information as well.
 
-	let insertAllData = botDb.transaction(cardData => {
-		for (const c of cardData) {
+	let insertAllData = botDb.transaction(searches => {
+		for (const s of searches) {
+			const c = s.data
 			c.name.forEach((n, l) => {
 				insertDataCache.run(
 					n, l, c.dbId, c.passcode, c.cardType, c.property, c.attribute, c.levelRank, c.attack,
-					c.defense, c.effect.get(l), c.pendEffect.get(l), c.pendScale, c.requirement, c.image, c.notInCg
+					c.defense, c.effect.get(l), c.pendEffect.get(l), c.pendScale, c.requirement, c.notInCg
 				)
 			})
 			// Update types and link markers as necessary too.
-			for (const t of c.types) insertCardTypes.run(c.dbId, c.passcode, c.name, t)
-			for (const m of c.linkMarkers) insertLinkMarkers.run(c.dbId, c.passcode, c.name, m)
+			for (const t of c.types) insertCardTypes.run(c.dbId, c.passcode, c.name.get('en'), t)
+			for (const m of c.linkMarkers) insertLinkMarkers.run(c.dbId, c.passcode, c.name.get('en'), m)
+			// Update image data. Don't care about language for this.
+			if (c.imageData.size)
+				c.imageData.forEach((imgPath, id) => {
+					insertImageData.run(c.dbId, c.passcode, c.name.get('en'), id, imgPath)
+				})
 		}
 	})
 	insertAllData(searchData)
 
+
+	// Insert the new images into the bot DB.
+	botDb.transaction(imageSearches => {
+		for (const s of imageSearches)  {
+			const card = s.data
+			card.imageData.forEach((imgPath, id) => {
+				addImageData.run(card.dbId, card.passcode, card.name.get('en'), id, imgPath)
+			})
+		}
+	})
 	// Add search terms for all of these as well.
 	addToTermCache(searchData, 'bot', db)
 }
@@ -207,8 +232,6 @@ function addToBotDb(searchData) {
  * @param {Array<Number>} ids The set of IDs to evict.
  */
 function evictFromBotCache(ids) {
-	const db = new Database(BOT_DB_PATH)
-
 	const delTerms = botDb.prepare('DELETE FROM termCache WHERE dbId = ? AND location = \'bot\'')
 	const delData = botDb.prepare('DELETE FROM dataCache WHERE dbId = ?')
 
@@ -226,8 +249,6 @@ function evictFromBotCache(ids) {
  * @param {Boolean} clearKonamiTerms Whether to remove search terms that reference the Konami database too.
  */
 function clearBotCache(clearKonamiTerms = false) {
-	const db = new Database(BOT_DB_PATH)
-
 	botDb.prepare('PRAGMA foreign_keys = 1').run()
 	botDb.prepare('DELETE FROM dataCache').run()
 	botDb.prepare('VACUUM').run()

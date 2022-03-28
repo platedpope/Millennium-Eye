@@ -177,7 +177,7 @@ class Query {
 		const oldSearch = this.findSearch(content)
 		if (oldSearch !== undefined)
 			// Don't merge QA searches with non-QA searches.
-			if (type !== 'q' || (type === 'q' && !oldSearch.hasType('q'))) {
+			if (type !== 'q' || (type === 'q' && oldSearch.hasType('q'))) {
 				oldSearch.addTypeToLan(type, language)
 				return
 			}

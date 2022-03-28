@@ -2,8 +2,8 @@ const axios = require('axios')
 const Database = require('better-sqlite3')
 
 const Search = require('lib/models/Search')
-const { Languages, YGORG_NAME_ID_INDEX, YGORG_PROPERTY_METADATA, YGORG_DB_PATH, YGORG_MANIFEST, YGORG_QA_DATA_API, API_TIMEOUT, YGORG_CARD_DATA_API } = require('lib/models/Defines')
-const { evictFromBotCache } = require('handlers/BotDBHandler')
+const { Languages, YGORG_NAME_ID_INDEX, YGORG_PROPERTY_METADATA, YGORG_DB_PATH, YGORG_MANIFEST, YGORG_QA_DATA_API, API_TIMEOUT, YGORG_CARD_DATA_API, YGORG_ARTWORK_API } = require('lib/models/Defines')
+const { evictFromBotCache, botDb } = require('handlers/BotDBHandler')
 const { logError, logger } = require('lib/utils/logging')
 const { CardDataFilter } = require('lib/utils/search')
 
@@ -16,6 +16,8 @@ const nameToIdIndex = {}
 // Both are used at various places in the bot logic, so both are cached.
 let propertyArray = []
 const propertyToLanguageIndex = {}
+
+let artworkManifest = {}
 
 /**
  * Caches the most recent manifest revision we know about.
@@ -167,7 +169,7 @@ async function searchYgorgDb(searches, qry, callback) {
 
 	// If we don't have anything to do with the API, just bail out early.
 	if (!qaApiSearches.length && !cardApiSearches.length && qaSearches.db.length) {
-		callback(qaSearches)
+		await callback(qaSearches)
 		return
 	}
 
@@ -246,7 +248,92 @@ async function searchYgorgDb(searches, qry, callback) {
 		}
 	}
 
-	callback(qaSearches, cardSearches)
+	await callback(qaSearches, cardSearches)
+}
+
+/**
+ * Query the artwork repo to try and resolve card art for the given searches.
+ * @param {Array<Search>} artSearches The searches that need card art. 
+ */
+async function searchArtworkRepo(artSearches) {
+	// First get the manifest. Used the cached one if we've got it.
+	if (!Object.keys(artworkManifest).length) {
+		await axios.get(`${YGORG_ARTWORK_API}/manifest.json`, {
+				'timeout': API_TIMEOUT * 1000
+		}).then(r => {
+			if (r.status === 200) {
+				artworkManifest = r.data
+				// Force a re-cache of the artwork manifest once per day.
+				logger.info('Cached new artwork manifest, resetting in 24 hrs.')
+				setInterval(() => {
+					artworkManifest = {}
+					logger.info('Evicted cached artwork manifest, will re-cache the next time it is necessary.')
+				}, 24 * 60 * 60 * 1000)
+			}
+		})
+	}
+
+	if (!artworkManifest || !('cards' in artworkManifest))
+		// Manifest query didn't work? No art then, I guess.
+		return
+
+	const manifestCardData = artworkManifest.cards
+
+	// Map index of the search in artSearches to an array of all art repo requests for that search.
+	const repoResponses = {}
+	// Send all the requests.
+	for (let i = 0; i < artSearches.length; i++) {
+		const s = artSearches[i]
+		repoResponses[i] = []
+
+		const cardId = s.data.dbId
+		if (cardId in manifestCardData) {
+			const cardArtData = manifestCardData[cardId]
+			for (const artId in cardArtData) {
+				// Send requests for each art.
+				const bestArtRepoLoc = cardArtData[artId].bestArt
+				const bestArtFullUrl = `${YGORG_ARTWORK_API}/${bestArtRepoLoc}`
+				const req = axios.get(bestArtFullUrl, {
+					'timeout': API_TIMEOUT * 1000
+				}).then(r => {
+					if (r.status === 200) return r
+				})
+
+				repoResponses[i].push(req)
+			}
+		}
+	}
+
+	for (const idx in repoResponses)
+		if (repoResponses[idx].length) {
+			const reqs = repoResponses[idx]
+			repoResponses[idx] = await Promise.allSettled(reqs)
+		}
+	
+	// Process the data we received.
+	const newImageData = []
+	for (const idx in repoResponses) {
+		const origSearch = artSearches[idx]
+		if (repoResponses[idx]) {
+			for (let i = 0; i < repoResponses[idx].length; i++) {
+				const resp = repoResponses[idx][i]
+
+				if (resp.status === 'rejected') {
+					logError(resp.reason, `YGOrg artwork repo query for ID ${origSearch.term} failed.`)
+					continue
+				}
+	
+				if (resp.value.data) {
+					// Artworks were queried in order of ID, but are zero-indexed.
+					// Therefore, our index in the array +1 is the art ID.
+					const artId = i + 1
+					// Repo artwork should always be from Neuron.
+					origSearch.data.addImageData(artId, resp.value.data, true)
+				}
+			}
+			newImageData.push(origSearch)
+		}
+	}
 }
 
 /**
@@ -277,8 +364,9 @@ function addToYgorgDb(qaSearches, faqSearches) {
 		let insertAllFaqs = ygorgDb.transaction(searchData => {
 			for (const s of searchData) {
 				const card = s.data
-				for (const lan of card.faqData)
-					for (const entry of lan) insertFaq.run(card.dbId, lan, entry)
+				card.faqData.forEach((entries, lan) => {
+					for (const entry of entries) insertFaq.run(card.dbId, lan, entry)
+				})
 			}
 		})
 		insertAllFaqs(faqSearches)
@@ -494,5 +582,5 @@ function searchPropertyArray(index, language) {
 }
 
 module.exports = {
-	ygorgDb, cacheManifestRevision, searchYgorgDb, addToYgorgDb, cacheNameToIdIndex, searchNameToIdIndex, cachePropertyMetadata, searchPropertyToLanguageIndex, searchPropertyArray
+	ygorgDb, cacheManifestRevision, searchYgorgDb, searchArtworkRepo, addToYgorgDb, cacheNameToIdIndex, searchNameToIdIndex, cachePropertyMetadata, searchPropertyToLanguageIndex, searchPropertyArray
 }

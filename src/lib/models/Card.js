@@ -6,6 +6,7 @@ const { MessageEmbed } = require('discord.js')
 
 const { EmbedIcons, EmbedColors } = require('./Defines')
 const { searchPropertyArray, searchPropertyToLanguageIndex } = require('handlers/YGOrgDBHandler')
+const { logError } = require('lib/utils/logging')
 
 class Card {
 	/**
@@ -56,9 +57,10 @@ class Card {
 		
 		// Map language-sensitive rows.
 		for (const r of dbRows) {
-			card.name.set(r.language, r.name)
+			card.name.set(r.language, r.dataName)
 			card.effect.set(r.language, r.effect)
-			card.pendEffect.set(r.language, r.pendEffect)
+			if (r.pendEffect)
+				card.pendEffect.set(r.language, r.pendEffect)
 		}
 		card.dbId = repRow.dbId
 		card.passcode = repRow.passcode
@@ -108,6 +110,12 @@ class Card {
 				for (const r of markerRows) card.linkMarkers.push(r.marker)
 			}
 		}
+
+		// Gather art data.
+		const getImages = `SELECT artId, artPath FROM cardDataImages ${where}`
+		const imageRows = db.prepare(getImages).all(searchParam)
+		for (const r of imageRows)
+			card.imageData.set(r.artId, r.artPath)
 
 		// TODO: Gather pricing and print information as well.
 
@@ -199,10 +207,9 @@ class Card {
 	 * @param {Card} card The card to set data for. 
 	 */
 	static fromYgorgCardApi(apiData, card) {
+		card.dbId = apiData.cardId
 		if ('cardData' in apiData) {
 			const apiCardData = apiData.cardData
-
-			card.dbId = apiCardData.cardId
 			for (const lan in apiCardData) {
 				const lanCardData = apiCardData[lan]
 				// Map the language-specific values.
@@ -414,21 +421,24 @@ class Card {
 	setEmbedImage(embed, id, thumbnail = true) {
 		let attach = null
 		const imagePath = this.imageData.get(id)
-		// If this path is in data/card_images, it's local and needs an attachment.
-		if (imagePath.includes('data/card_images')) {
-			attach = imagePath
-			const imageName = path.basename(imagePath)
-			if (thumbnail)
-				embed.setThumbnail(`attachment://${imageName}`)
-			else
-				embed.setImage(`attachment://${imageName}`)
-		}
-		else {
-			// Otherwise just assume it's a URL to somewhere and use it as the image.
-			if (thumbnail)
-				embed.setThumbnail(imagePath)
-			else
-				embed.setImage(imagePath)
+
+		if (imagePath) {
+			// If this path is in data/card_images, it's local and needs an attachment.
+			if (imagePath.includes('data/card_images')) {
+				attach = imagePath
+				const imageName = path.basename(imagePath)
+				if (thumbnail)
+					embed.setThumbnail(`attachment://${imageName}`)
+				else
+					embed.setImage(`attachment://${imageName}`)
+			}
+			else {
+				// Otherwise just assume it's a URL to somewhere and use it as the image.
+				if (thumbnail)
+					embed.setThumbnail(imagePath)
+				else
+					embed.setImage(imagePath)
+			}
 		}
 
 		return attach
@@ -452,9 +462,15 @@ class Card {
 
 		const fullArtPath = `${artPath}/${artFilename}.png`
 		if (!fs.existsSync(fullArtPath)) {
-			if (fromNeuron)
-				sharp(img).extract({ top: 69, left: 32, width: 193, height: 191 }).toFile(fullArtPath)
+			if (fromNeuron) {
+				let artCropDims = { 'top': 69, 'left': 32, 'width': 193, 'height': 191 }
+				if (this.pendScale !== null)
+					// Pendulums have squished arts, so the crop needs to be different.
+					artCropDims = { 'top': 67, 'left': 18, 'width': 220, 'height': 163 }
+				
+				sharp(img).extract(artCropDims).toFile(fullArtPath)
 				.catch(err => logError(err, 'Failed to save card cropped image.'))
+			}
 			else
 				fs.writeFileSync(fullArtPath, img)
 		}

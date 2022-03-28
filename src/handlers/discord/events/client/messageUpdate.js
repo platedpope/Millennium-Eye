@@ -34,8 +34,6 @@ module.exports = new Event({
 		else 
 			newQry = new Query(newMessage, bot)
 
-		processQuery(newQry)
-
 		if (newQry.searches.length) {
 			// Let the user know they're timed out.
 			// For edits this is a bit imperfect because it will count searches that have already happened...
@@ -48,39 +46,53 @@ module.exports = new Event({
 				return
 			}
 
+			const editReply = cachedReply && cachedReply.replies.length === 1
+			// If we won't be editing a reply, turn on "typing".
+			if (!editReply)
+				await newMessage.channel.sendTyping()
+		
+			await processQuery(newQry)
+
 			const embedData = newQry.getDataEmbeds()
-			if (Object.keys(embedData).length) {
-				// If we have a single reply to edit, do that.
-				if (cachedReply && cachedReply.replies.length == 1) {
-					const replyToEdit = cachedReply.replies[0]
-					await replyToEdit.removeAttachments()
-					await replyToEdit.edit({
-						embeds: embedData.embeds,
-						files: embedData.attachments,
-						allowedMentions: { repliedUser: false }
-					})
-					bot.replyCache.put(newMessage.id, {
-						'author': newMessage.author,
-						'replies': [replyToEdit],
-						'qry': newQry
-					})
-				}
-				else {
-					// Otherwise, just send new replies.
-					await sendReply(bot, newMessage, '', newQry, {
-						embeds: embedData.embeds,
-						files: embedData.attachments,
-						allowedMentions: { repliedUser: false },
-					})
-				}
+			// Build message data.
+			const replyOptions = { 
+				allowedMentions: { repliedUser: false }
 			}
-			else 
-				// There were still searches but we didn't find anything for them. If we had a response, delete it.
+			if ('embeds' in embedData)
+				replyOptions.embeds = embedData.embeds
+			else
+				// Need to do this so embeds for searches that can no longer resolve after an edit get removed.
+				replyOptions.embeds = []
+			if ('attachments' in embedData)
+				replyOptions.files = embedData.attachments
+			const report = newQry.reportResolution()
+
+			if (!report && !('embeds' in replyOptions)) {
+				// There were searches but we didn't find anything for them. If we had a response, delete it.
 				if (cachedReply) {
 					for (const cr of cachedReply.replies)
 						await cr.delete()
 					bot.replyCache.remove(oldMessage.id)
 				}
+			}
+			else {
+				// If we have a single reply to edit, do that.
+				if (editReply) {
+					const replyToEdit = cachedReply.replies[0]
+					await replyToEdit.removeAttachments()
+
+					if (report) replyOptions.content = report
+					const editedReply = await replyToEdit.edit(replyOptions)
+					bot.replyCache.put(newMessage.id, {
+						'author': newMessage.author,
+						'replies': [editedReply],
+						'qry': newQry
+					})
+				}
+				else 
+					// Otherwise, just send new replies.
+					await sendReply(bot, newMessage, report, newQry, replyOptions)
+			}
 		}
 		else
 			// If the new query has nothing and we had any cached replies, just delete 'em.

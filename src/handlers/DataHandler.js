@@ -1,10 +1,9 @@
 const Card = require('lib/models/Card')
 const Ruling = require('lib/models/Ruling')
 const Search = require('lib/models/Search')
-const { logError } = require('lib/utils/logging')
 const { botDb, addToTermCache, addToBotDb } = require('./BotDBHandler')
 const { konamiDb } = require('./KonamiDBHandler')
-const { ygorgDb, addToYgorgDb } = require('./YGOrgDBHandler')
+const { ygorgDb, addToYgorgDb, searchArtworkRepo } = require('./YGOrgDBHandler')
 
 /**
  * This is the callback data handler for turning data from the bot database into
@@ -44,22 +43,31 @@ function convertKonamiDataToSearchData(resolvedSearches, termUpdates) {
  * @param {Object} qaSearches A map containing QA searches that were resolved through either the DB or API.
  * @param {Array<Search>} cardSearches A map containing card searches that were resolved through the API.
  */
-function convertYgorgDataToSearchData(qaSearches, cardSearches = []) {
+async function convertYgorgDataToSearchData(qaSearches, cardSearches = []) {
+	// Process the QAs.
 	for (const s of qaSearches.db) {
 		const convertedRuling = Ruling.fromYgorgDb(s.data, ygorgDb)
-		convertRulingAssociatedCardsToCards(convertedRuling, s.lanToTypesMap.keys())
+		await convertRulingAssociatedCardsToCards(convertedRuling, [...s.lanToTypesMap.keys()])
 		s.data = convertedRuling
 	}
 	for (const s of qaSearches.api) {
 		const convertedRuling = Ruling.fromYgorgQaApi(s.data)
-		convertRulingAssociatedCardsToCards(convertedRuling, s.lanToTypesMap.keys())
+		await convertRulingAssociatedCardsToCards(convertedRuling, [...s.lanToTypesMap.keys()])
 		s.data = convertedRuling
 	}
+	// Process the cards we got from the API.
+	const cardsWithoutArt = []
 	for (const s of cardSearches) {
 		const convertedCard = s.data instanceof Card ? s.data : new Card()
 		Card.fromYgorgCardApi(s.data, convertedCard)
 		s.data = convertedCard
+		// If this card has no art yet, gonna need to use the artwork repo to resolve it.
+		if (!s.data.imageData.size) 
+			cardsWithoutArt.push(s)
 	}
+	// Resolve any that still don't have art.
+	if (cardsWithoutArt.length)
+		await searchArtworkRepo(cardSearches)
 
 	// Add anything from the API to the bot and YGOrg DBs as necessary.
 	addToYgorgDb(qaSearches.api, cardSearches)

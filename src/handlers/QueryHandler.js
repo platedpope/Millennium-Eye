@@ -51,13 +51,13 @@ async function processQuery(qry) {
 			await stepSearch(searchesToEval, qry, stepHandlerCallback)
 		}
 		catch (err) {
-			logError(err, `Process query step ${stepSearch.name} failed.`)
+			logError(err, `Process query step ${stepSearch.name} encountered an error.`)
 		}
 
 		// Log out our new successes.
 		for (const s of searchesToEval)
 			if (s.isDataFullyResolved())
-				logger.info(`Step ${stepSearch.name} successfully mapped original search(es) [${[...s.originals].join(', ')}] to ${s.data}.`)
+				logger.info(`Step ${stepSearch.name} finished resolving original search(es) [${[...s.originals].join(', ')}] to ${s.data}.`)
 	}
 }
 
@@ -79,11 +79,10 @@ async function processSearches(searches) {
 		const stepSearch = step.searchFunction
 		const stepHandlerCallback = step.dataHandler
 		try {
-			stepSearch(searchesToEval, null, stepHandlerCallback)
-			console.log(`Finished search step ${stepSearch.name}!`)
+			await stepSearch(searchesToEval, null, stepHandlerCallback)
 		}
 		catch (err) {
-			logError(err, `Process search step ${stepSearch.name} failed.`)
+			logError(err, `Process search step ${stepSearch.name} encountered an error.`)
 		}
 
 		// Don't log out successes along the way.
@@ -131,7 +130,9 @@ async function sendReply(bot, origMessage, replyContent, qry, replyOptions) {
 			fullReply[o] = replyOptions[o]
 
 	// Empty reply, why are we here?
-	if (!('content' in fullReply) && !('embeds' in fullReply)) return
+	if ( (!('content' in fullReply) || !fullReply.content) && 
+		 (!('embeds' in fullReply) || !fullReply.embeds.length) )
+		return
 
 	await origMessage.reply(fullReply)
 		.then(reply => {

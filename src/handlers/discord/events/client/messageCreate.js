@@ -34,7 +34,6 @@ module.exports = new Event({
 			await processQuery(qry)
 			
 			const embedData = qry.getDataEmbeds()
-
 			// Build message data.
 			const replyOptions = { 
 				allowedMentions: { repliedUser: false }
