@@ -4,8 +4,8 @@ const sharp = require('sharp')
 const sanitize = require('sanitize-filename') 
 const { MessageEmbed } = require('discord.js')
 
-const { EmbedIcons, EmbedColors, BanlistStatus, KONAMI_CARD_LINK, KONAMI_REQUEST_LOCALE, LanguageEmojis, KONAMI_QA_LINK, YGORG_CARD_LINK } = require('./Defines')
-const { searchPropertyArray, searchPropertyToLanguageIndex } = require('handlers/YGOrgDBHandler')
+const { EmbedIcons, EmbedColors, BanlistStatus, KONAMI_CARD_LINK, KONAMI_REQUEST_LOCALE, LocaleEmojis, KONAMI_QA_LINK, YGORG_CARD_LINK } = require('./Defines')
+const { searchPropertyArray, searchPropertyToLocaleIndex } = require('handlers/YGOrgDBHandler')
 const { logError } = require('lib/utils/logging')
 
 class Card {
@@ -16,7 +16,7 @@ class Card {
 	 */
 	constructor() {
 		// Main values that define a card.
-		this.name = new Map()			// Card name. Each key is a language, with value as the name in that language.
+		this.name = new Map()			// Card name. Each key is a locale, with value as the name in that locale.
 		this.dbId = null				// Database ID. Unique.
 		this.passcode = null			// Passcode. Unique.
 		this.cardType = null			// Card type (Monster/Spell/Trap).
@@ -26,8 +26,8 @@ class Card {
 		this.levelRank = null			// Monster Level or Rank (only ever one or the other, ? = -1, only relevant for manga/anime cards)
 		this.attack = null				// Monster ATK (? = -1)
 		this.defense = null				// Monster DEF (? = -1)
-		this.effect = new Map()			// Effect text. For Normal Monsters, this is their flavor text instead. Each key is a language, with value as the effect text in that language.
-		this.pendEffect = new Map()		// Monster Pendulum Effect text. Each key is a language, with value as the effect text in that language.							
+		this.effect = new Map()			// Effect text. For Normal Monsters, this is their flavor text instead. Each key is a locale, with value as the effect text in that locale.
+		this.pendEffect = new Map()		// Monster Pendulum Effect text. Each key is a locale, with value as the effect text in that locale.							
 		this.pendScale = null			// Monster Pendulum Scale value.
 		this.linkMarkers = []			// List of Link Monster arrows.
 
@@ -35,10 +35,10 @@ class Card {
 		this.tcgList = null				// Status on the TCG F/L list (-1 = unreleased, 0 = forbidden, 1 = limited, 2 = semi-limited, anything else = unlimited)
 		this.ocgList = null				// Status on the OCG F/L list (same values as above).
 		this.notInCg = null				// True if the card isn't from the TCG or OCG; from anime/manga/game instead.
-		this.printData = new Map()		// Data about when this card was printed and in which sets. Each key is a language, with value a further map of print code -> print date.
+		this.printData = new Map()		// Data about when this card was printed and in which sets. Each key is a locale, with value a further map of print code -> print date.
 		this.imageData = new Map()		// Image(s) associated with the card. Each key is an ID, with value a link to that image (either local file or on the web).
 		this.priceData = new Map()		// Any price data for this card. Valid keys are 'us' or 'eu', with values being the price data in that region.
-		this.faqData = new Map()		// Any FAQ data for this card. Each key is a language, with value being the FAQ data for that language.
+		this.faqData = new Map()		// Any FAQ data for this card. Each key is a locale, with value being the FAQ data for that locale.
 	}
 
 	/**
@@ -52,15 +52,15 @@ class Card {
 	static fromBotDb(dbRows, db) {
 		const card = new Card()
 
-		// Just use the first row as a representative for all the stats that aren't language-sensitive.
+		// Just use the first row as a representative for all the stats that aren't locale-sensitive.
 		const repRow = dbRows[0]
 		
-		// Map language-sensitive rows.
+		// Map locale-sensitive rows.
 		for (const r of dbRows) {
-			card.name.set(r.language, r.dataName)
-			card.effect.set(r.language, r.effect)
+			card.name.set(r.locale, r.dataName)
+			card.effect.set(r.locale, r.effect)
 			if (r.pendEffect)
-				card.pendEffect.set(r.language, r.pendEffect)
+				card.pendEffect.set(r.locale, r.pendEffect)
 		}
 		card.dbId = repRow.dbId
 		card.passcode = repRow.passcode
@@ -118,15 +118,15 @@ class Card {
 			card.imageData.set(r.artId, r.artPath)
 		
 		// Gather print data.
-		const getPrints = `SELECT printCode, language, printDate FROM cardDataPrints ${where}`
+		const getPrints = `SELECT printCode, locale, printDate FROM cardDataPrints ${where}`
 		const printRows = db.prepare(getPrints).all(searchParam)
 		for (const r of printRows) {
-			const printsInLocale = card.printData.get(r.language)
+			const printsInLocale = card.printData.get(r.locale)
 
 			if (printsInLocale) printsInLocale.set(r.printCode, r.printDate)
 			else {
-				card.printData.set(r.language, new Map())
-				card.printData.get(r.language).set(r.printCode, r.printDate)
+				card.printData.set(r.locale, new Map())
+				card.printData.get(r.locale).set(r.printCode, r.printDate)
 			}
 		}
 	
@@ -147,11 +147,11 @@ class Card {
 	 * @returns {Card} The evaluated Card object.
 	 */
 	static fromKonamiDb(dbRows, card, db) {
-		// Just use the first row as a representative for all the stats that aren't language-sensitive.
+		// Just use the first row as a representative for all the stats that aren't locale-sensitive.
 		const repRow = dbRows[0]
 		
 		card.dbId = repRow.id
-		// Map language-sensitive rows.
+		// Map locale-sensitive rows.
 		for (const r of dbRows) {
 			if (!card.name.has(r.locale)) card.name.set(r.locale, r.name)
 			if (!card.effect.has(r.locale)) card.effect.set(r.locale, r.effect_text)
@@ -229,44 +229,44 @@ class Card {
 		card.dbId = apiData.cardId
 		if ('cardData' in apiData) {
 			const apiCardData = apiData.cardData
-			for (const lan in apiCardData) {
-				const lanCardData = apiCardData[lan]
-				// Map the language-specific values.
-				if (!card.name.has(lan)) card.name.set(lan, lanCardData.name)
-				if (!card.effect.has(lan)) card.effect.set(lan, lanCardData.effectText)
-				if ('pendulumEffectText' in lanCardData)
-					if (!card.pendEffect.has(lan)) card.pendEffect.set(lan, lanCardData.pendulumEffectText)
+			for (const locale in apiCardData) {
+				const localeCardData = apiCardData[locale]
+				// Map the locale-specific values.
+				if (!card.name.has(locale)) card.name.set(locale, localeCardData.name)
+				if (!card.effect.has(locale)) card.effect.set(locale, localeCardData.effectText)
+				if ('pendulumEffectText' in localeCardData)
+					if (!card.pendEffect.has(locale)) card.pendEffect.set(locale, localeCardData.pendulumEffectText)
 				// Parse print dates too.
-				if ('prints' in lanCardData) {
-					const apiPrints = lanCardData.prints
-					if (!card.printData.has(lan)) card.printData.set(lan, new Map())
+				if ('prints' in localeCardData) {
+					const apiPrints = localeCardData.prints
+					if (!card.printData.has(locale)) card.printData.set(locale, new Map())
 					for (const p of apiPrints)
-						card.printData.get(lan).set(p.code, p.date)
+						card.printData.get(locale).set(p.code, p.date)
 				}
-				// Some non-language-specific values are repeated per language. Just use them the first time we see them.
-				if (!card.cardType) card.cardType = lanCardData.cardType
+				// Some non-locale-specific values are repeated per locale. Just use them the first time we see them.
+				if (!card.cardType) card.cardType = localeCardData.cardType
 				// Parse monster-specific stats.
 				if (card.cardType === 'monster') {
-					if (!card.attribute && 'attribute' in lanCardData) card.property = lanCardData.attribute
+					if (!card.attribute && 'attribute' in localeCardData) card.property = localeCardData.attribute
 					if (!card.levelRank && !card.linkMarkers.length) {
-						if ('level' in lanCardData) card.levelRank = lanCardData.level
-						else if ('rank' in lanCardData) card.levelRank = lanCardData.rank
-						else if ('linkArrows' in lanCardData) {
-							const arrows = lanCardData.linkArrows
+						if ('level' in localeCardData) card.levelRank = localeCardData.level
+						else if ('rank' in localeCardData) card.levelRank = localeCardData.rank
+						else if ('linkArrows' in localeCardData) {
+							const arrows = localeCardData.linkArrows
 							for (let i = 0; i < arrows.length; i++)
 								card.linkMarkers.push(parseInt(arrows.charAt(i), 10))	
 						}
 					}
-					if (!card.types.length && 'properties' in lanCardData)
-						for (const prop of lanCardData.properties)
+					if (!card.types.length && 'properties' in localeCardData)
+						for (const prop of localeCardData.properties)
 							card.types.push(searchPropertyArray(prop, 'en'))
-					if (!card.attack && 'atk' in lanCardData) card.attack = lanCardData.atk
-					if (!card.defense && 'def' in lanCardData) card.defense = lanCardData.def
-					if (!card.pendScale && 'pendulumScale' in lanCardData) card.pendScale = lanCardData.pendulumScale
+					if (!card.attack && 'atk' in localeCardData) card.attack = localeCardData.atk
+					if (!card.defense && 'def' in localeCardData) card.defense = localeCardData.def
+					if (!card.pendScale && 'pendulumScale' in localeCardData) card.pendScale = localeCardData.pendulumScale
 				}
 				// Parse Spell/Trap specific stats.
 				else {
-					if (!card.property && 'property' in lanCardData) card.property = lanCardData.property
+					if (!card.property && 'property' in localeCardData) card.property = localeCardData.property
 				}
 				
 			}
@@ -274,29 +274,29 @@ class Card {
 		if ('faqData' in apiData) {
 			const apiFaqData = apiData.faqData
 			for (const entry of apiFaqData.entries)
-				for (const lan in entry) {
-					if (!card.faqData.has(lan)) card.faqData.set(lan, [])
-					card.faqData.get(lan).push(entry[lan])
+				for (const locale in entry) {
+					if (!card.faqData.has(locale)) card.faqData.set(locale, [])
+					card.faqData.get(locale).push(entry[locale])
 				}
 		}
 	}
 
 	/**
 	 * Generic wrapper for generating any type of embed.
-	 * @param {Object} options Relevant options (type, language, etc.) that are passed on to more specific embed functions.
+	 * @param {Object} options Relevant options (type, locale, etc.) that are passed on to more specific embed functions.
 	 */
 	generateEmbed(options) {
 		let embedData = {}
 
 		if ('type' in options)
 			var type = options.type
-		if ('language' in options)
-			var language = options.language
+		if ('locale' in options)
+			var locale = options.locale
 		if ('official' in options)
 			var official = options.official
 
 		if (type === 'i' || type === 'r') {
-			embedData = this.generateInfoEmbed(language, type === 'r' ? true : false, official)
+			embedData = this.generateInfoEmbed(locale, type === 'r' ? true : false, official)
 		}
 
 		return embedData
@@ -304,22 +304,22 @@ class Card {
 
 	/**
 	 * Generates the base, common information embed for the card.
-	 * @param {String} language Which language to use when generating the embed.
+	 * @param {String} locale Which locale to use when generating the embed.
 	 * @param {Boolean} rulings Whether to include additional information relevant to rulings for the card.
 	 * @param {Boolean} official Whether to only include official Konami information. This overrides any inclusion from rulings mode being true.
 	 */
-	generateInfoEmbed(language, rulings, official) {
+	generateInfoEmbed(locale, rulings, official) {
 		const embedData = {}
 
-		// We shouldn't be here without data for this language, but do a final sanity check to make sure we leave if so.
-		if (!this.name.has(language))
+		// We shouldn't be here without data for this locale, but do a final sanity check to make sure we leave if so.
+		if (!this.name.has(locale))
 			return embedData
 		
 		const finalEmbed = new MessageEmbed()
 
-		const cardName = this.name.get(language)
+		const cardName = this.name.get(locale)
 		const colorIcon = this.getEmbedColorAndIcon()
-		const titleUrl = this.getEmbedTitleLink(language, official)
+		const titleUrl = this.getEmbedTitleLink(locale, official)
 
 		finalEmbed.setAuthor(cardName, colorIcon[1], titleUrl)
 		finalEmbed.setColor(colorIcon[0])
@@ -330,9 +330,9 @@ class Card {
 		if (this.levelRank !== null) {
 			const lrString = this.levelRank >= 1 ? `${this.levelRank}` : '?'
 			if (this.types.includes('Xyz'))
-				var stats = `${EmbedIcons['Rank']} **${searchPropertyToLanguageIndex('Rank', language)}**: ${lrString}`
+				var stats = `${EmbedIcons['Rank']} **${searchPropertyToLocaleIndex('Rank', locale)}**: ${lrString}`
 			else
-				stats = `${EmbedIcons['Level']} **${searchPropertyToLanguageIndex('Level', language)}**: ${lrString}`
+				stats = `${EmbedIcons['Level']} **${searchPropertyToLocaleIndex('Level', locale)}**: ${lrString}`
 		}
 		// Link Markers
 		else if (this.linkMarkers.length) {
@@ -343,13 +343,13 @@ class Card {
 		}
 		// Pendulum Scale
 		if (this.pendScale !== null)
-			stats += ` | ${EmbedIcons['Pendulum Scales']} **${searchPropertyToLanguageIndex('Pendulum Scale', language)}**: ${this.pendScale}`
+			stats += ` | ${EmbedIcons['Pendulum Scales']} **${searchPropertyToLocaleIndex('Pendulum Scale', locale)}**: ${this.pendScale}`
 		// Monster Types
 		if (this.types.length) {
-			if (language !== 'en')
-				var newLanTypes = searchPropertyToLanguageIndex(this.types, language)
+			if (locale !== 'en')
+				var newLanTypes = searchPropertyToLocaleIndex(this.types, locale)
 			
-			if (language === 'en' || !newLanTypes)
+			if (locale === 'en' || !newLanTypes)
 				stats += `\n**[** ${this.types.join(' **/** ')} **]**`
 			else
 				stats += `\n**[** ${newLanTypes.join(' **/** ')} **]**`
@@ -369,20 +369,20 @@ class Card {
 			finalEmbed.setDescription(stats)
 
 		// Pendulum Effect
-		const pendEffect = this.pendEffect.get(language)
+		const pendEffect = this.pendEffect.get(locale)
 		if (pendEffect)
-			finalEmbed.addField(searchPropertyToLanguageIndex('Pendulum Effect', language), pendEffect, false)
+			finalEmbed.addField(searchPropertyToLocaleIndex('Pendulum Effect', locale), pendEffect, false)
 		// Effect
-		let effect = this.effect.get(language)
+		let effect = this.effect.get(locale)
 		if (effect) {
 			if (this.types.includes('Normal'))
 				effect = `*${effect}*`
-			finalEmbed.addField(searchPropertyToLanguageIndex('Effect', language), effect, false)
+			finalEmbed.addField(searchPropertyToLocaleIndex('Effect', locale), effect, false)
 		}
 
 		// Display ruling data if necessary. Only do this for cards that are on the database.
 		if (rulings && this.dbId) {
-			const rulingsText = this.buildRulingsField(language, official)
+			const rulingsText = this.buildRulingsField(locale, official)
 			if (rulingsText)
 				finalEmbed.addField('Additional Information', rulingsText, false)
 		}
@@ -459,28 +459,28 @@ class Card {
 
 	/**
 	 * Generates the URL destination for the title of any embed created this card's data.
-	 * @param {String} language The language being used for this embed. 
+	 * @param {String} locale The locale being used for this embed. 
 	 * @param {Boolean} official Whether official mode is enabled. 
 	 * @returns {String} The generated URL.
 	 */
-	getEmbedTitleLink(language, official) {
+	getEmbedTitleLink(locale, official) {
 		// TODO: We don't support non-database queries yet, but this will have to be changed when we do.
 		if (!this.dbId) return
 
-		let localeReleased = this.isReleased(language)
+		let localeReleased = this.isReleased(locale)
 		const jaReleased = this.isReleased('ja')
 		if (!localeReleased) {
-			// If it's not released in this language, look at EN.
+			// If it's not released in this locale, look at EN.
 			localeReleased = this.isReleased('en')
-			if (localeReleased) language = 'en'
+			if (localeReleased) locale = 'en'
 			// If not in EN, it's gotta be in JP. Only do this if official mode isn't being used.
 			else if (!official) {
 				localeReleased = jaReleased
-				language = 'ja'
+				locale = 'ja'
 			}
 		}
 
-		return `${KONAMI_CARD_LINK}${this.dbId}${KONAMI_REQUEST_LOCALE}${language}`
+		return `${KONAMI_CARD_LINK}${this.dbId}${KONAMI_REQUEST_LOCALE}${locale}`
 
 		// TODO: Generate Yugipedia page links for anything that's not on the database.
 	}
@@ -521,47 +521,47 @@ class Card {
 
 	/**
 	 * Build the string for this card's "ruling information."
-	 * @param {String} language The language this field is being generated for.
+	 * @param {String} locale The locale this field is being generated for.
 	 * @param {Boolean} official Whether to only display official information.
 	 */
-	buildRulingsField(language, official) {
-		let localeReleased = this.isReleased(language, true)
+	buildRulingsField(locale, official) {
+		let localeReleased = this.isReleased(locale, true)
 		const jaReleased = this.isReleased('ja')
 		if (!localeReleased) {
-			// If it's not released in this language, look at EN.
+			// If it's not released in this locale, look at EN.
 			localeReleased = this.isReleased('en', true)
-			if (localeReleased) language = 'en'
+			if (localeReleased) locale = 'en'
 			// If not in EN, it's gotta be in JP. Only do this if official mode isn't being used.
 			else if (!official) {
 				localeReleased = jaReleased
-				language = 'ja'
+				locale = 'ja'
 			}
 		}
 
 		let fieldText = ''
 
 		// Database links.
-		const cardKonamiInfoLink = `${KONAMI_CARD_LINK}${this.dbId}${KONAMI_REQUEST_LOCALE}${language}`
+		const cardKonamiInfoLink = `${KONAMI_CARD_LINK}${this.dbId}${KONAMI_REQUEST_LOCALE}${locale}`
 		const cardKonamiRulingsLink = `${KONAMI_QA_LINK}${this.dbId}${KONAMI_REQUEST_LOCALE}ja`
 		const cardYgorgCardLink = `${YGORG_CARD_LINK}${this.dbId}:en`
 		if (official)
-			// Official mode only gives card database links to the given language, or EN if that language is unreleased.
-			fieldText += `Konami: [card](${cardKonamiInfoLink}) (${LanguageEmojis[language]})`
+			// Official mode only gives card database links to the given locale, or EN if that locale is unreleased.
+			fieldText += `Konami: [card](${cardKonamiInfoLink}) (${LocaleEmojis[locale]})`
 		else {
-			fieldText += `Konami: [card](${cardKonamiInfoLink}) (${LanguageEmojis[language]})`
-			if (jaReleased) fieldText += ` **·** [faq](${cardKonamiRulingsLink}) (${LanguageEmojis.ja})`
-			fieldText += ` | YGOrg: [card/rulings](${cardYgorgCardLink}) (${LanguageEmojis['en']})`
+			fieldText += `Konami: [card](${cardKonamiInfoLink}) (${LocaleEmojis[locale]})`
+			if (jaReleased) fieldText += ` **·** [faq](${cardKonamiRulingsLink}) (${LocaleEmojis.ja})`
+			fieldText += ` | YGOrg: [card/rulings](${cardYgorgCardLink}) (${LocaleEmojis['en']})`
 			// TODO: Include Yugipedia links in this?
 		}
 
 		// Most recent print date.
-		const sortedPrintDates = this.sortPrintDates(language)
+		const sortedPrintDates = this.sortPrintDates(locale)
 		if (!localeReleased)
-			fieldText += `\nLast ${language.toUpperCase()} print: **Not yet released**`
+			fieldText += `\nLast ${locale.toUpperCase()} print: **Not yet released**`
 		else {
 			// Check if the date is in the future.
 			const mostRecentPrint = sortedPrintDates[0]
-			fieldText += `\nLast ${language.toUpperCase()}  print: **${mostRecentPrint}**`
+			fieldText += `\nLast ${locale.toUpperCase()}  print: **${mostRecentPrint}**`
 			if (new Date(mostRecentPrint) > new Date()) fieldText += ' *(not yet released)*'
 		}
 

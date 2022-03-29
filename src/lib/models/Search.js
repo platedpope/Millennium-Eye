@@ -12,9 +12,9 @@ const Ruling = require('./Ruling')
 	 * Initializes the search properties.
 	 * @param {String | Number} content The content of the search (i.e., what is being searched for).
 	 * @param {String} type The type of search (e.g., i, r, etc.)
-	 * @param {String} language The language of the search (e.g., en, es, etc.)
+	 * @param {String} locale The locale of the search (e.g., en, es, etc.)
 	 */
-	constructor(content, type, language) {
+	constructor(content, type, locale) {
 		// The original search term associated with this card data.
 		// This is a Set because it may end up containing multiple original searches over time.
 		this.originals = new Set()
@@ -24,11 +24,11 @@ const Ruling = require('./Ruling')
 		// as the databases/APIs find a better search term.
 		this.term = content
 		/** 
-		 * @type {Map<String,Set} Each language-type pair associated with this search.
+		 * @type {Map<String,Set} Each locale-type pair associated with this search.
 		 */
-		this.lanToTypesMap = new Map()
-		if (type !== undefined && language !== undefined)
-			this.addTypeToLan(type, language)
+		this.localeToTypesMap = new Map()
+		if (type !== undefined && locale !== undefined)
+			this.addTypeToLan(type, locale)
 
 		/**
 		 * @type {Card | Ruling} This starts out unset but will be set to something when data is found.
@@ -44,20 +44,20 @@ const Ruling = require('./Ruling')
 	/**
 	 * Adds a search type to the types map.
 	 * @param {String} type The type of search (e.g., i, r, etc.)
-	 * @param {String} language The language of the search (e.g., en, es, etc.)
+	 * @param {String} locale The locale of the search (e.g., en, es, etc.)
 	 */
-	addTypeToLan(type, language) {
-		const lanTypes = this.lanToTypesMap.get(language)
+	addTypeToLan(type, locale) {
+		const localeTypes = this.localeToTypesMap.get(locale)
 		// If this one doesn't already exist in the map, just add it.
-		if (lanTypes === undefined) {
-			this.lanToTypesMap.set(language, new Set())
-			this.lanToTypesMap.get(language).add(type)
+		if (localeTypes === undefined) {
+			this.localeToTypesMap.set(locale, new Set())
+			this.localeToTypesMap.get(locale).add(type)
 		}
 		// Otherwise, add it and let JS Set handle conflicts.
 		else {
 			if (type instanceof Set) 
-				lanTypes.add(...type) 
-			else lanTypes.add(type)
+				localeTypes.add(...type) 
+			else localeTypes.add(type)
 		}
 	}
 
@@ -67,37 +67,37 @@ const Ruling = require('./Ruling')
 	 * @returns {Boolean} Whether or not this search has the given type.
 	 */
 	hasType(type) {
-		for (const l of this.lanToTypesMap.keys()) 
-			return this.lanToTypesMap.get(l).has(type)
+		for (const l of this.localeToTypesMap.keys()) 
+			return this.localeToTypesMap.get(l).has(type)
 	}
 
 	/**
 	 * Checks whether a search has resolved all necessary data related to its search types.
-	 * i.e., does it have data for all the languages and types it searched?
-	 * @returns {Boolean} True if all types/languages have corresponding data.
+	 * i.e., does it have data for all the locales and types it searched?
+	 * @returns {Boolean} True if all types/locales have corresponding data.
 	 */
 	isDataFullyResolved() {
 		if (this.data === undefined) return false
 
-		// Go through our language/types map and check what we need to see for each.
-		for (const lan of this.lanToTypesMap.keys()) {
-			const types = this.lanToTypesMap.get(lan)
+		// Go through our locale/types map and check what we need to see for each.
+		for (const locale of this.localeToTypesMap.keys()) {
+			const types = this.localeToTypesMap.get(locale)
 
-			// If this has 'r' or 'i'-type search, it needs name + effect text for this language at a minimum.
+			// If this has 'r' or 'i'-type search, it needs name + effect text for this locale at a minimum.
 			if (types.has('i') || types.has('r'))
-				if ( !(this.data.name.has(lan)) || !(this.data.effect.has(lan)) )
+				if ( !(this.data.name.has(locale)) || !(this.data.effect.has(locale)) )
 					return false
-			// If this has 'a'-type search, it needs image data (language independent).
+			// If this has 'a'-type search, it needs image data (locale independent).
 			if (types.has('a'))
 				if (!this.data.imageData.size)
 					return false
-			// If this has 'd'-type search, it needs print data for this language.
+			// If this has 'd'-type search, it needs print data for this locale.
 			if (types.has('d'))
-				if (!(this.data.printData.has(lan)))
+				if (!(this.data.printData.has(locale)))
 					return false
-			// If this has 'p'-type search... honestly these are nonstandard, just check for name in this language for now.
+			// If this has 'p'-type search... honestly these are nonstandard, just check for name in this locale for now.
 			if (types.has('p'))
-				if (!(this.data.name.has(lan)))
+				if (!(this.data.name.has(locale)))
 					return false
 			const usPrice = types.has('$')
 			const euPrice = types.has('€')
@@ -107,13 +107,13 @@ const Ruling = require('./Ruling')
 					return false
 				if (euPrice && !(this.data.priceData.has('eu')))
 					return false
-			// If this has 'f'-type search, it needs FAQ data for this language.
+			// If this has 'f'-type search, it needs FAQ data for this locale.
 			if (types.has('f'))
-				if (!(this.data.faqData.has(lan)))
+				if (!(this.data.faqData.has(locale)))
 					return false
-			// If this has 'q'-type search, it needs QA data for this language.
+			// If this has 'q'-type search, it needs QA data for this locale.
 			if (types.has('q'))
-				if ( !(this.data.title.has(lan)) || !(this.data.question.has(lan)) || !(this.data.answer.has(lan)) )
+				if ( !(this.data.title.has(locale)) || !(this.data.question.has(locale)) || !(this.data.answer.has(locale)) )
 					return false
 		}
 
@@ -122,21 +122,21 @@ const Ruling = require('./Ruling')
 	}
 
 	/**
-	 * Gets all the unresolved data of this search. Returns the same format as the lanToTypes map
-	 * to indicate which languages and types did not get resolved.
+	 * Gets all the unresolved data of this search. Returns the same format as the localeToTypes map
+	 * to indicate which locales and types did not get resolved.
 	 * This is basically a more specific form of isDataFullyResolved, but more comprehensive, since it will
 	 * return ALL data unresolved rather than just a true/false as soon as it finds something bad.
-	 * @returns {Map} The map of languages -> types that did not have resolved data.
+	 * @returns {Map} The map of locales -> types that did not have resolved data.
 	 */
 	getUnresolvedData() {
 		const unresolvedLanTypes = new Map()
 
-		this.lanToTypesMap.forEach((types, lan) => {
+		this.localeToTypesMap.forEach((types, locale) => {
 			for (const t of types) {
 				let unresolvedType = false
-				// Any 'r' or 'i'-type search should have name + effect text in this language.
+				// Any 'r' or 'i'-type search should have name + effect text in this locale.
 				if (t === 'i' || t === 'r') {
-					if ( !(this.data.name.has(lan)) || !(this.data.effect.has(lan)) )
+					if ( !(this.data.name.has(locale)) || !(this.data.effect.has(locale)) )
 						unresolvedType = true
 				}
 				// Any 'a'-type search should have image data.
@@ -144,14 +144,14 @@ const Ruling = require('./Ruling')
 					if (!this.data.imageData.size())
 						unresolvedType = true
 				}
-				// Any 'd'-type search should have print data in this language.
+				// Any 'd'-type search should have print data in this locale.
 				else if (t === 'd') {
-					if (!this.data.printData.has(lan))
+					if (!this.data.printData.has(locale))
 						unresolvedType = true
 				}
-				// Any 'p'-type search should have... honestly these are nonstandard, just check for name in this language for now.
+				// Any 'p'-type search should have... honestly these are nonstandard, just check for name in this locale for now.
 				else if (t === 'p') {
-					if (!this.data.name.has(lan))
+					if (!this.data.name.has(locale))
 						unresolvedType = true
 				}
 				// Any '$' or '€'-type search should have corresponding price data.
@@ -162,21 +162,21 @@ const Ruling = require('./Ruling')
 					if (!this.data.priceData.has('eu'))
 						unresolvedType = true
 				}
-				// Any 'f'-type search should have FAQ data in this language.
+				// Any 'f'-type search should have FAQ data in this locale.
 				else if (t === 'f') {
-					if (!this.data.faqData.has(lan))
+					if (!this.data.faqData.has(locale))
 						unresolvedType = true
 				}
-				// Any 'q'-type search should have QA data in this language.
+				// Any 'q'-type search should have QA data in this locale.
 				else if (t === 'q') {
-					if (!this.data.title.has(lan) || !this.data.question.has(lan) || !this.data.answer.has(lan))
+					if (!this.data.title.has(locale) || !this.data.question.has(locale) || !this.data.answer.has(locale))
 						unresolvedType = true
 				}
 
 				if (unresolvedType) {
-					if (!unresolvedLanTypes.has(lan))
-						unresolvedLanTypes.set(lan, new Set())
-					unresolvedLanTypes.get(lan).add(t)
+					if (!unresolvedLanTypes.has(locale))
+						unresolvedLanTypes.set(locale, new Set())
+					unresolvedLanTypes.get(locale).add(t)
 				}
 			}
 		})
@@ -198,13 +198,13 @@ const Ruling = require('./Ruling')
 		// In other words, this object already has the correct search term.
 
 		// Add any new search types to associate with this search.
-		otherSearch.lanToTypesMap.forEach((otherTypes, otherLan) => {
-			const thisSearchLan = this.lanToTypesMap.get(otherLan)
+		otherSearch.localeToTypesMap.forEach((otherTypes, otherLan) => {
+			const thisSearchLan = this.localeToTypesMap.get(otherLan)
 			if (thisSearchLan === undefined)
 				// If the other search has a type this one doesn't, just add it.
-				this.lanToTypesMap.set(otherLan, otherTypes)
+				this.localeToTypesMap.set(otherLan, otherTypes)
 			else
-				// This type exists in both Searches. Add any new languages to this one, let JS Set handle conflicts.
+				// This type exists in both Searches. Add any new locales to this one, let JS Set handle conflicts.
 				thisSearchLan.add(...otherTypes)
 		})
 

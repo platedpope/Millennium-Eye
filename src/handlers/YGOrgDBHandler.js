@@ -2,7 +2,7 @@ const axios = require('axios')
 const Database = require('better-sqlite3')
 
 const Search = require('lib/models/Search')
-const { Languages, YGORG_NAME_ID_INDEX, YGORG_PROPERTY_METADATA, YGORG_DB_PATH, YGORG_MANIFEST, YGORG_QA_DATA_API, API_TIMEOUT, YGORG_CARD_DATA_API, YGORG_ARTWORK_API } = require('lib/models/Defines')
+const { Locales, YGORG_NAME_ID_INDEX, YGORG_PROPERTY_METADATA, YGORG_DB_PATH, YGORG_MANIFEST, YGORG_QA_DATA_API, API_TIMEOUT, YGORG_CARD_DATA_API, YGORG_ARTWORK_API } = require('lib/models/Defines')
 const { evictFromBotCache, botDb } = require('handlers/BotDBHandler')
 const { logError, logger } = require('lib/utils/logging')
 const { CardDataFilter } = require('lib/utils/search')
@@ -12,10 +12,10 @@ const ygorgDb = new Database(YGORG_DB_PATH)
 let cachedRevision = undefined
 const nameToIdIndex = {}
 // The property array is the raw data returned by the YGOrg API and is used for its own API.
-// The propertyToLanguageIndex is that data converted into a map for easy type lookups for the bot's purposes.
+// The propertyToLocaleIndex is that data converted into a map for easy type lookups for the bot's purposes.
 // Both are used at various places in the bot logic, so both are cached.
 let propertyArray = []
-const propertyToLanguageIndex = {}
+const propertyToLocaleIndex = {}
 
 let artworkManifest = {}
 
@@ -97,7 +97,7 @@ async function processManifest(newRevision) {
 				if ('idx' in changes) {
 					const idxChanges = changes.idx
 					if ('name' in idxChanges) {
-						logger.info(`Evicted languages ${Object.keys(idxChanges).join(', ')} from name index.`)
+						logger.info(`Evicted locales ${Object.keys(idxChanges).join(', ')} from name index.`)
 						for (l in idxChanges.name) delete nameToIdIndex[l]
 					}
 				}
@@ -366,8 +366,8 @@ function addToYgorgDb(qaSearches, faqSearches) {
 		let insertAllFaqs = ygorgDb.transaction(searchData => {
 			for (const s of searchData) {
 				const card = s.data
-				card.faqData.forEach((entries, lan) => {
-					for (const entry of entries) insertFaq.run(card.dbId, lan, entry)
+				card.faqData.forEach((entries, locale) => {
+					for (const entry of entries) insertFaq.run(card.dbId, locale, entry)
 				})
 			}
 		})
@@ -376,23 +376,23 @@ function addToYgorgDb(qaSearches, faqSearches) {
 }
 
 /**
- * Saves off the YGORG card name -> ID search index for all languages.
- * @param {Array<String>} language An array of languages to query the search index for.
+ * Saves off the YGORG card name -> ID search index for all locales.
+ * @param {Array<String>} locale An array of locales to query the search index for.
  */
-async function cacheNameToIdIndex(lans = Object.keys(Languages)) {
-	// Only request the languages that we don't have cached.
-	const lansNotCached = lans.filter(l => !(l in nameToIdIndex))
-	if (!lansNotCached.length) return
+async function cacheNameToIdIndex(locales = Object.keys(Locales)) {
+	// Only request the locales that we don't have cached.
+	const localesNotCached = locales.filter(l => !(l in nameToIdIndex))
+	if (!localesNotCached.length) return
 
 	const apiRequests = []
-	for (const l of lansNotCached) {
-		const lanIndex = axios.get(`${YGORG_NAME_ID_INDEX}/${l}`, {
+	for (const l of localesNotCached) {
+		const localeIndex = axios.get(`${YGORG_NAME_ID_INDEX}/${l}`, {
 			'timeout': API_TIMEOUT * 1000
 		}).then(r => {
 			if (r.status === 200) return r
 		})
 
-		apiRequests.push(lanIndex)
+		apiRequests.push(localeIndex)
 	}
 
 	// Track results for logging.
@@ -408,57 +408,57 @@ async function cacheNameToIdIndex(lans = Object.keys(Languages)) {
 	for (let i = 0; i < indices.length; i++) {
 		const index = indices[i]
 		// These promises return in the same order we sent the requests in.
-		// Map this response to its corresponding language that way.
-		const indexLanguage = lansNotCached[i]
+		// Map this response to its corresponding locale that way.
+		const indexLocale = localesNotCached[i]
 
 		if (index.status === 'rejected') {
-			logError(index.reason, `Failed to refresh cached YGORG name->ID index for language ${indexLanguage}.`)
+			logError(index.reason, `Failed to refresh cached YGORG name->ID index for locale ${indexLocale}.`)
 			continue
 		}
 
-		nameToIdIndex[indexLanguage] = {}
+		nameToIdIndex[indexLocale] = {}
 		// Make all the names lowercase for case-insensitive lookups.
 		for (const n of Object.keys(index.value.data)) {
 			const lcName = n.toLowerCase()
-			nameToIdIndex[indexLanguage][lcName] = index.value.data[n]
+			nameToIdIndex[indexLocale][lcName] = index.value.data[n]
 		}
-		successfulRequests.push(indexLanguage)
+		successfulRequests.push(indexLocale)
 	}
 
 	if (successfulRequests.length)
-		logger.info(`Refreshed cached YGOrg name->ID index for language(s): ${successfulRequests.join(', ')}`)
+		logger.info(`Refreshed cached YGOrg name->ID index for locale(s): ${successfulRequests.join(', ')}`)
 }
 
 /**
- * Searches the name to ID index for the best match among all languages.
+ * Searches the name to ID index for the best match among all locales.
  * @param {String} search The value to search for. 
- * @param {Array<String>} lans The array of languages to search for.
+ * @param {Array<String>} locales The array of locales to search for.
  * @param {Number} returnMatches The number of matches to return, sorted in descending order (better matches first).
  * @returns {Object} All relevant matches.
  */
-function searchNameToIdIndex(search, lans, returnMatches = 1) {
+function searchNameToIdIndex(search, locales, returnMatches = 1) {
 	// First make sure we've got everything cached.
-	cacheNameToIdIndex(lans)
+	cacheNameToIdIndex(locales)
 	// Note: in rare scenarios this can cache something but evict another (if a manifest revision demands it),
-	// leaving us with nothing for a given language. This will cause this function to find no matches for the given search's language index,
+	// leaving us with nothing for a given locale. This will cause this function to find no matches for the given search's locale index,
 	// which is unfortunate, but the logic will fail gracefully and I'm hoping it's rare enough that it won't be a practical issue.
 
 	let matches = {}
 
-	for (const l of lans) {
+	for (const l of locales) {
 		if (!(l in nameToIdIndex)) continue
 
 		const searchFilter = new CardDataFilter(nameToIdIndex[l], search, 'CARD_NAME')
-		const lanMatches = searchFilter.filterIndex(returnMatches)
-		for (const id in lanMatches) {
-			const score = lanMatches[id]
+		const localeMatches = searchFilter.filterIndex(returnMatches)
+		for (const id in localeMatches) {
+			const score = localeMatches[id]
 			if (score > 0) 
 				matches[id] = Math.max(score, matches[id] || 0)
 		}
 	}
 
-	// If we had more than one language and more than one match, we need to re-sort our matches in case each language added some.
-	if (lans.length > 1 && Object.keys(matches).length > 1) {
+	// If we had more than one locale and more than one match, we need to re-sort our matches in case each locale added some.
+	if (locales.length > 1 && Object.keys(matches).length > 1) {
 		// If scores are different, descending sort by score (i.e., higher scores first).
 		// If scores are the same, ascending sort by ID (i.e., lower IDs first).
 		const sortedResult = Object.entries(matches).sort(([idA, scoreA], [idB, scoreB]) => {
@@ -492,15 +492,15 @@ async function cachePropertyMetadata() {
 
 				// Pull out the EN property name and make it a key.
 				const enProp = prop['en']
-				propertyToLanguageIndex[enProp] = {}
-				for (const lan in prop) {
-					// Make each language a key under EN that maps to the translation of that property.
-					propertyToLanguageIndex[enProp][lan] = prop[lan]
+				propertyToLocaleIndex[enProp] = {}
+				for (const locale in prop) {
+					// Make each locale a key under EN that maps to the translation of that property.
+					propertyToLocaleIndex[enProp][locale] = prop[locale]
 				}
 			}
 
 			// Also load some hardcoded ones the bot tracks for itself (not given by YGOrg DB since it doesn't have any use for them).
-			propertyToLanguageIndex['Level'] = {
+			propertyToLocaleIndex['Level'] = {
 				'de': 'Stufe',
 				'en': 'Level',
 				'es': 'Nivel',
@@ -510,7 +510,7 @@ async function cachePropertyMetadata() {
 				'ko': '레벨',
 				'pt': 'Nível'
 			}
-			propertyToLanguageIndex['Rank'] = {
+			propertyToLocaleIndex['Rank'] = {
 				'de': 'Rang',
 				'en': 'Rank',
 				'es': 'Rango',
@@ -520,7 +520,7 @@ async function cachePropertyMetadata() {
 				'ko': '랭크',
 				'pt': 'Classe'
 			}
-			propertyToLanguageIndex['Pendulum Effect'] = {
+			propertyToLocaleIndex['Pendulum Effect'] = {
 				'de': 'Pendeleffekt',
 				'en': 'Pendulum Effect',
 				'es': 'Efecto de Péndulo',
@@ -530,7 +530,7 @@ async function cachePropertyMetadata() {
 				'ko': '펜듈럼 효과',
 				'pt': 'Efeito de Pêndulo'
 			}
-			propertyToLanguageIndex['Pendulum Scale'] = {
+			propertyToLocaleIndex['Pendulum Scale'] = {
 				'de': 'Pendelbereich',
 				'en': 'Pendulum Scale',
 				'es': 'Escala de Péndulo',
@@ -550,22 +550,22 @@ async function cachePropertyMetadata() {
 }
 
 /**
- * Searches the locale property metadata to map an English property(s) to its version in another language.
+ * Searches the locale property metadata to map an English property(s) to its version in another locale.
  * @param {String | Array<String>} type The property(s) in English.
- * @param {String} language The language's version of the property to search for.
- * @returns {String | Array<String>} The property(s) in the given language.
+ * @param {String} locale The locale's version of the property to search for.
+ * @returns {String | Array<String>} The property(s) in the given locale.
  */
-function searchPropertyToLanguageIndex(prop, language) {
+function searchPropertyToLocaleIndex(prop, locale) {
 	let props = []
 
 	// If we're just converting the one property, return immediately once we find it.
-	if (typeof prop === 'string' && prop in propertyToLanguageIndex)
-		return propertyToLanguageIndex[prop][language]
+	if (typeof prop === 'string' && prop in propertyToLocaleIndex)
+		return propertyToLocaleIndex[prop][locale]
 	else {
 		// Otherwise, loop through our properties to map each of them to the proper value.
 		for (const p of prop) {
-			if (p in propertyToLanguageIndex)
-				props.push(propertyToLanguageIndex[p][language])
+			if (p in propertyToLocaleIndex)
+				props.push(propertyToLocaleIndex[p][locale])
 		}
 	}
 
@@ -573,16 +573,16 @@ function searchPropertyToLanguageIndex(prop, language) {
 }
 
 /**
- * Returns the language of the property at the given index of the property array. 
+ * Returns the locale of the property at the given index of the property array. 
  * @param {Number} index The index of the property array to look at.
- * @param {String} language The language to search for at that index.
+ * @param {String} locale The locale to search for at that index.
  */
-function searchPropertyArray(index, language) {
+function searchPropertyArray(index, locale) {
 	const prop = propertyArray.at(index)
 	if (prop)
-		return prop[language]
+		return prop[locale]
 }
 
 module.exports = {
-	ygorgDb, cacheManifestRevision, searchYgorgDb, searchArtworkRepo, addToYgorgDb, cacheNameToIdIndex, searchNameToIdIndex, cachePropertyMetadata, searchPropertyToLanguageIndex, searchPropertyArray
+	ygorgDb, cacheManifestRevision, searchYgorgDb, searchArtworkRepo, addToYgorgDb, cacheNameToIdIndex, searchNameToIdIndex, cachePropertyMetadata, searchPropertyToLocaleIndex, searchPropertyArray
 }

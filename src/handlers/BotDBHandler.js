@@ -21,7 +21,7 @@ function searchTermCache(searches, qry, callback) {
 	const cachedPriceData = []
 	*/
 
-	const sqlQry = `SELECT dbId, passcode, fullName, location, language
+	const sqlQry = `SELECT dbId, passcode, fullName, location, locale
 					FROM termCache 
 					WHERE term = ?`
 	// Iterate through the array backwards because we might modify it as we go.
@@ -33,11 +33,11 @@ function searchTermCache(searches, qry, callback) {
 		const currTerm = currSearch.term
 
 		const dbRows = botDb.prepare(sqlQry).all(currTerm)
-		// Find a representative row. Prioritize any EN language one.
-		let repRow = dbRows.filter(r => r.language === 'en')
+		// Find a representative row. Prioritize any EN locale one.
+		let repRow = dbRows.filter(r => r.locale === 'en')
 		if (!repRow) {
-			// Otherwise, get one with a language we need.
-			repRow = dbRows.filter(r => currSearch.lanToTypesMap.has(r.language))
+			// Otherwise, get one with a locale we need.
+			repRow = dbRows.filter(r => currSearch.localeToTypesMap.has(r.locale))
 			if (!repRow)
 				// If still nothing, just pick the first one and call it good enough.
 				repRow = dbRows
@@ -153,7 +153,7 @@ function searchBotDb(searches, qry) {
  * @param {String} fromLoc The location this data is stored in (bot or konami DB).
  */
 function addToTermCache(searchData, fromLoc) {
-	const insertTerm = botDb.prepare(`INSERT OR REPLACE INTO termCache(term, dbId, passcode, fullName, location, language)
+	const insertTerm = botDb.prepare(`INSERT OR REPLACE INTO termCache(term, dbId, passcode, fullName, location, locale)
 								   VALUES(?, ?, ?, ?, ?, ?)`)
 
 	const insertMany = botDb.transaction(termSearches => {
@@ -175,7 +175,7 @@ function addToBotDb(searchData) {
 	if (!searchData.length) return
 	
 	const insertDataCache = botDb.prepare(`
-		INSERT OR REPLACE INTO dataCache(dataName, language, dbId, passcode, cardType, property, attribute, levelRank, attack, defense, effect, pendEffect, pendScale, requirement, notInCg)
+		INSERT OR REPLACE INTO dataCache(dataName, locale, dbId, passcode, cardType, property, attribute, levelRank, attack, defense, effect, pendEffect, pendScale, requirement, notInCg)
 		VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`)
 	const insertCardTypes = botDb.prepare(`
@@ -191,7 +191,7 @@ function addToBotDb(searchData) {
 		VALUES(?, ?, ?, ?, ?)
 	`)
 	const insertPrintData = botDb.prepare(`
-		INSERT INTO cardDataPrints(printCode, language, dbId, printDate)
+		INSERT INTO cardDataPrints(printCode, locale, dbId, printDate)
 		VALUES(?, ?, ?, ?)
 	`)
 	// TODO: Check and update pricing information as well.
@@ -208,17 +208,17 @@ function addToBotDb(searchData) {
 			// Update types and link markers as necessary too.
 			for (const t of c.types) insertCardTypes.run(c.dbId, c.passcode, c.name.get('en'), t)
 			for (const m of c.linkMarkers) insertLinkMarkers.run(c.dbId, c.passcode, c.name.get('en'), m)
-			// Update image data. Don't care about language for this.
+			// Update image data. Don't care about locale for this.
 			if (c.imageData.size)
 				c.imageData.forEach((imgPath, id) => {
 					insertImageData.run(c.dbId, c.passcode, c.name.get('en'), id, imgPath)
 				})
 			// Update print data.
 			if (c.printData.size)
-				c.printData.forEach((prints, lan) => {
+				c.printData.forEach((prints, locale) => {
 					if (prints)
 						prints.forEach((date, code) => {
-							insertPrintData.run(code, lan, c.dbId, date)
+							insertPrintData.run(code, locale, c.dbId, date)
 						})
 				})
 		}

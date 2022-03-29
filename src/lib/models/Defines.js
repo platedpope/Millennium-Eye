@@ -39,7 +39,7 @@ module.exports = {
 		'f': 'FAQ',
 		'q': 'QA'
 	},
-	Languages: {
+	Locales: {
 		'de': 'German',
 		'en': 'English',
 		'es': 'Spanish',
@@ -49,7 +49,7 @@ module.exports = {
 		'ko': 'Korean',
 		'pt': 'Portuguese'
 	},
-	LanguageEmojis: {
+	LocaleEmojis: {
 		'de': '🇩🇪',
 		'en': '🇬🇧',
 		'es': '🇪🇸',

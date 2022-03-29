@@ -49,12 +49,12 @@ async function convertYgorgDataToSearchData(qaSearches, cardSearches = []) {
 	// Process the QAs.
 	for (const s of qaSearches.db) {
 		const convertedRuling = Ruling.fromYgorgDb(s.data, ygorgDb)
-		await convertRulingAssociatedCardsToCards(convertedRuling, [...s.lanToTypesMap.keys()])
+		await convertRulingAssociatedCardsToCards(convertedRuling, [...s.localeToTypesMap.keys()])
 		s.data = convertedRuling
 	}
 	for (const s of qaSearches.api) {
 		const convertedRuling = Ruling.fromYgorgQaApi(s.data)
-		await convertRulingAssociatedCardsToCards(convertedRuling, [...s.lanToTypesMap.keys()])
+		await convertRulingAssociatedCardsToCards(convertedRuling, [...s.localeToTypesMap.keys()])
 		s.data = convertedRuling
 	}
 	// Process the cards we got from the API.
@@ -79,17 +79,17 @@ async function convertYgorgDataToSearchData(qaSearches, cardSearches = []) {
 /**
  * Converts a ruling's associated cards to actual cards.
  * @param {Ruling} ruling The ruling with cards to convert.
- * @param {Array<String>} languages The languages that the ruling was queried in, so we can attempt to match these for the cards as well.
+ * @param {Array<String>} locales The locales that the ruling was queried in, so we can attempt to match these for the cards as well.
  */
-async function convertRulingAssociatedCardsToCards(ruling, languages) {
+async function convertRulingAssociatedCardsToCards(ruling, locales) {
 	// This is in here to avoid a circular dependency. Not ideal, but easy.
 	const { processSearches } = require('handlers/QueryHandler')
 	
 	const cardSearches = []
 	for (const cid of ruling.cards) {
 		const newSearch = new Search(cid)
-		for (const l of languages)
-			// Type doesn't matter, but we need to track the important languages for this search.
+		for (const l of locales)
+			// Type doesn't matter, but we need to track the important locales for this search.
 			newSearch.addTypeToLan('i', l)
 		cardSearches.push(newSearch)
 	}

@@ -5,7 +5,7 @@ const config = require('config')
 const { generateError } = require('lib/utils/logging')
 const { setupQueryRegex } = require('lib/utils/regex')
 const ConfigCache = require('./ConfigCache')
-const { Languages, MESSAGE_TIMEOUT } = require('./Defines')
+const { Locales, MESSAGE_TIMEOUT } = require('./Defines')
 
 const intents = new Discord.Intents(32767)
 
@@ -44,21 +44,21 @@ class MillenniumEyeBot extends Discord.Client {
 	start(token) {
 		const defRegex = setupQueryRegex(config.defaultOpen, config.defaultClose)
 		// Track default regex for use outside of guilds or in newly joined guilds.
-		this.guildQueries.put(['default', config.defaultLanguage], defRegex)
-		// Repopulate server regexes based on language + open/close symbols saved in JSON config.
+		this.guildQueries.put(['default', config.defaultLocale], defRegex)
+		// Repopulate server regexes based on locale + open/close symbols saved in JSON config.
 		for (const [sid, settings] of this.guildSettings.entries()) {
 			if ('queries' in settings && settings.queries) {
-				for (const [lan, symbols] of Object.entries(settings.queries))
-					this.guildQueries.put([sid, lan], setupQueryRegex(symbols.open, symbols.close))
+				for (const [locale, symbols] of Object.entries(settings.queries))
+					this.guildQueries.put([sid, locale], setupQueryRegex(symbols.open, symbols.close))
 			}
 			
 			const defaultSyntaxRemoved = this.guildSettings.get([sid, 'defaultSyntaxRemoved']) ?? false
 			// Add default regex if necessary (not removed, and no custom syntax to conflict with).
 			if (!defaultSyntaxRemoved && 
 				(!('queries' in settings) || 
-				('queries' in settings && !(config.defaultLanguage in settings.queries))))
+				('queries' in settings && !(config.defaultLocale in settings.queries))))
 			{
-				this.guildQueries.put([sid, config.defaultLanguage], defRegex)
+				this.guildQueries.put([sid, config.defaultLocale], defRegex)
 			}
 		}
 
@@ -100,74 +100,74 @@ class MillenniumEyeBot extends Discord.Client {
 	 * @param {Discord.Guild} guild The guild associated with this setting.
 	 * @param {String} open The opening symbol of the query syntax.
 	 * @param {String} close The close symbol of the query syntax.
-	 * @param {String} language The language associated with the query syntax.
+	 * @param {String} locale The locale associated with the query syntax.
 	 */
-	setGuildQuery(guild, open, close, language) {
+	setGuildQuery(guild, open, close, locale) {
 		const defaultSyntaxRemoved = this.guildSettings.get([guild.id, 'defaultSyntaxRemoved']) ?? false
-		const fullLanguage = Languages[language]
-		// Check to make sure no other different-language syntax is using those symbols.
-		// Overwriting the same language with a different syntax is fine.
+		const fullLocale = Locales[locale]
+		// Check to make sure no other different-locale syntax is using those symbols.
+		// Overwriting the same locale with a different syntax is fine.
 		// Check default syntax overlap first if this server hasn't opted out of using it.
-		if (!defaultSyntaxRemoved && language !== config.defaultLanguage && 
+		if (!defaultSyntaxRemoved && locale !== config.defaultLocale && 
 			open === config.defaultOpen && close === config.defaultClose) 
 		{
 			throw generateError(
 				null,
-				`This syntax is already being used for **${fullLanguage}** queries.`
+				`This syntax is already being used for **${fullLocale}** queries.`
 			)
 		}
-		// now check all other languages this server might have set (if applicable)
+		// now check all other locales this server might have set (if applicable)
 		const currQueries = this.guildSettings.get([guild.id, 'queries'])
 		if (currQueries) {
 			for (const qLan in currQueries) {
 				if (currQueries[qLan]['open'] === open && 
 					currQueries[qLan]['close'] === close)
 				{
-					const conflictedLanguage = Languages[qLan]
-					if (qLan !== language)  
+					const conflictedLocale = Locales[qLan]
+					if (qLan !== locale)  
 						throw generateError(
 							null,
-							`This syntax is already being used for **${conflictedLanguage}** queries. To use this syntax for ${fullLanguage} queries, you must either remove or change the ones used for ${conflictedLanguage} queries.`
+							`This syntax is already being used for **${conflictedLocale}** queries. To use this syntax for ${fullLocale} queries, you must either remove or change the ones used for ${conflictedLocale} queries.`
 						)
 					else
 						throw generateError(
 							null,
-							`This syntax is already being used for **${conflictedLanguage}** queries. No changes were made.`
+							`This syntax is already being used for **${conflictedLocale}** queries. No changes were made.`
 						)
 				}
 			}
 		}
 
 		const queryRegex = setupQueryRegex(open, close)
-		this.guildQueries.put([guild.id, language], queryRegex)
-		// If this is the default query syntax + language again and they've previously removed it,
+		this.guildQueries.put([guild.id, locale], queryRegex)
+		// If this is the default query syntax + locale again and they've previously removed it,
 		// then just reflect they no longer want it removed and stop at quietly adding it back.
-		if (defaultSyntaxRemoved && language === config.defaultLanguage &&
+		if (defaultSyntaxRemoved && locale === config.defaultLocale &&
 			open === config.defaultOpen && close == config.defaultClose)
 		{
 			this.guildSettings.remove([guild.id, 'defaultSyntaxRemoved'])
 		}
 		else {
 			// Otherwise save to config as well.
-			this.guildSettings.put([guild.id, 'queries', language], { 'open': open, 'close': close })
+			this.guildSettings.put([guild.id, 'queries', locale], { 'open': open, 'close': close })
 		}
 	}
 
 	/**
 	 * Helper function to remove a query regex for a guild.
 	 * @param {Discord.Guild} guild The guild for which the query syntax will be removed.
-	 * @param {String} language The language associated with the query syntax to be removed.
+	 * @param {String} locale The locale associated with the query syntax to be removed.
 	 * @returns The removed query syntax, or undefined if none existed.
 	 */
-	removeGuildQuery(guild, language) {
+	removeGuildQuery(guild, locale) {
 		const defaultSyntaxRemoved = this.guildSettings.get([guild.id, 'defaultSyntaxRemoved']) ?? false
 
-		let removed = this.guildSettings.remove([guild.id, 'queries', language])
-		this.guildQueries.remove([guild.id, language])
+		let removed = this.guildSettings.remove([guild.id, 'queries', locale])
+		this.guildQueries.remove([guild.id, locale])
 		// If nothing was removed at first blush, check whether this is the default,
 		// and if so, track that they no longer want it.
 		if (!removed && !defaultSyntaxRemoved &&
-			language === config.defaultLanguage) 
+			locale === config.defaultLocale) 
 		{
 			this.guildSettings.put([guild.id, 'defaultSyntaxRemoved'], true)
 			removed = { 'open': config.defaultOpen, 'close': config.defaultClose }

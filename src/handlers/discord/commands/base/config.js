@@ -4,13 +4,13 @@ const config = require('config')
 const { generateError } = require('lib/utils/logging')
 const Command = require('lib/models/Command')
 const { MillenniumEyeBot } = require('lib/models/MillenniumEyeBot')
-const { CommandTypes, Languages, LanguageEmojis } = require('lib/models/Defines')
+const { CommandTypes, Locales, LocaleEmojis } = require('lib/models/Defines')
 
-// convert available languages to an array of choices that can be parsed by slash commands
-const languageChoices = []
-for (const code in Languages) {
-	languageChoices.push({
-		'name': Languages[code],
+// convert available locales to an array of choices that can be parsed by slash commands
+const localeChoices = []
+for (const code in Locales) {
+	localeChoices.push({
+		'name': Locales[code],
 		'value': code
 	})
 }
@@ -26,7 +26,7 @@ function generateServerComponents(interaction, bot, disable = false) {
 	const messageRows = []
 	const guildOfficial = bot.getCurrentGuildSetting(interaction.guild, 'official')
 	const guildRulings = bot.getCurrentGuildSetting(interaction.guild, 'rulings')
-	const guildLanguage = bot.getCurrentGuildSetting(interaction.guild, 'language')
+	const guildLocale = bot.getCurrentGuildSetting(interaction.guild, 'locale')
 
 	const officialRow = new MessageActionRow()
 		.addComponents(
@@ -58,25 +58,25 @@ function generateServerComponents(interaction, bot, disable = false) {
 		)
 	messageRows.push(rulingsRow)
 
-	const languageRow = new MessageActionRow()
-	const languageSelect = new MessageSelectMenu()
-		.setCustomId('guild_language_select')
-		.setPlaceholder('Select Language')
+	const localeRow = new MessageActionRow()
+	const localeSelect = new MessageSelectMenu()
+		.setCustomId('guild_locale_select')
+		.setPlaceholder('Select Locale')
 		.setDisabled(disable)
-	const languageOptions = []
-	for (const code in Languages) {
-		languageOptions.push(
+	const localeOptions = []
+	for (const code in Locales) {
+		localeOptions.push(
 			{
-				label: `Default Query Language: ${Languages[code]}`,
+				label: `Default Query Locale: ${Locales[code]}`,
 				value: code,
-				emoji: LanguageEmojis[code],
-				default: code === guildLanguage
+				emoji: LocaleEmojis[code],
+				default: code === guildLocale
 			}
 		)
 	}
-	languageSelect.addOptions(languageOptions)
-	languageRow.addComponents(languageSelect)
-	messageRows.push(languageRow)
+	localeSelect.addOptions(localeOptions)
+	localeRow.addComponents(localeSelect)
+	messageRows.push(localeRow)
 
 	return messageRows
 }
@@ -93,7 +93,7 @@ function generateChannelComponents(bot, target, useMenu, disable = false) {
 	const messageRows = []
 	const channelOfficial = bot.getCurrentChannelSetting(target, 'official')
 	const channelRulings = bot.getCurrentChannelSetting(target, 'rulings')
-	const channelLanguage = bot.getCurrentChannelSetting(target, 'language')
+	const channelLocale = bot.getCurrentChannelSetting(target, 'locale')
 
 	if (useMenu) {
 		const channelRow = new MessageActionRow()
@@ -147,26 +147,26 @@ function generateChannelComponents(bot, target, useMenu, disable = false) {
 		)
 	messageRows.push(rulingsRow)
 
-	const languageRow = new MessageActionRow()
-	const languageSelect = new MessageSelectMenu()
-		.setCustomId('channel_language_select')
-		.setPlaceholder('Select Language')
+	const localeRow = new MessageActionRow()
+	const localeSelect = new MessageSelectMenu()
+		.setCustomId('channel_locale_select')
+		.setPlaceholder('Select Locale')
 		.setDisabled(disable)
-	const languageOptions = []
-	for (const code in Languages) {
-		const isCurrentLanguage = code === channelLanguage
-		languageOptions.push(
+	const localeOptions = []
+	for (const code in Locales) {
+		const isCurrentLocale = code === channelLocale
+		localeOptions.push(
 			{
-				label: `Default Query Language: ${Languages[code]}`,
+				label: `Default Query Locale: ${Locales[code]}`,
 				value: code,
-				emoji: LanguageEmojis[code],
-				default: isCurrentLanguage
+				emoji: LocaleEmojis[code],
+				default: isCurrentLocale
 			}
 		)
 	}
-	languageSelect.addOptions(languageOptions)
-	languageRow.addComponents(languageSelect)
-	messageRows.push(languageRow)
+	localeSelect.addOptions(localeOptions)
+	localeRow.addComponents(localeSelect)
+	messageRows.push(localeRow)
 
 	return messageRows
 }
@@ -215,7 +215,7 @@ module.exports = new Command({
 				options: [
 					{
 						name: 'add',
-						description: 'Add new symbols and an associated language to recognize as a card query.',
+						description: 'Add new symbols and an associated locale to recognize as a card query.',
 						type: CommandTypes.SUB_COMMAND,
 						options: [
 							{
@@ -231,25 +231,25 @@ module.exports = new Command({
 								required: true
 							},
 							{
-								name: 'language',
-								description: 'The language code indicating which language card queries using this syntax will be treated as.',
+								name: 'locale',
+								description: 'The locale code indicating which locale card queries using this syntax will be treated as.',
 								type: CommandTypes.STRING,
 								required: true,
-								choices: languageChoices
+								choices: localeChoices
 							}
 						]
 					},
 					{
 						name: 'remove',
-						description: 'Remove the symbols associated with a given language.',
+						description: 'Remove the symbols associated with a given locale.',
 						type: CommandTypes.SUB_COMMAND,
 						options: [
 							{
-								name: 'language',
-								description: 'The language associated with the query syntax you want to remove.',
+								name: 'locale',
+								description: 'The locale associated with the query syntax you want to remove.',
 								type: CommandTypes.STRING,
 								required: true,
-								choices: languageChoices
+								choices: localeChoices
 							}
 						]
 					}
@@ -268,16 +268,16 @@ module.exports = new Command({
 			if (sc === 'add') {
 				const qOpen = interaction.options.getString('open', true)
 				const qClose = interaction.options.getString('close', true)
-				const qLan = interaction.options.getString('language', true)
-				const fullLan = Languages[qLan]
+				const qLan = interaction.options.getString('locale', true)
+				const fullLan = Locales[qLan]
 				
 				bot.setGuildQuery(interaction.guild, qOpen, qClose, qLan)
 
 				await interaction.reply({ content: `I will now recognize parts of messages between **${qOpen}** and **${qClose}** as **${fullLan}** queries!`, ephemeral: true })
 			}
 			else if (sc === 'remove') {
-				const rLan = interaction.options.getString('language', true)
-				const fullLan = Languages[rLan]
+				const rLan = interaction.options.getString('locale', true)
+				const fullLan = Locales[rLan]
 
 				const removed = bot.removeGuildQuery(interaction.guild, rLan)
 				if (removed) 
@@ -324,9 +324,9 @@ module.exports = new Command({
 					const currRulings = bot.getCurrentGuildSetting(interaction.guild, 'rulings')
 					bot.setGuildSetting(interaction.guild, 'rulings', !currRulings)
 				}
-				else if (i.customId === 'guild_language_select') {
-					const newLanguage = i.values[0]
-					bot.setGuildSetting(interaction.guild, 'language', newLanguage)
+				else if (i.customId === 'guild_locale_select') {
+					const newLocale = i.values[0]
+					bot.setGuildSetting(interaction.guild, 'locale', newLocale)
 				}
 				// setting channel-related configuration
 				else if (i.customId === 'channel_official_mode') {
@@ -337,9 +337,9 @@ module.exports = new Command({
 					const currRulings = bot.getCurrentChannelSetting(channelTarget, 'rulings')
 					bot.setChannelSetting(channelTarget, 'rulings', !currRulings)
 				}
-				else if (i.customId === 'channel_language_select') {
-					const newLanguage = i.values[0]
-					bot.setChannelSetting(channelTarget, 'language', newLanguage)
+				else if (i.customId === 'channel_locale_select') {
+					const newLocale = i.values[0]
+					bot.setChannelSetting(channelTarget, 'locale', newLocale)
 				}
 
 				if (configSelection === 'guild') {
@@ -347,16 +347,16 @@ module.exports = new Command({
 					let queryString = ''
 					const defaultSyntax = { open: config.defaultOpen, close: config.defaultClose }
 					if (interaction.guild)
-						for (const lan in bot.getGuildQueries(interaction.guild)) {
-							let syntax = bot.guildSettings.get([interaction.guild.id, 'queries', lan])
-							// if this language is in guildQueries but not in guildSettings, it was the default addition
+						for (const locale in bot.getGuildQueries(interaction.guild)) {
+							let syntax = bot.guildSettings.get([interaction.guild.id, 'queries', locale])
+							// if this locale is in guildQueries but not in guildSettings, it was the default addition
 							if (!syntax)
 								syntax = defaultSyntax
 
-							queryString += `${LanguageEmojis[lan]} ${Languages[lan]}: \`${syntax.open}query contents${syntax.close}\`\n`
+							queryString += `${LocaleEmojis[locale]} ${Locales[locale]}: \`${syntax.open}query contents${syntax.close}\`\n`
 						}
 					// just print out the default outside of servers
-					else queryString += `${LanguageEmojis[config.defaultLanguage]} ${Languages[config.defaultLanguage]}: \`${defaultSyntax.open}query contents${defaultSyntax.close}\`\n`
+					else queryString += `${LocaleEmojis[config.defaultLocale]} ${Locales[config.defaultLocale]}: \`${defaultSyntax.open}query contents${defaultSyntax.close}\`\n`
 
 					if (queryString === '') 
 						queryString = '__Query Syntaxes__: none\n'

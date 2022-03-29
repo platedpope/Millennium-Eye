@@ -4,7 +4,7 @@ const Search = require('./Search')
 const Card = require('./Card')
 const Ruling = require('./Ruling')
 const { MillenniumEyeBot } = require('./MillenniumEyeBot')
-const { KONAMI_DB_CARD_REGEX, KONAMI_DB_QA_REGEX, YGORG_DB_CARD_REGEX, YGORG_DB_QA_REGEX, IGNORE_LINKS_REGEX, Languages } = require('./Defines')
+const { KONAMI_DB_CARD_REGEX, KONAMI_DB_QA_REGEX, YGORG_DB_CARD_REGEX, YGORG_DB_QA_REGEX, IGNORE_LINKS_REGEX, Locales } = require('./Defines')
 const { logError } = require('lib/utils/logging')
 
 /**
@@ -23,7 +23,7 @@ class Query {
 		if (qry instanceof Query) {
 			this.official = qry.official
 			this.rulings = qry.rulings
-			this.language = qry.language
+			this.locale = qry.locale
 			this.rawSearchData = qry.rawSearchData
 			this.bot = qry.bot
 			/**
@@ -35,7 +35,7 @@ class Query {
 			// Save off state info about where this message was sent.
 			this.official = bot.getCurrentChannelSetting(qry.channel, 'official')
 			this.rulings = bot.getCurrentChannelSetting(qry.channel, 'rulings')
-			this.language = bot.getCurrentChannelSetting(qry.channel, 'language')
+			this.locale = bot.getCurrentChannelSetting(qry.channel, 'locale')
 			this.bot = bot
 			this.rawSearchData = this.evaluateMessage(qry)
 			
@@ -52,7 +52,7 @@ class Query {
 	 * Evaluates the contents of a message to extract the raw search data 
 	 * (i.e., the content and types to query) from it.
 	 * @param {Message | CommandInteraction} msg The message to evaluate.
-	 * @returns {Array} An array of raw search data, each member is an array of [search content, type, language].
+	 * @returns {Array} An array of raw search data, each member is an array of [search content, type, locale].
 	 */
 	evaluateMessage(msg) {
 		let msgContent = msg instanceof CommandInteraction ? msg.options.getString('content', true) : msg.content
@@ -72,8 +72,8 @@ class Query {
 		
 		const guildQueries = this.bot.getGuildQueries(msg.guild)
 		if (guildQueries) {
-			for (const lan in guildQueries) {
-				const matches = [...msgContent.matchAll(guildQueries[lan])]
+			for (const locale in guildQueries) {
+				const matches = [...msgContent.matchAll(guildQueries[locale])]
 				for (const m of matches) {
 					let sContent = m[2]
 					// If the search content has a link in it, ignore it to avoid really dumb behavior.
@@ -87,7 +87,7 @@ class Query {
 							sContent = intSContent
 						}
 					}
-					let sLan = m[3] ?? lan
+					let sLan = m[3] ?? locale
 
 					searchData.push([sContent, sType, sLan])
 				}
@@ -103,7 +103,7 @@ class Query {
 		for (const l of cardLinks) {
 			let sType = this.rulings ? 'r' : 'i'
 			let sContent = parseInt(l[1], 10)
-			let sLan = this.language
+			let sLan = this.locale
 
 			searchData.push([sContent, sType, sLan])
 		}
@@ -115,7 +115,7 @@ class Query {
 		for (const l of qaLinks) {
 			let sType = 'q'
 			let sContent = parseInt(l[1], 10)
-			let sLan = this.language
+			let sLan = this.locale
 
 			searchData.push([sContent, sType, sLan])
 		}
@@ -126,7 +126,7 @@ class Query {
 	/**
 	 * Updates the query's content and searches array to correspond to the contents of a new message.
 	 * This will add or remove searches that are new or no longer present (respectively),
-	 * and update existing searches that may have new types or languages based on the new message.
+	 * and update existing searches that may have new types or locales based on the new message.
 	 * @param {Message | CommandInteraction} msg The new message from which to update the search data. 
 	 */
 	updateSearchData(msg) {
@@ -146,15 +146,15 @@ class Query {
 
 			const currSearch = this.findSearch(sContent)
 			if (currSearch) {
-				// Remove this search's language -> type pair from the map.
-				const currTypes = currSearch.lanToTypesMap.get(sLan)
+				// Remove this search's locale -> type pair from the map.
+				const currTypes = currSearch.localeToTypesMap.get(sLan)
 				currTypes.delete(sType)
-				// If this left no types for this language, delete the language from the map.
+				// If this left no types for this locale, delete the locale from the map.
 				if (!currTypes.size) {
-					currSearch.lanToTypesMap.delete(sLan)
-					// If deleting this language left no languages for this search,
+					currSearch.localeToTypesMap.delete(sLan)
+					// If deleting this locale left no locales for this search,
 					// then this search isn't being used anymore. Delete it entirely.
-					if (!currSearch.lanToTypesMap.size) 
+					if (!currSearch.localeToTypesMap.size) 
 						this.searches.splice(this.searches.indexOf(s => s.originals.has(originalTerm)), 1)
 				} 
 			}
@@ -166,23 +166,23 @@ class Query {
 
 	/**
 	 * Adds a search to the search array. If the search content already exists,
-	 * then add a new language-type pair to it as necessary.
+	 * then add a new locale-type pair to it as necessary.
 	 * @param {String | Number} content The content of the search (i.e., what is being searched for).
 	 * @param {String} type The type of search (e.g., i, r, etc.)
-	 * @param {String} language The language of the search (e.g., en, es, etc.)
+	 * @param {String} locale The locale of the search (e.g., en, es, etc.)
 	 */
-	addSearch(content, type, language) {
+	addSearch(content, type, locale) {
 		// Handle duplicates. If we already have a search of this content,
-		// then track any new type or language to evaluate for it.
+		// then track any new type or locale to evaluate for it.
 		const oldSearch = this.findSearch(content)
 		if (oldSearch !== undefined)
 			// Don't merge QA searches with non-QA searches.
 			if (type !== 'q' || (type === 'q' && oldSearch.hasType('q'))) {
-				oldSearch.addTypeToLan(type, language)
+				oldSearch.addTypeToLan(type, locale)
 				return
 			}
 		// Something new to look for...
-		this.searches.push(new Search(content, type, language))
+		this.searches.push(new Search(content, type, locale))
 	}
 
 	/**
@@ -240,11 +240,11 @@ class Query {
 
 		for (const s of this.searches) {
 			if (!s.data) continue
-			s.lanToTypesMap.forEach((searchTypes, searchLan) => {
+			s.localeToTypesMap.forEach((searchTypes, searchLan) => {
 				for (const t of searchTypes) {
 					let newData = s.data.generateEmbed({
 						'type': t,
-						'language': searchLan,
+						'locale': searchLan,
 						'official': this.official,
 						'random': false
 					})
@@ -281,10 +281,10 @@ class Query {
 
 			// If this had unresolved data, report it.
 			if (unresolvedLanTypes.size) {
-				for (const lan of unresolvedLanTypes.keys()) {
-					if (!unresolvedLanData.has(lan))
-						unresolvedLanData.set(lan, new Set)
-					unresolvedLanData.get(lan).add(...s.originals)
+				for (const locale of unresolvedLanTypes.keys()) {
+					if (!unresolvedLanData.has(locale))
+						unresolvedLanData.set(locale, new Set)
+					unresolvedLanData.get(locale).add(...s.originals)
 				}
 			}
 
@@ -295,8 +295,8 @@ class Query {
 		}
 
 		if (unresolvedLanData.size) {
-			unresolvedLanData.forEach((searches, lan) => {
-				str += `Could not resolve ${Languages[lan]} data for searches: ${[...searches].join(', ')}\n`
+			unresolvedLanData.forEach((searches, locale) => {
+				str += `Could not resolve ${Locales[locale]} data for searches: ${[...searches].join(', ')}\n`
 			})
 		}
 		if (officialModeBlocks.size) {
