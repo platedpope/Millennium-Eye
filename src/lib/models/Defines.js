@@ -60,21 +60,21 @@ module.exports = {
 		'pt': '🇵🇹'
 	},
 	EmbedIcons: {
-		'Continuous': 'https://cdn.discordapp.com/attachments/551534945454260265/557607309010927626/continuous.png',
-		'Counter': 'https://cdn.discordapp.com/attachments/551534945454260265/557607317126774825/counter.png',
+		'continuous': 'https://cdn.discordapp.com/attachments/551534945454260265/557607309010927626/continuous.png',
+		'counter': 'https://cdn.discordapp.com/attachments/551534945454260265/557607317126774825/counter.png',
 		'dark': 'https://cdn.discordapp.com/attachments/551534945454260265/557607325913841687/dark.png',
 		'divine': 'https://cdn.discordapp.com/attachments/551534945454260265/557607334092996641/divine.png',
 		'earth': 'https://cdn.discordapp.com/attachments/551534945454260265/557607413105295360/earth.png',
-		'Equip': 'https://cdn.discordapp.com/attachments/551534945454260265/557607414430433281/equip.png',
-		'Field': 'https://cdn.discordapp.com/attachments/551534945454260265/557607417546801202/field.png',
+		'equip': 'https://cdn.discordapp.com/attachments/551534945454260265/557607414430433281/equip.png',
+		'field': 'https://cdn.discordapp.com/attachments/551534945454260265/557607417546801202/field.png',
 		'fire': 'https://cdn.discordapp.com/attachments/551534945454260265/557605564847226903/fire.png',
 		'laugh': 'https://cdn.discordapp.com/attachments/549781799484522518/635807829122351125/LAUGH.png',
 		'Level': '<:level_star:550008695652614144>',
 		'light': 'https://cdn.discordapp.com/attachments/551534945454260265/557607396810424343/light.png',
 		'Pendulum Scales': '<:pend_scales:549862459142569994>',
-		'Quick-Play': 'https://cdn.discordapp.com/attachments/551534945454260265/557607404196331531/quickplay.png',
+		'quickplay': 'https://cdn.discordapp.com/attachments/551534945454260265/557607404196331531/quickplay.png',
 		'Rank': '<:rank_star:549859884460408842>',
-		'Ritual': 'https://cdn.discordapp.com/attachments/551534945454260265/557607407174418475/ritual.png',
+		'ritual': 'https://cdn.discordapp.com/attachments/551534945454260265/557607407174418475/ritual.png',
 		'spell': 'https://cdn.discordapp.com/attachments/551534945454260265/557607407853895690/spell.png',
 		'trap': 'https://cdn.discordapp.com/attachments/551534945454260265/557607408910860288/trap.png',
 		'water': 'https://cdn.discordapp.com/attachments/551534945454260265/557607411616055306/water.png',
@@ -102,6 +102,12 @@ module.exports = {
 		'spell': '0x1D9E74',
 		'trap': '0xBC5A84',
 		'None': '0x000000'
+	},
+	BanlistStatus: {
+		'-1': 'Unreleased',
+		0: 'Forbidden',
+		1: 'Limited',
+		2: 'Semi-Limited'
 	},
 	//																		7 8 9
 	// Link markers are stored by the konami DB in the following format:	4   6

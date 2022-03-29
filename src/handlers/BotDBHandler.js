@@ -190,6 +190,10 @@ function addToBotDb(searchData) {
 		INSERT INTO cardDataImages(dbId, passcode, fullName, artId, artPath)
 		VALUES(?, ?, ?, ?, ?)
 	`)
+	const insertPrintData = botDb.prepare(`
+		INSERT INTO cardDataPrints(printCode, language, dbId, printDate)
+		VALUES(?, ?, ?, ?)
+	`)
 	// TODO: Check and update pricing information as well.
 
 	let insertAllData = botDb.transaction(searches => {
@@ -208,6 +212,14 @@ function addToBotDb(searchData) {
 			if (c.imageData.size)
 				c.imageData.forEach((imgPath, id) => {
 					insertImageData.run(c.dbId, c.passcode, c.name.get('en'), id, imgPath)
+				})
+			// Update print data.
+			if (c.printData.size)
+				c.printData.forEach((prints, lan) => {
+					if (prints)
+						prints.forEach((date, code) => {
+							insertPrintData.run(code, lan, c.dbId, date)
+						})
 				})
 		}
 	})
@@ -234,11 +246,13 @@ function addToBotDb(searchData) {
 function evictFromBotCache(ids) {
 	const delTerms = botDb.prepare('DELETE FROM termCache WHERE dbId = ? AND location = \'bot\'')
 	const delData = botDb.prepare('DELETE FROM dataCache WHERE dbId = ?')
+	const delPrints = botDb.prepare('DELETE FROM cardDataPrints WHERE dbId = ?')
 
 	const delMany = botDb.transaction(vals => {
 		for (const v of vals) {
 			delTerms.run(v)
 			delData.run(v)
+			delPrints.run(v)
 		}
 	})
 	delMany(ids)
@@ -251,6 +265,7 @@ function evictFromBotCache(ids) {
 function clearBotCache(clearKonamiTerms = false) {
 	botDb.prepare('PRAGMA foreign_keys = 1').run()
 	botDb.prepare('DELETE FROM dataCache').run()
+	botDb.prepare('DELETE FROM cardDataPrints').run()
 	botDb.prepare('VACUUM').run()
 
 	// Default behavior is to only remove search terms that reference the bot data cache,

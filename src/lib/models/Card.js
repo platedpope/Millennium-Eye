@@ -4,7 +4,7 @@ const sharp = require('sharp')
 const sanitize = require('sanitize-filename') 
 const { MessageEmbed } = require('discord.js')
 
-const { EmbedIcons, EmbedColors } = require('./Defines')
+const { EmbedIcons, EmbedColors, BanlistStatus, KONAMI_CARD_LINK, KONAMI_REQUEST_LOCALE, LanguageEmojis, KONAMI_QA_LINK, YGORG_CARD_LINK } = require('./Defines')
 const { searchPropertyArray, searchPropertyToLanguageIndex } = require('handlers/YGOrgDBHandler')
 const { logError } = require('lib/utils/logging')
 
@@ -115,9 +115,24 @@ class Card {
 		const getImages = `SELECT artId, artPath FROM cardDataImages ${where}`
 		const imageRows = db.prepare(getImages).all(searchParam)
 		for (const r of imageRows)
-			card.imageData.set(r.artId)
+			card.imageData.set(r.artId, r.artPath)
+		
+		// Gather print data.
+		const getPrints = `SELECT printCode, language, printDate FROM cardDataPrints ${where}`
+		const printRows = db.prepare(getPrints).all(searchParam)
+		for (const r of printRows) {
+			const printsInLocale = card.printData.get(r.language)
 
-		// TODO: Gather pricing and print information as well.
+			if (printsInLocale) printsInLocale.set(r.printCode, r.printDate)
+			else {
+				card.printData.set(r.language, new Map())
+				card.printData.get(r.language).set(r.printCode, r.printDate)
+			}
+		}
+	
+		// TODO: Gather pricing information as well.
+
+		return card
 	}
 
 	/**
@@ -170,6 +185,9 @@ class Card {
 							  ORDER BY printDate`
 		const printRows = db.prepare(getPrintData).all(card.dbId)
 		for (const r of printRows) {
+			// Sometimes Konami DB messes up and puts a nbsp in something's print date...
+			if (r.printDate === '&nbsp;') continue
+
 			const printsInLocale = card.printData.get(r.locale)
 
 			if (printsInLocale) printsInLocale.set(r.printCode, r.printDate)
@@ -301,9 +319,9 @@ class Card {
 
 		const cardName = this.name.get(language)
 		const colorIcon = this.getEmbedColorAndIcon()
-		// TODO: Embed (author) URL.
+		const titleUrl = this.getEmbedTitleLink(language, official)
 
-		finalEmbed.setAuthor(cardName, colorIcon[1])
+		finalEmbed.setAuthor(cardName, colorIcon[1], titleUrl)
 		finalEmbed.setColor(colorIcon[0])
 		const imageAttach = this.setEmbedImage(finalEmbed, 1)
 
@@ -362,7 +380,35 @@ class Card {
 			finalEmbed.addField(searchPropertyToLanguageIndex('Effect', language), effect, false)
 		}
 
-		// TODO: Banlist data (footer)
+		// Display ruling data if necessary. Only do this for cards that are on the database.
+		if (rulings && this.dbId) {
+			const rulingsText = this.buildRulingsField(language, official)
+			if (rulingsText)
+				finalEmbed.addField('Additional Information', rulingsText, false)
+		}
+
+		// Put banlist data in the footer.
+		let footerString = ''
+		// If there's nothing in our effect field, this is some jank data,
+		// it's probably not a card at all, so don't display any banlist data in the footer.
+		if (this.effect.size) {
+			if (this.notInCg) {
+				footerString = '(Anime/Manga/Game Exclusive)'
+			}
+			else {
+				const banlistData = this.getBanlistData()
+				const statuses = []
+				for (const status in banlistData) {
+					const cgs = banlistData[status]
+					if (cgs.length) 
+						statuses.push(`${status} (${cgs.join('/')})`)
+				}
+
+				footerString = `F/L Status: ${statuses.join(', ')}`
+			}
+		}
+		if (footerString)
+			finalEmbed.setFooter(footerString)
 
 		embedData.embed = finalEmbed
 		if (imageAttach)
@@ -412,6 +458,34 @@ class Card {
 	}
 
 	/**
+	 * Generates the URL destination for the title of any embed created this card's data.
+	 * @param {String} language The language being used for this embed. 
+	 * @param {Boolean} official Whether official mode is enabled. 
+	 * @returns {String} The generated URL.
+	 */
+	getEmbedTitleLink(language, official) {
+		// TODO: We don't support non-database queries yet, but this will have to be changed when we do.
+		if (!this.dbId) return
+
+		let localeReleased = this.isReleased(language)
+		const jaReleased = this.isReleased('ja')
+		if (!localeReleased) {
+			// If it's not released in this language, look at EN.
+			localeReleased = this.isReleased('en')
+			if (localeReleased) language = 'en'
+			// If not in EN, it's gotta be in JP. Only do this if official mode isn't being used.
+			else if (!official) {
+				localeReleased = jaReleased
+				language = 'ja'
+			}
+		}
+
+		return `${KONAMI_CARD_LINK}${this.dbId}${KONAMI_REQUEST_LOCALE}${language}`
+
+		// TODO: Generate Yugipedia page links for anything that's not on the database.
+	}
+
+	/**
 	 * Sets the given embed's image to this image ID and returns
 	 * the corresponding attachment (if any) that is necessary to attach with the message.
 	 * @param {MessageEmbed} embed The embed to set the image for.
@@ -443,6 +517,93 @@ class Card {
 		}
 
 		return attach
+	}
+
+	/**
+	 * Build the string for this card's "ruling information."
+	 * @param {String} language The language this field is being generated for.
+	 * @param {Boolean} official Whether to only display official information.
+	 */
+	buildRulingsField(language, official) {
+		let localeReleased = this.isReleased(language, true)
+		const jaReleased = this.isReleased('ja')
+		if (!localeReleased) {
+			// If it's not released in this language, look at EN.
+			localeReleased = this.isReleased('en', true)
+			if (localeReleased) language = 'en'
+			// If not in EN, it's gotta be in JP. Only do this if official mode isn't being used.
+			else if (!official) {
+				localeReleased = jaReleased
+				language = 'ja'
+			}
+		}
+
+		let fieldText = ''
+
+		// Database links.
+		const cardKonamiInfoLink = `${KONAMI_CARD_LINK}${this.dbId}${KONAMI_REQUEST_LOCALE}${language}`
+		const cardKonamiRulingsLink = `${KONAMI_QA_LINK}${this.dbId}${KONAMI_REQUEST_LOCALE}ja`
+		const cardYgorgCardLink = `${YGORG_CARD_LINK}${this.dbId}:en`
+		if (official)
+			// Official mode only gives card database links to the given language, or EN if that language is unreleased.
+			fieldText += `Konami: [card](${cardKonamiInfoLink}) (${LanguageEmojis[language]})`
+		else {
+			fieldText += `Konami: [card](${cardKonamiInfoLink}) (${LanguageEmojis[language]})`
+			if (jaReleased) fieldText += ` **·** [faq](${cardKonamiRulingsLink}) (${LanguageEmojis.ja})`
+			fieldText += ` | YGOrg: [card/rulings](${cardYgorgCardLink}) (${LanguageEmojis['en']})`
+			// TODO: Include Yugipedia links in this?
+		}
+
+		// Most recent print date.
+		const sortedPrintDates = this.sortPrintDates(language)
+		if (!localeReleased)
+			fieldText += `\nLast ${language.toUpperCase()} print: **Not yet released**`
+		else {
+			// Check if the date is in the future.
+			const mostRecentPrint = sortedPrintDates[0]
+			fieldText += `\nLast ${language.toUpperCase()}  print: **${mostRecentPrint}**`
+			if (new Date(mostRecentPrint) > new Date()) fieldText += ' *(not yet released)*'
+		}
+
+		return fieldText
+	}
+
+	/**
+	 * Returns a map of banlist statuses, where each key is the status (Unlimited, Forbidden, etc.)
+	 * and each value is an array of CGs (TCG, OCG, MD, etc.) with that status.
+	 * @returns {Object} A map of banlist status -> CGs with that status.
+	 */
+	getBanlistData() {
+		const banlistStatus = {
+			'Unreleased': [],
+			'Forbidden': [],
+			'Limited': [],
+			'Semi-Limited': [],
+			'Unlimited': []
+		}
+		const tcgString = 'TCG'
+		const ocgString = 'OCG'
+
+		if (this.tcgList)
+			banlistStatus[BanlistStatus[this.tcgList]].push(tcgString)
+		else {
+			// If no status, need to distinguish between unreleased and unlimited.
+			// Check print dates to determine whether something is unreleased.
+			if (this.isReleased('en')) 
+				banlistStatus.Unlimited.push(tcgString)
+			else
+				banlistStatus.Unreleased.push(tcgString)
+		}
+		if (this.ocgList)
+			banlistStatus[BanlistStatus[this.ocgList]].push(ocgString)
+		else {
+			if (this.isReleased('ja'))
+				banlistStatus.Unlimited.push(ocgString)
+			else
+				banlistStatus.Unreleased.push(ocgString)
+		}
+
+		return banlistStatus
 	}
 	
 	/**
@@ -492,7 +653,61 @@ class Card {
 	}
 
 	/**
+	 * Returns whether this card is released in a given locale.
+	 * @param {String} locale The locale to search for.
+	 * @param {Boolean} includeFuturePrints If true, will treat this card as released provided we have any print data for it, even in the future.
+	 * @returns {Boolean} Whether this card is released in this locale.
+	 */
+	isReleased(locale, includeFuturePrints = false) {
+		// Anything not on the database is an easy "not released" card.
+		if (!this.dbId) return false
+
+		// Check CG locales versus their list property.
+		// Can't be unreleased if you're on a banlist. Hopefully.
+		if (locale === 'ja' || locale === 'ko')
+			if (this.ocgList)
+				return this.ocgList !== -1
+		else 
+			if (this.tcgList)
+				return this.tcgList !== -1
+		
+		// If we got this far, we need to look at print dates instead.
+		const localePrints = this.printData.get(locale)
+		// No prints means no release.
+		if (!localePrints || !localePrints.size) return false
+		else {
+			// This has prints, but need to check whether they're in the future.
+			if (includeFuturePrints) return true
+
+			const sortedDates = this.sortPrintDates(locale)
+			// If the most recent print is in the future, this isn't released.
+			return new Date() >= new Date(sortedDates[0])
+		}
+	}
+
+	/**
+	 * Processes all the print dates in a given locale and sorts them.
+	 * @param {String} locale The locale to sort print dates for.
+	 * @returns {Array<String>} The print dates, sorted in descending order (oldest print last).
+	 */
+	sortPrintDates(locale) {
+		let sortedPrintDates = []
+		const localePrints = this.printData.get(locale)
+
+		if (localePrints && localePrints.size) {
+			const printDates = [...localePrints.values()]
+
+			sortedPrintDates = printDates.sort((a, b) => {
+				return new Date(b) - new Date(a)
+			})
+		}
+
+		return sortedPrintDates
+	}
+
+	/**
 	 * Prints this object as a string. Uses DB ID, passcode, and EN name if available.
+	 * @returns {String}
 	 */
 	toString() {
 		const strParts = []
