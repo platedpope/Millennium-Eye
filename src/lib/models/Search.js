@@ -1,3 +1,6 @@
+const Card = require('./Card')
+const Ruling = require('./Ruling')
+
 /**
  * Container class for a single search. It tracks any original terms used to map to its data,
  * the current best-available search term it used to resolve any data,
@@ -27,9 +30,15 @@
 		if (type !== undefined && language !== undefined)
 			this.addTypeToLan(type, language)
 
-		// This starts as nothing, but will become actual data if this search
-		// ever gets as far as being mapped to proper data.
+		/**
+		 * @type {Card | Ruling} This starts out unset but will be set to something when data is found.
+		 */
 		this.data = undefined
+
+		// This is used to store any data we found while making our way through 
+		// databases/APIs and is converted into a Card or Ruling stored in this.data.
+		// It is voided after use.
+		this.tempData = undefined
 	}
 
 	/**

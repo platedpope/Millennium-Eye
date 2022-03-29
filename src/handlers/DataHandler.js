@@ -1,6 +1,7 @@
 const Card = require('lib/models/Card')
 const Ruling = require('lib/models/Ruling')
 const Search = require('lib/models/Search')
+const { logError } = require('lib/utils/logging')
 const { botDb, addToTermCache, addToBotDb } = require('./BotDBHandler')
 const { konamiDb } = require('./KonamiDBHandler')
 const { ygorgDb, addToYgorgDb, searchArtworkRepo } = require('./YGOrgDBHandler')
@@ -29,8 +30,9 @@ function convertBotDataToSearchData(resolvedSearches, termUpdates) {
  */
 function convertKonamiDataToSearchData(resolvedSearches, termUpdates) {
 	for (const s of resolvedSearches) {
-		const convertedCard = Card.fromKonamiDb(s.data, konamiDb)
-		s.data = convertedCard
+		if (!(s.data instanceof Card)) s.data = new Card()
+		Card.fromKonamiDb(s.tempData, s.data, konamiDb)
+		s.tempData = undefined
 	}
 
 	if (termUpdates.length)
@@ -58,9 +60,9 @@ async function convertYgorgDataToSearchData(qaSearches, cardSearches = []) {
 	// Process the cards we got from the API.
 	const cardsWithoutArt = []
 	for (const s of cardSearches) {
-		const convertedCard = s.data instanceof Card ? s.data : new Card()
-		Card.fromYgorgCardApi(s.data, convertedCard)
-		s.data = convertedCard
+		if (!(s.data instanceof Card)) s.data = new Card()
+		Card.fromYgorgCardApi(s.tempData, s.data)
+		s.tempData = undefined
 		// If this card has no art yet, gonna need to use the artwork repo to resolve it.
 		if (!s.data.imageData.size) 
 			cardsWithoutArt.push(s)

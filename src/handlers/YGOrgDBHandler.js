@@ -59,45 +59,47 @@ async function processManifest(newRevision) {
 			logger.info(`Processing new manifest revision ${newRevision}...`)
 			const changes = r.data.data 
 
-			// Card data updates: no way to tell what exactly has changed,
-			// so just invalidate any data stored in the bot or YGOrg databases.
-			// (Don't invalidate anything from the Konami database.)
-			if ('card' in changes) {
-				const evictIds = Object.keys(changes.card)
-				// Delete any FAQ data from YGOrg DB.
-				const delFaq = ygorgDb.prepare('DELETE FROM faqData WHERE dbId = ?')
-				const delMany = ygorgDb.transaction(ids => {
-					for (const id of ids) delFaq.run(id)
-				})
-				delMany(evictIds)
-				// Delete any bot-specific data.
-				// This is here to avoid circular dependency. Not pretty...
-				evictFromBotCache(evictIds)
+			if (changes) {
+				// Card data updates: no way to tell what exactly has changed,
+				// so just invalidate any data stored in the bot or YGOrg databases.
+				// (Don't invalidate anything from the Konami database.)
+				if ('card' in changes) {
+					const evictIds = Object.keys(changes.card)
+					// Delete any FAQ data from YGOrg DB.
+					const delFaq = ygorgDb.prepare('DELETE FROM faqData WHERE dbId = ?')
+					const delMany = ygorgDb.transaction(ids => {
+						for (const id of ids) delFaq.run(id)
+					})
+					delMany(evictIds)
+					// Delete any bot-specific data.
+					// This is here to avoid circular dependency. Not pretty...
+					evictFromBotCache(evictIds)
 
-				logger.info(`Evicted all FAQ and cached bot data associated with database IDs: ${evictIds.join(', ')}`)
-			}
-			// Invalidate cached QA data.
-			if ('qa' in changes) {
-				const evictQas = Object.keys(changes.qa)
+					logger.info(`Evicted all FAQ and cached bot data associated with database IDs: ${evictIds.join(', ')}`)
+				}
+				// Invalidate cached QA data.
+				if ('qa' in changes) {
+					const evictQas = Object.keys(changes.qa)
 
-				const delQa = ygorgDb.prepare('DELETE FROM qaData WHERE qaId = ?')
-				const delCards = ygorgDb.prepare('DELETE FROM qaCards WHERE qaId = ?')
-				const delMany = ygorgDb.transaction(ids => {
-					for (const id of ids) {
-						delQa.run(id)
-						delCards.run(id)
+					const delQa = ygorgDb.prepare('DELETE FROM qaData WHERE qaId = ?')
+					const delCards = ygorgDb.prepare('DELETE FROM qaCards WHERE qaId = ?')
+					const delMany = ygorgDb.transaction(ids => {
+						for (const id of ids) {
+							delQa.run(id)
+							delCards.run(id)
+						}
+					})
+					delMany(evictQas)
+
+					logger.info(`Evicted all QA data for QA IDs: ${evictQas.join(', ')}`)
+				}
+				// Invalidate any cached indices we care about.
+				if ('idx' in changes) {
+					const idxChanges = changes.idx
+					if ('name' in idxChanges) {
+						logger.info(`Evicted languages ${Object.keys(idxChanges).join(', ')} from name index.`)
+						for (l in idxChanges.name) delete nameToIdIndex[l]
 					}
-				})
-				delMany(evictQas)
-
-				logger.info(`Evicted all QA data for QA IDs: ${evictQas.join(', ')}`)
-			}
-			// Invalidate any cached indices we care about.
-			if ('idx' in changes) {
-				const idxChanges = changes.idx
-				if ('name' in idxChanges) {
-					logger.info(`Evicted languages ${Object.keys(idxChanges).join(', ')} from name index.`)
-					for (l in idxChanges.name) delete nameToIdIndex[l]
 				}
 			}
 
@@ -242,7 +244,7 @@ async function searchYgorgDb(searches, qry, callback) {
 			}
 
 			if (cardResponse.value.data && Object.keys(cardResponse.value.data).length) {
-				cardSearch.data = cardResponse.value.data
+				cardSearch.tempData = cardResponse.value.data
 				cardSearches.push(cardSearch)
 			}
 		}

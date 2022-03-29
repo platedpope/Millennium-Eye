@@ -115,49 +115,48 @@ class Card {
 		const getImages = `SELECT artId, artPath FROM cardDataImages ${where}`
 		const imageRows = db.prepare(getImages).all(searchParam)
 		for (const r of imageRows)
-			card.imageData.set(r.artId, r.artPath)
+			card.imageData.set(r.artId)
 
 		// TODO: Gather pricing and print information as well.
-
-		return card
 	}
 
 	/**
 	 * Constructs and returns a populated Card object using data from the Konami DB.
 	 * This could be a case handled in the constructor, but I didn't want to have a constructor
-	 * that was 5 million lines long with multiple special cases. 
+	 * that was 5 million lines long with multiple special cases.
+	 * This can do work on a card that already has some data, so don't overwrite values outright,
+	 * just merge ones we don't already have.
 	 * @param {Array} dbRows Rows of data returned from the card_data Konami DB table.
+	 * @param {Card} card The card to populate with data.
 	 * @param db An existing database connection to the Konami DB. 
 	 * @returns {Card} The evaluated Card object.
 	 */
-	static fromKonamiDb(dbRows, db) {
-		const card = new Card()
-
+	static fromKonamiDb(dbRows, card, db) {
 		// Just use the first row as a representative for all the stats that aren't language-sensitive.
 		const repRow = dbRows[0]
 		
+		card.dbId = repRow.id
 		// Map language-sensitive rows.
 		for (const r of dbRows) {
-			card.name.set(r.locale, r.name)
-			card.effect.set(r.locale, r.effect_text)
+			if (!card.name.has(r.locale)) card.name.set(r.locale, r.name)
+			if (!card.effect.has(r.locale)) card.effect.set(r.locale, r.effect_text)
 			if (r.pendulum_text)
-				card.pendEffect.set(r.locale, r.pendulum_text)
+				if (!card.pendEffect.has(r.locale)) card.pendEffect.set(r.locale, r.pendulum_text)
 		}
-		card.dbId = repRow.id
-		card.cardType = repRow.card_type
-		card.property = repRow.en_property
-		card.attribute = repRow.en_attribute
-		card.levelRank = repRow.level ?? repRow.rank
-		card.attack = repRow.atk 
-		card.defense = repRow.def 
-		card.pendScale = repRow.pendulum_scale
+		if (!card.cardType) card.cardType = repRow.card_type
+		if (!card.property) card.property = repRow.en_property
+		if (!card.attribute) card.attribute = repRow.en_attribute
+		if (!card.levelRank) card.levelRank = repRow.level ?? repRow.rank
+		if (!card.attack) card.attack = repRow.atk 
+		if (!card.defense) card.defense = repRow.def 
+		if (!card.pendScale) card.pendScale = repRow.pendulum_scale
 		// Link markers are stored as a string, each character is a number
 		// indicating the position of the marker (starting at bottom left).
-		if (repRow.link_arrows)
+		if (repRow.link_arrows && !card.linkMarkers.length)
 			for (let i = 0; i < repRow.link_arrows.length; i++)
 				card.linkMarkers.push(parseInt(repRow.link_arrows.charAt(i), 10))
 		// Grab monster types from the junction table if necessary.
-		if (card.cardType === 'monster') {
+		if (card.cardType === 'monster' && !card.types.length) {
 			const getCardTypes = `SELECT property FROM card_properties
 								  WHERE cardId = ? AND locale = 'en'
 								  ORDER BY position`
@@ -188,11 +187,13 @@ class Card {
 			else if (r.cg === 'ocg') card.ocgList = r.copies
 		}
 
-		// Gather art data.
-		const getArtData = 'SELECT artId, artwork FROM card_artwork WHERE cardId = ?'
-		const artRows = db.prepare(getArtData).all(card.dbId)
-		for (const r of artRows) 
-			card.addImageData(r.artId, r.artwork, true)
+		// Gather art data if necessary.
+		if (!card.imageData.size) {
+			const getArtData = 'SELECT artId, artwork FROM card_artwork WHERE cardId = ?'
+			const artRows = db.prepare(getArtData).all(card.dbId)
+			for (const r of artRows) 
+				card.addImageData(r.artId, r.artwork, true)
+		}
 
 		// TODO: Gather pricing data.
 
@@ -213,10 +214,10 @@ class Card {
 			for (const lan in apiCardData) {
 				const lanCardData = apiCardData[lan]
 				// Map the language-specific values.
-				card.name.set(lan, lanCardData.name)
-				card.effect.set(lan, lanCardData.effectText)
+				if (!card.name.has(lan)) card.name.set(lan, lanCardData.name)
+				if (!card.effect.has(lan)) card.effect.set(lan, lanCardData.effectText)
 				if ('pendulumEffectText' in lanCardData)
-					card.pendEffect.set(lanCardData.pendulumEffectText)
+					if (!card.pendEffect.has(lan)) card.pendEffect.set(lan, lanCardData.pendulumEffectText)
 				// Parse print dates too.
 				if ('prints' in lanCardData) {
 					const apiPrints = lanCardData.prints
@@ -461,33 +462,47 @@ class Card {
 			artFilename = `${sanitize(this.name.get('en'))}_${id}`
 
 		const fullArtPath = `${artPath}/${artFilename}.png`
-		if (!fs.existsSync(fullArtPath)) {
+
+		if (fs.existsSync(fullArtPath))
+			this.imageData.set(id, fullArtPath)
+		else if (img !== undefined) {
 			if (fromNeuron) {
 				let artCropDims = { 'top': 69, 'left': 32, 'width': 193, 'height': 191 }
-				if (this.pendScale !== null)
-					// Pendulums have squished arts, so the crop needs to be different.
-					artCropDims = { 'top': 67, 'left': 18, 'width': 220, 'height': 163 }
+				// Pendulums have squished arts, so the crop needs to be different.
+				if (this.pendScale !== null || this.types.includes('Pendulum')) {
+					// Not only that, but OCG Pendulums have different art dimensions than TCG Pendulums.
+					if (!this.printData.has('en') || !this.name.has('en'))
+						// OCG has a larger Pendulum Effect text box, so the art isn't as tall.
+						artCropDims = { 'top': 67, 'left': 18, 'width': 220, 'height': 165 }
+					else 
+						artCropDims = { 'top': 67, 'left': 18, 'width': 220, 'height': 177 }
+				}
 				
 				sharp(img).extract(artCropDims).toFile(fullArtPath)
-				.catch(err => logError(err, 'Failed to save card cropped image.'))
+				.catch(err => {
+					logError(err, 'Failed to save card cropped image.')
+					throw err
+				})
 			}
 			else
 				fs.writeFileSync(fullArtPath, img)
+			
+			this.imageData.set(id, fullArtPath)
 		}
-
-		this.imageData.set(id, fullArtPath)
 	}
 
 	/**
 	 * Prints this object as a string. Uses DB ID, passcode, and EN name if available.
 	 */
 	toString() {
-		let str = ''
-		if (this.dbId) str += `ID(${this.dbId}) `
-		if (this.passcode) str += `passcode(${this.passcode}) `
-		if (this.name.get('en')) str  += `EN name(${this.name.get('en')})`
+		const strParts = []
 
-		return str
+		if (this.dbId) strParts.push(`ID(${this.dbId})`)
+		if (this.passcode) strParts.push(`passcode(${this.passcode})`)
+		if (this.name.get('en')) strParts.push(`EN name(${this.name.get('en')})`)
+
+
+		return strParts.join(', ')
 	}
 }
 

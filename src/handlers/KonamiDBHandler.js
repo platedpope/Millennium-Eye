@@ -29,7 +29,7 @@ function searchKonamiDb(searches, qry, callback) {
 		if (Number.isInteger(currSearch.term)) {
 			const dataRows = getDbId.all(currSearch.term)
 			if (dataRows.length) {
-				currSearch.data = dataRows
+				currSearch.tempData = dataRows
 				resolvedSearches.push(currSearch)
 			}
 		}
@@ -45,7 +45,7 @@ function searchKonamiDb(searches, qry, callback) {
 			for (const id in bestMatch) {
 				const dataRows = getDbId.all(id)
 				if (dataRows.length) {
-					currSearch.data = dataRows
+					currSearch.tempData = dataRows
 					const repRow = dataRows[0]
 					// We should have a better search term now.
 					if (repRow.id) {

@@ -2,7 +2,7 @@ const munkres = require('munkres-js')
 const { logger } = require('./logging')
 
 class CardDataFilter {
-	static tokenRegex = /\w+/g
+	static tokenRegex = /[一-龠]+|[ぁ-ゔ]+|[ァ-ヴー]+|[a-zA-Z0-9]+|[ａ-ｚＡ-Ｚ０-９]+|[々〆〤]|[가-힣]/ug
 	static MAX_DISTANCE = 4
 	static mr = new munkres.Munkres()
 
@@ -30,7 +30,6 @@ class CardDataFilter {
 		const requestedMatches = {}
 		if (!this.ref) return requestedMatches
 
-		let bestScore = 0
 		const filteredResult = {}
 		for (const k in this.idx) {
 			const score = (+this.filter(k)) || 0
