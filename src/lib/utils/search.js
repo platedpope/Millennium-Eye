@@ -77,8 +77,6 @@ class CardDataFilter {
 				costMatrix[i][j] = score
 			}
 		}
-		if (val.includes('7'))
-			console.log(`Cost matrix for search ${val} was: ${JSON.stringify(costMatrix, null, 4)}`)
 
 		let sum = 0
 		for (const [i, j] of CardDataFilter.mr.compute(costMatrix))

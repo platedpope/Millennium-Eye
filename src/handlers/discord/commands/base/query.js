@@ -2,7 +2,7 @@
 const Command = require('lib/models/Command')
 const { CommandTypes } = require('lib/models/Defines')
 const Query = require('lib/models/Query')
-const { processQuery } = require('handlers/QueryHandler')
+const { processQuery, sendReply, updateUserTimeout } = require('handlers/QueryHandler')
 
 module.exports = new Command({
 	name: 'query',
@@ -35,21 +35,19 @@ module.exports = new Command({
 
 			await interaction.channel.sendTyping()
 
-			processQuery(qry)
+			await processQuery(qry)
 			
 			const embedData = qry.getDataEmbeds()
 
 			// Build message data.
-			const replyOptions = { 
-				allowedMentions: { repliedUser: false }
-			}
+			const replyOptions = {}
 			if ('embeds' in embedData)
 				replyOptions.embeds = embedData.embeds
 			if ('attachments' in embedData)
 				replyOptions.files = embedData.attachments
-			const report = qry.reportResolution()
+			const report = Query.generateSearchResolutionReport(qry.searches)
 
-			await sendReply(bot, message, report, qry, replyOptions)
+			await sendReply(bot, interaction, report, qry, replyOptions)
 		}
 	}
 })

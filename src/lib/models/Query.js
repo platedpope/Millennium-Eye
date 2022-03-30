@@ -16,7 +16,7 @@ class Query {
 	/**
 	 * Initializes the query's properties (regexes to use to parse the message, official mode, etc.)
 	 * by referencing the properties of the given qry.
-	 * @param {Message | CommandInteraction | Query} qry The message or interaction associated with the query, or another Query to copy the data of.
+	 * @param {Message | CommandInteraction | Query | Array<Search>} qry The message associated with the query, another Query to copy the data of, or an array of searches to treat as a query.
 	 * @param {MillenniumEyeBot} bot The bot.
 	 */
 	constructor(qry, bot) {
@@ -31,6 +31,11 @@ class Query {
 			 */
 			this.searches = qry.searches 
 		}
+		else if (qry instanceof Array)
+			/**
+			 * @type {Array<Search>}
+			 */
+			this.searches = qry
 		else {
 			// Save off state info about where this message was sent.
 			this.official = bot.getCurrentChannelSetting(qry.channel, 'official')
@@ -267,16 +272,17 @@ class Query {
 	}
 
 	/**
-	 * Returns a string that reports any quirks of this Query's resolution that would cause
-	 * any of its search data to not show.
-	 * @returns {String} A report string indicating what data is unresolved in this query.
+	 * Returns a string that reports any quirks of the given searches' that would cause
+	 * any of their data to not show.
+	 * @param {Array<Search>} searches All the searches to evaluate for unresolved data.
+	 * @returns {String} A report string indicating what data is unresolved in these searches.
 	 */
-	reportResolution() {
+	static generateSearchResolutionReport(searches) {
 		let str = ''
 		const unresolvedLocaleData = new Map()
 		const officialModeBlocks = new Set()
 
-		for (const s of this.searches) {
+		for (const s of searches) {
 			const unresolvedLocaleTypes = s.getUnresolvedData()
 
 			// If this was an FAQ or QA-type query in an official-mode channel, report that instead of a generic "unresolved".

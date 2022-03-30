@@ -146,8 +146,8 @@ async function searchYgorgDb(searches, qry, callback) {
 				currSearch.data = dbRows
 				qaSearches.db.push(currSearch)
 			}
-			else 
-				// If there's nothing in the DB, to the API we go.
+			else
+				// If there's nothing in the DB, go to the API.
 				qaApiSearches.push(currSearch)
 		}
 		else if (isFaqSearch) {
@@ -164,7 +164,7 @@ async function searchYgorgDb(searches, qry, callback) {
 					}
 			}
 			else
-				// If there's nothing in the DB, to the API we go.
+				// If there's nothing in the DB, go to the API.
 				cardApiSearches.push(currSearch)
 		}
 	}
@@ -184,6 +184,8 @@ async function searchYgorgDb(searches, qry, callback) {
 			'timeout': API_TIMEOUT * 1000
 		}).then(r => {
 			if (r.status === 200) return r
+		}).catch(err => {
+			throw new Error(`YGOrg API card query for ID ${cardId} returned nothing.`)
 		})
 
 		qaRequests.push(req)
@@ -194,6 +196,8 @@ async function searchYgorgDb(searches, qry, callback) {
 			'timeout': API_TIMEOUT * 1000
 		}).then(r => {
 			if (r.status === 200) return r
+		}).catch(err => {
+			throw new Error(`YGOrg API card query for ID ${cardId} returned nothing.`)
 		})
 
 		cardRequests.push(req)

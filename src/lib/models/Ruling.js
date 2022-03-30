@@ -133,25 +133,18 @@ class Ruling {
 			replacedTitle = truncTitle[0]
 		}
 		// Maximum field length is 1024 characters. Break up answers before they're too long.
-		if (replacedAnswer.length >= 1024) {
-			// Break on punctuation for maximum reliability.
-			const truncAnswer = breakUpDiscordMessage(replacedAnswer, 1024, '.')
-			replacedAnswer = truncAnswer
-		}
+		// Break on punctuation for maximum reliability.
+		replacedAnswer = breakUpDiscordMessage(replacedAnswer, 1024, '.')
 
 		const finalEmbed = new MessageEmbed()
 
 		finalEmbed.setAuthor(replacedTitle, null, konamiDbLink)
 		finalEmbed.addField('__Question__', replacedQuestion, false)
-		if (typeof replacedAnswer === 'string')
-			finalEmbed.addField('__Answer__', replacedAnswer, false)
-		else {
-			for (let i = 0; i < replacedAnswer.length; i++) {
-				finalEmbed.addField(
-					i == 0 ? '__Answer__' : '__cont.__',
-					replacedAnswer[i], false
-				)
-			}
+		for (let i = 0; i < replacedAnswer.length; i++) {
+			finalEmbed.addField(
+				i == 0 ? '__Answer__' : '__cont.__',
+				replacedAnswer[i], false
+			)
 		}
 
 		embedData.embed = finalEmbed

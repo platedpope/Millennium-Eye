@@ -42,7 +42,7 @@ module.exports = new Event({
 				replyOptions.embeds = embedData.embeds
 			if ('attachments' in embedData)
 				replyOptions.files = embedData.attachments
-			const report = qry.reportResolution()
+			const report = Query.generateSearchResolutionReport(qry.searches)
 
 			await sendReply(bot, message, report, qry, replyOptions)
 		}

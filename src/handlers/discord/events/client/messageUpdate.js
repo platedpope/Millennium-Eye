@@ -65,7 +65,7 @@ module.exports = new Event({
 				replyOptions.embeds = []
 			if ('attachments' in embedData)
 				replyOptions.files = embedData.attachments
-			const report = newQry.reportResolution()
+			const report = Query.generateSearchResolutionReport(newQry.searches)
 
 			if (!report && !('embeds' in replyOptions)) {
 				// There were searches but we didn't find anything for them. If we had a response, delete it.

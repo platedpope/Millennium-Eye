@@ -6,7 +6,7 @@ const { MessageEmbed } = require('discord.js')
 
 const { EmbedIcons, EmbedColors, BanlistStatus, KONAMI_CARD_LINK, KONAMI_REQUEST_LOCALE, LocaleEmojis, KONAMI_QA_LINK, YGORG_CARD_LINK } = require('./Defines')
 const { searchPropertyArray, searchPropertyToLocaleIndex } = require('handlers/YGOrgDBHandler')
-const { logError } = require('lib/utils/logging')
+const { logError, breakUpDiscordMessage } = require('lib/utils/logging')
 
 class Card {
 	/**
@@ -298,6 +298,12 @@ class Card {
 		if (type === 'i' || type === 'r') {
 			embedData = this.generateInfoEmbed(locale, type === 'r' ? true : false, official)
 		}
+		else if (type === 'a') {
+			embedData = this.generateArtEmbed(locale, official)
+		}
+		else if (type === 'd') {
+			embedData = this.generateDateEmbed(locale, official)
+		}
 
 		return embedData
 	}
@@ -414,6 +420,102 @@ class Card {
 		if (imageAttach)
 			embedData.attachment = imageAttach
 
+		return embedData
+	}
+
+	/**
+	 * Generates an embed containing an upsized card art (of the given ID).
+	 * @param {String} locale The locale to use for the card name.
+	 * @param {Boolean} official Whether to only include official Konami information. 
+	 * @param {Number} artId The ID of the art to display. 
+	 */
+	generateArtEmbed(locale, official, artId = 1) {
+		const embedData = {}
+		
+		// We shouldn't be here with no art data, but do a final sanity check to make sure we leave if so.
+		if (!this.imageData.size || !this.imageData.get(artId)) 
+			return embedData
+
+		const finalEmbed = new MessageEmbed()
+
+		// Still display the typical "author line" (name, property, link, etc.)
+		const cardName = this.name.get(locale)
+		const colorIcon = this.getEmbedColorAndIcon()
+		const titleUrl = this.getEmbedTitleLink(locale, official)
+
+		finalEmbed.setAuthor(cardName, colorIcon[1], titleUrl)
+		finalEmbed.setColor(colorIcon[0])
+		// Set the image.
+		const imageAttach = this.setEmbedImage(finalEmbed, artId, false)
+
+		embedData.embed = finalEmbed
+		if (imageAttach) {
+			embedData.attachment = imageAttach
+		}
+
+		return embedData
+	}
+
+	generateDateEmbed(locale, official) {
+		const embedData = {}
+
+		// We shouldn't be here with no print data, but do a final sanity check to make sure we leave if so.
+		if (!this.printData.size || !this.printData.get(locale))
+			return embedData
+		
+		const finalEmbed = new MessageEmbed()
+
+		// Still display the typical "author line" (name, property, link, etc.)
+		const cardName = this.name.get(locale)
+		const colorIcon = this.getEmbedColorAndIcon()
+		const titleUrl = this.getEmbedTitleLink(locale, official)
+
+		finalEmbed.setAuthor(cardName, colorIcon[1], titleUrl)
+		finalEmbed.setColor(colorIcon[0])
+		const imageAttach = this.setEmbedImage(finalEmbed, 1)
+
+		// Set the description field to be the first and last print dates in this locale.
+		let introText = `${LocaleEmojis[locale]} ${locale.toUpperCase()} print data for this card:`
+		const sortedDates = this.sortPrintDates(locale)
+		const firstPrint = sortedDates[sortedDates.length-1]
+		const lastPrint = sortedDates[0]
+		const today = new Date()
+
+		let firstText = `First (oldest) print: **${firstPrint}**`
+		if (new Date(firstPrint) > today) firstText += ' *(not yet released)*'
+		let lastText = `Last (newest) print: **${lastPrint}**`
+		if (new Date(lastPrint) > today) lastText += ` *(not yet released)*`
+
+		finalEmbed.setDescription(`${introText}\n● ${firstText}\n● ${lastText}`)
+
+		// Now add a field(s) for more detailed print data. Print dates *should* already be in order in the map.
+		// Add "lines" to our final product per print date, and then join them into a single string for making fields at the end.
+		const printLines = []
+		let currPrint = 1
+		let totalPrints = this.printData.get(locale).size
+		this.printData.get(locale).forEach((date, code) => {
+			printLines.push(`**${currPrint}.** ${code} -> ${date}`)
+			currPrint++
+		})
+		// If we have more than 5 prints, split based on commas rather than newlines so this embed isn't 5 million lines long.
+		const breakupDelimiter = totalPrints <= 5 ? '\n' : '|'
+		if (printLines.length > 5) 
+			var fullPrintData = printLines.join(' | ')
+		else fullPrintData = printLines.join('\n')
+
+		// Break things up if necessary, then add all the fields.
+		const fields = breakUpDiscordMessage(fullPrintData, 1024, breakupDelimiter)
+		for (let i = 0; i < fields.length; i++) {
+			finalEmbed.addField(
+				i === 0 ? `__Full Print Data (${totalPrints} ${totalPrints > 1 ? 'prints' : 'print'})__` : '__cont.__',
+				fields[i], false
+			)
+		}
+
+		embedData.embed = finalEmbed
+		if (imageAttach)	
+			embedData.attachment = imageAttach
+		
 		return embedData
 	}
 

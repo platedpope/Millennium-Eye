@@ -81,8 +81,12 @@ const Ruling = require('./Ruling')
 
 		// Go through our locale/types map and check what we need to see for each.
 		for (const locale of this.localeToTypesMap.keys()) {
-			const types = this.localeToTypesMap.get(locale)
+			// Broad case: if this is a Card and we don't have a name in this locale,
+			// pretty good bet we don't have the data resolved.
+			if (this.data instanceof Card)
+				if ( !this.data.name.has(locale) ) return false
 
+			const types = this.localeToTypesMap.get(locale)
 			// If this has 'r' or 'i'-type search, it needs name + effect text for this locale at a minimum.
 			if (types.has('i') || types.has('r'))
 				if ( !(this.data.name.has(locale)) || !(this.data.effect.has(locale)) )
@@ -94,10 +98,6 @@ const Ruling = require('./Ruling')
 			// If this has 'd'-type search, it needs print data for this locale.
 			if (types.has('d'))
 				if (!(this.data.printData.has(locale)))
-					return false
-			// If this has 'p'-type search... honestly these are nonstandard, just check for name in this locale for now.
-			if (types.has('p'))
-				if (!(this.data.name.has(locale)))
 					return false
 			const usPrice = types.has('$')
 			const euPrice = types.has('€')
@@ -138,26 +138,25 @@ const Ruling = require('./Ruling')
 		}
 
 		this.localeToTypesMap.forEach((types, locale) => {
+			// Broad case: if this is a Card and we don't have name or effect text in this locale,
+			// pretty good bet we don't have the data resolved.
+			if (this.data instanceof Card)
+				if ( !this.data.name.has(locale) ) {
+					unresolvedLocaleTypes.set(locale, types)
+					return
+				}
+				
+			// Assuming we have that as a baseline, check some more specific data.
 			for (const t of types) {
 				let unresolvedType = false
-				// Any 'r' or 'i'-type search should have name + effect text in this locale.
-				if (t === 'i' || t === 'r') {
-					if ( !(this.data.name.has(locale)) || !(this.data.effect.has(locale)) )
-						unresolvedType = true
-				}
 				// Any 'a'-type search should have image data.
-				else if (t === 'a') {
-					if (!this.data.imageData.size())
+				if (t === 'a') {
+					if (!this.data.imageData.size)
 						unresolvedType = true
 				}
 				// Any 'd'-type search should have print data in this locale.
 				else if (t === 'd') {
 					if (!this.data.printData.has(locale))
-						unresolvedType = true
-				}
-				// Any 'p'-type search should have... honestly these are nonstandard, just check for name in this locale for now.
-				else if (t === 'p') {
-					if (!this.data.name.has(locale))
 						unresolvedType = true
 				}
 				// Any '$' or '€'-type search should have corresponding price data.

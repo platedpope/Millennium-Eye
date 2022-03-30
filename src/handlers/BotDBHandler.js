@@ -187,11 +187,11 @@ function addToBotDb(searchData) {
 		VALUES(?, ?, ?, ?)
 	`)
 	const insertImageData = botDb.prepare(`
-		INSERT INTO cardDataImages(dbId, passcode, fullName, artId, artPath)
+		INSERT OR REPLACE INTO cardDataImages(dbId, passcode, fullName, artId, artPath)
 		VALUES(?, ?, ?, ?, ?)
 	`)
 	const insertPrintData = botDb.prepare(`
-		INSERT INTO cardDataPrints(printCode, locale, dbId, printDate)
+		INSERT OR REPLACE INTO cardDataPrints(printCode, locale, dbId, printDate)
 		VALUES(?, ?, ?, ?)
 	`)
 	// TODO: Check and update pricing information as well.
