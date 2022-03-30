@@ -90,7 +90,7 @@ async function convertRulingAssociatedCardsToCards(ruling, locales) {
 		const newSearch = new Search(cid)
 		for (const l of locales)
 			// Type doesn't matter, but we need to track the important locales for this search.
-			newSearch.addTypeToLan('i', l)
+			newSearch.addTypeToLocale('i', l)
 		cardSearches.push(newSearch)
 	}
 

@@ -19,15 +19,18 @@ const userSearchCounter = new Cache({ defaultTtl: 60 * 1000 })
 const processSteps = [
 	{ 
 		'searchFunction': searchTermCache,
-		'dataHandler': convertBotDataToSearchData
+		'dataHandler': convertBotDataToSearchData,
+		'useForOfficial': false,
 	},
 	{
 		'searchFunction': searchKonamiDb,
-		'dataHandler': convertKonamiDataToSearchData
+		'dataHandler': convertKonamiDataToSearchData,
+		'useForOfficial': true,
 	},
 	{
 		'searchFunction': searchYgorgDb,
-		'dataHandler': convertYgorgDataToSearchData
+		'dataHandler': convertYgorgDataToSearchData,
+		'useForOfficial': false,
 	}
 ]
 
@@ -39,6 +42,11 @@ const processSteps = [
  */
 async function processQuery(qry) {
 	for (const step of processSteps) {
+		// Some steps are not used when "official mode" is turned on.
+		if (qry.official && !step.useForOfficial)
+			continue
+		// TODO: In the future, some steps won't be used for certain search times too. (For example, Yugipedia searches will skip all except searchWiki.)
+
 		// Update for any searches that remain.
 		let searchesToEval = qry.findUnresolvedSearches()
 		if (!searchesToEval.length)

@@ -87,9 +87,9 @@ class Query {
 							sContent = intSContent
 						}
 					}
-					let sLan = m[3] ?? locale
+					let sLocale = m[3] ?? locale
 
-					searchData.push([sContent, sType, sLan])
+					searchData.push([sContent, sType, sLocale])
 				}
 			}
 		}
@@ -103,9 +103,9 @@ class Query {
 		for (const l of cardLinks) {
 			let sType = this.rulings ? 'r' : 'i'
 			let sContent = parseInt(l[1], 10)
-			let sLan = this.locale
+			let sLocale = this.locale
 
-			searchData.push([sContent, sType, sLan])
+			searchData.push([sContent, sType, sLocale])
 		}
 
 		const qaLinks = [
@@ -115,9 +115,9 @@ class Query {
 		for (const l of qaLinks) {
 			let sType = 'q'
 			let sContent = parseInt(l[1], 10)
-			let sLan = this.locale
+			let sLocale = this.locale
 
-			searchData.push([sContent, sType, sLan])
+			searchData.push([sContent, sType, sLocale])
 		}
 
 		return searchData
@@ -142,16 +142,16 @@ class Query {
 		for (const oldS of onlyInOldSearch) {
 			const sContent = oldS[0]
 			const sType = oldS[1]
-			const sLan = oldS[2]
+			const sLocale = oldS[2]
 
 			const currSearch = this.findSearch(sContent)
 			if (currSearch) {
 				// Remove this search's locale -> type pair from the map.
-				const currTypes = currSearch.localeToTypesMap.get(sLan)
+				const currTypes = currSearch.localeToTypesMap.get(sLocale)
 				currTypes.delete(sType)
 				// If this left no types for this locale, delete the locale from the map.
 				if (!currTypes.size) {
-					currSearch.localeToTypesMap.delete(sLan)
+					currSearch.localeToTypesMap.delete(sLocale)
 					// If deleting this locale left no locales for this search,
 					// then this search isn't being used anymore. Delete it entirely.
 					if (!currSearch.localeToTypesMap.size) 
@@ -178,7 +178,7 @@ class Query {
 		if (oldSearch !== undefined)
 			// Don't merge QA searches with non-QA searches.
 			if (type !== 'q' || (type === 'q' && oldSearch.hasType('q'))) {
-				oldSearch.addTypeToLan(type, locale)
+				oldSearch.addTypeToLocale(type, locale)
 				return
 			}
 		// Something new to look for...
@@ -240,11 +240,11 @@ class Query {
 
 		for (const s of this.searches) {
 			if (!s.data) continue
-			s.localeToTypesMap.forEach((searchTypes, searchLan) => {
+			s.localeToTypesMap.forEach((searchTypes, searchLocale) => {
 				for (const t of searchTypes) {
 					let newData = s.data.generateEmbed({
 						'type': t,
-						'locale': searchLan,
+						'locale': searchLocale,
 						'official': this.official,
 						'random': false
 					})
@@ -273,29 +273,28 @@ class Query {
 	 */
 	reportResolution() {
 		let str = ''
-		const unresolvedLanData = new Map()
+		const unresolvedLocaleData = new Map()
 		const officialModeBlocks = new Set()
 
 		for (const s of this.searches) {
-			const unresolvedLanTypes = s.getUnresolvedData()
+			const unresolvedLocaleTypes = s.getUnresolvedData()
 
-			// If this had unresolved data, report it.
-			if (unresolvedLanTypes.size) {
-				for (const locale of unresolvedLanTypes.keys()) {
-					if (!unresolvedLanData.has(locale))
-						unresolvedLanData.set(locale, new Set)
-					unresolvedLanData.get(locale).add(...s.originals)
-				}
-			}
-
-			// If this was an FAQ or QA-type query in an official-mode channel, report an issue regardless of whether they're resolved.
+			// If this was an FAQ or QA-type query in an official-mode channel, report that instead of a generic "unresolved".
 			if (this.official && (s.hasType('f') || s.hasType('q'))) {
 				officialModeBlocks.add(...s.originals)
 			}
+			// If this had any generic unresolved data, report it.
+			else if (unresolvedLocaleTypes.size) {
+				for (const locale of unresolvedLocaleTypes.keys()) {
+					if (!unresolvedLocaleData.has(locale))
+						unresolvedLocaleData.set(locale, new Set)
+					unresolvedLocaleData.get(locale).add(...s.originals)
+				}
+			}
 		}
 
-		if (unresolvedLanData.size) {
-			unresolvedLanData.forEach((searches, locale) => {
+		if (unresolvedLocaleData.size) {
+			unresolvedLocaleData.forEach((searches, locale) => {
 				str += `Could not resolve ${Locales[locale]} data for searches: ${[...searches].join(', ')}\n`
 			})
 		}

@@ -119,12 +119,12 @@ class MillenniumEyeBot extends Discord.Client {
 		// now check all other locales this server might have set (if applicable)
 		const currQueries = this.guildSettings.get([guild.id, 'queries'])
 		if (currQueries) {
-			for (const qLan in currQueries) {
-				if (currQueries[qLan]['open'] === open && 
-					currQueries[qLan]['close'] === close)
+			for (const qLocale in currQueries) {
+				if (currQueries[qLocale]['open'] === open && 
+					currQueries[qLocale]['close'] === close)
 				{
-					const conflictedLocale = Locales[qLan]
-					if (qLan !== locale)  
+					const conflictedLocale = Locales[qLocale]
+					if (qLocale !== locale)  
 						throw generateError(
 							null,
 							`This syntax is already being used for **${conflictedLocale}** queries. To use this syntax for ${fullLocale} queries, you must either remove or change the ones used for ${conflictedLocale} queries.`

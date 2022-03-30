@@ -347,12 +347,12 @@ class Card {
 		// Monster Types
 		if (this.types.length) {
 			if (locale !== 'en')
-				var newLanTypes = searchPropertyToLocaleIndex(this.types, locale)
+				var newLocaleTypes = searchPropertyToLocaleIndex(this.types, locale)
 			
-			if (locale === 'en' || !newLanTypes)
+			if (locale === 'en' || !newLocaleTypes)
 				stats += `\n**[** ${this.types.join(' **/** ')} **]**`
 			else
-				stats += `\n**[** ${newLanTypes.join(' **/** ')} **]**`
+				stats += `\n**[** ${newLocaleTypes.join(' **/** ')} **]**`
 		}
 		// ATK/DEF (value of -1 means ?)
 		if (this.attack !== null) {

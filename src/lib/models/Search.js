@@ -28,7 +28,7 @@ const Ruling = require('./Ruling')
 		 */
 		this.localeToTypesMap = new Map()
 		if (type !== undefined && locale !== undefined)
-			this.addTypeToLan(type, locale)
+			this.addTypeToLocale(type, locale)
 
 		/**
 		 * @type {Card | Ruling} This starts out unset but will be set to something when data is found.
@@ -46,7 +46,7 @@ const Ruling = require('./Ruling')
 	 * @param {String} type The type of search (e.g., i, r, etc.)
 	 * @param {String} locale The locale of the search (e.g., en, es, etc.)
 	 */
-	addTypeToLan(type, locale) {
+	addTypeToLocale(type, locale) {
 		const localeTypes = this.localeToTypesMap.get(locale)
 		// If this one doesn't already exist in the map, just add it.
 		if (localeTypes === undefined) {
@@ -129,7 +129,13 @@ const Ruling = require('./Ruling')
 	 * @returns {Map} The map of locales -> types that did not have resolved data.
 	 */
 	getUnresolvedData() {
-		const unresolvedLanTypes = new Map()
+		const unresolvedLocaleTypes = new Map()
+
+		// If this has no data, all of its locales -> types are unresolved.
+		if (this.data === undefined) {
+			this.localeToTypesMap.forEach((types, locale) => unresolvedLocaleTypes.set(locale, types))
+			return unresolvedLocaleTypes
+		}
 
 		this.localeToTypesMap.forEach((types, locale) => {
 			for (const t of types) {
@@ -174,14 +180,14 @@ const Ruling = require('./Ruling')
 				}
 
 				if (unresolvedType) {
-					if (!unresolvedLanTypes.has(locale))
-						unresolvedLanTypes.set(locale, new Set())
-					unresolvedLanTypes.get(locale).add(t)
+					if (!unresolvedLocaleTypes.has(locale))
+						unresolvedLocaleTypes.set(locale, new Set())
+					unresolvedLocaleTypes.get(locale).add(t)
 				}
 			}
 		})
 
-		return unresolvedLanTypes
+		return unresolvedLocaleTypes
 	}
 
 	/**
@@ -198,14 +204,14 @@ const Ruling = require('./Ruling')
 		// In other words, this object already has the correct search term.
 
 		// Add any new search types to associate with this search.
-		otherSearch.localeToTypesMap.forEach((otherTypes, otherLan) => {
-			const thisSearchLan = this.localeToTypesMap.get(otherLan)
-			if (thisSearchLan === undefined)
+		otherSearch.localeToTypesMap.forEach((otherTypes, otherLocale) => {
+			const thisSearchLocale = this.localeToTypesMap.get(otherLocale)
+			if (thisSearchLocale === undefined)
 				// If the other search has a type this one doesn't, just add it.
-				this.localeToTypesMap.set(otherLan, otherTypes)
+				this.localeToTypesMap.set(otherLocale, otherTypes)
 			else
 				// This type exists in both Searches. Add any new locales to this one, let JS Set handle conflicts.
-				thisSearchLan.add(...otherTypes)
+				thisSearchLocale.add(...otherTypes)
 		})
 
 		// Integrate any new data this might have.

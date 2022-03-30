@@ -268,22 +268,22 @@ module.exports = new Command({
 			if (sc === 'add') {
 				const qOpen = interaction.options.getString('open', true)
 				const qClose = interaction.options.getString('close', true)
-				const qLan = interaction.options.getString('locale', true)
-				const fullLan = Locales[qLan]
+				const qLocale = interaction.options.getString('locale', true)
+				const fullLocale = Locales[qLocale]
 				
-				bot.setGuildQuery(interaction.guild, qOpen, qClose, qLan)
+				bot.setGuildQuery(interaction.guild, qOpen, qClose, qLocale)
 
-				await interaction.reply({ content: `I will now recognize parts of messages between **${qOpen}** and **${qClose}** as **${fullLan}** queries!`, ephemeral: true })
+				await interaction.reply({ content: `I will now recognize parts of messages between **${qOpen}** and **${qClose}** as **${fullLocale}** queries!`, ephemeral: true })
 			}
 			else if (sc === 'remove') {
-				const rLan = interaction.options.getString('locale', true)
-				const fullLan = Locales[rLan]
+				const rLocale = interaction.options.getString('locale', true)
+				const fullLocale = Locales[rLocale]
 
-				const removed = bot.removeGuildQuery(interaction.guild, rLan)
+				const removed = bot.removeGuildQuery(interaction.guild, rLocale)
 				if (removed) 
-					await interaction.reply({ content: `I will no longer recognize parts of messages between **${removed.open}** and **${removed.close}** as ${fullLan} queries.`, ephemeral: true })
+					await interaction.reply({ content: `I will no longer recognize parts of messages between **${removed.open}** and **${removed.close}** as ${fullLocale} queries.`, ephemeral: true })
 				else
-					await interaction.reply({ content: `Could not find any existing query syntax associated with ${fullLan} queries, no changes were made.`, ephemeral: true })
+					await interaction.reply({ content: `Could not find any existing query syntax associated with ${fullLocale} queries, no changes were made.`, ephemeral: true })
 			}
 		}
 		else if (sc === 'settings') {
