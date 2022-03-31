@@ -12,9 +12,9 @@ const botDb = new Database(BOT_DB_PATH)
  * If a match is found, then branch off to the correct logic for resolving that match to data.
  * @param {Array<Search>} searches The array of relevant searches to evaluate.
  * @param {Query} qry The query that contains all relevant searches.
- * @param {Function} callback The callback for handling the data produced by this search.
+ * @param {Function} dataHandlerCallback The callback for handling the data produced by this search.
  */
-function searchTermCache(searches, qry, callback) {
+function searchTermCache(searches, qry, dataHandlerCallback) {
 	// Track all searches in each location so we can divvy things up and query them all at once.
 	const cachedBotData = []
 	/* TODO
@@ -27,9 +27,6 @@ function searchTermCache(searches, qry, callback) {
 	// Iterate through the array backwards because we might modify it as we go.
 	for (let i = searches.length - 1; i >= 0; i--) {
 		const currSearch = searches[i]
-		// Skip QA searches, their terms aren't card database IDs.
-		if (currSearch.hasType('q')) continue
-
 		const currTerm = currSearch.term
 
 		const dbRows = botDb.prepare(sqlQry).all(currTerm)
@@ -70,7 +67,7 @@ function searchTermCache(searches, qry, callback) {
 	// Resolve bot data.
 	if (cachedBotData.length) {
 		const botSearchResults = searchBotDb(cachedBotData, qry, db)
-		callback(botSearchResults.resolved, botSearchResults.termUpdates)
+		dataHandlerCallback(botSearchResults.resolved, botSearchResults.termUpdates)
 	}
 
 	/* TODO
@@ -199,6 +196,7 @@ function addToBotDb(searchData) {
 	let insertAllData = botDb.transaction(searches => {
 		for (const s of searches) {
 			const c = s.data
+			logError(c, `Inserting data:`)
 			c.name.forEach((n, l) => {
 				insertDataCache.run(
 					n, l, c.dbId, c.passcode, c.cardType, c.property, c.attribute, c.levelRank, c.attack,

@@ -15,6 +15,22 @@ module.exports = {
 	KONAMI_DB_PATH: `${process.cwd()}/data/carddata.db`,
 	NEURON_DB_PATH: `${process.cwd()}/data/neuron_name_rainbow`,
 	YGORG_DB_PATH: `${process.cwd()}/data/ygorg.db`,
+	YUGIPEDIA_API_PARAMS: {
+		action: 'query',
+		format: 'json',
+		formatversion: 2,
+		redirects: true,
+		prop: 'revisions|categories|pageimages',
+		rvprop: 'content',
+		cllimit: 50,
+		piprop: 'original',
+		rvlimit: 1,
+		generator: 'search',
+		gsrlimit: 1,
+		gsrwhat: 'title'
+		// There's also a "gsrsearch" property that is used for the actual search value.
+		// That value is filled in at runtime, per search.
+	},
 	// Seed URLs.
 	KONAMI_REQUEST_LOCALE: `&request_locale=`,
 	KONAMI_CARD_LINK: `https://www.db.yugioh-card.com/yugiohdb/card_search.action?ope=2&cid=`,
@@ -27,6 +43,7 @@ module.exports = {
 	YGORG_ARTWORK_API: `https://artworks.ygorganization.com`,
 	YGORG_NAME_ID_INDEX: 'https://db.ygorganization.com/data/idx/card/name',
 	YGORG_PROPERTY_METADATA: 'https://db.ygorganization.com/data/meta/mprop',
+	YUGIPEDIA_API: 'https://yugipedia.com/api.php',
 	// Bot data type definitions for easy reference.
 	QueryTypes: {
 		'i': 'info',

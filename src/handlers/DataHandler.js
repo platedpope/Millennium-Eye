@@ -1,4 +1,5 @@
 const Card = require('lib/models/Card')
+const Query = require('lib/models/Query')
 const Ruling = require('lib/models/Ruling')
 const Search = require('lib/models/Search')
 const { logError } = require('lib/utils/logging')
@@ -103,6 +104,46 @@ async function convertRulingAssociatedCardsToCards(ruling, locales) {
 	ruling.cards = convertedCardData
 }
 
+/**
+ * Converts a Yugipedia API query to card data and adds any new data to the bot database.
+ * @param {Array<Search>} searches The searches that produced API data.
+ * @param {Query} qry The query with these searches.
+ */
+function convertYugipediaDataToSearchData(searches, qry) {
+	const resolvedSearches = []
+	
+	for (const s of searches) {
+		if (!s.tempData) continue
+		
+		const qryData = s.tempData
+		if ('pages' in qryData) {
+			const pageData = qryData.pages
+			// This is an array, but we only ever want the first one.
+			const page = pageData[0]
+			if (!(s.data instanceof Card)) s.data = new Card()
+			Card.fromYugipediaApi(page, s.data)
+			s.tempData = undefined
+
+			// Did we get a better search term out of this?
+			if (s.data.dbId)
+				var betterTerm = s.data.dbId
+			else if (s.data.passcode)
+				betterTerm = s.data.passcode
+			else
+				betterTerm = s.data.name.get('en')
+
+			const mergedSearch = qry.updateSearchTerm(s.term, betterTerm)
+			if (!mergedSearch)
+				resolvedSearches.push(s)
+		}
+	}
+
+	// Only add these to the bot database if they're not in the Konami DB (i.e., no database ID.)
+	const newSearches = resolvedSearches.filter(s => !s.data.dbId) 
+
+	addToBotDb(newSearches)
+}
+
 module.exports = {
-	convertBotDataToSearchData, convertKonamiDataToSearchData, convertYgorgDataToSearchData
+	convertBotDataToSearchData, convertKonamiDataToSearchData, convertYgorgDataToSearchData, convertYugipediaDataToSearchData
 }

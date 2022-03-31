@@ -9,7 +9,8 @@ const { logger, logError } = require('lib/utils/logging')
 const { searchTermCache } = require('./BotDBHandler')
 const { searchKonamiDb } = require('./KonamiDBHandler')
 const { searchYgorgDb } = require('./YGOrgDBHandler')
-const { convertBotDataToSearchData, convertKonamiDataToSearchData, convertYgorgDataToSearchData } = require('./DataHandler')
+const { convertBotDataToSearchData, convertKonamiDataToSearchData, convertYgorgDataToSearchData, convertYugipediaDataToSearchData } = require('./DataHandler')
+const { searchYugipedia } = require('./YugipediaHandler')
 
 // Used to monitor how many searches a user has queried the bot over a period of time (default 1 min).
 // If a user passes the acceptable number over the course of that minute, no future searches within that minute are allowed.
@@ -21,16 +22,25 @@ const processSteps = [
 		'searchFunction': searchTermCache,
 		'dataHandler': convertBotDataToSearchData,
 		'useForOfficial': false,
+		'ignoreSearchTypes': ['q']
 	},
 	{
 		'searchFunction': searchKonamiDb,
 		'dataHandler': convertKonamiDataToSearchData,
 		'useForOfficial': true,
+		'ignoreSearchTypes': ['p', 'q']
 	},
 	{
 		'searchFunction': searchYgorgDb,
 		'dataHandler': convertYgorgDataToSearchData,
 		'useForOfficial': false,
+		'ignoreSearchTypes': ['p']
+	},
+	{
+		'searchFunction': searchYugipedia,
+		'dataHandler': convertYugipediaDataToSearchData,
+		'useForOfficial': false,
+		'ignoreSearchTypes': ['q']
 	}
 ]
 
@@ -45,13 +55,22 @@ async function processQuery(qry) {
 		// Some steps are not used when "official mode" is turned on.
 		if (qry.official && !step.useForOfficial)
 			continue
-		// TODO: In the future, some steps won't be used for certain search times too. (For example, Yugipedia searches will skip all except searchWiki.)
 
 		// Update for any searches that remain.
 		let searchesToEval = qry.findUnresolvedSearches()
 		if (!searchesToEval.length)
-			// Nothing left to evaluate.
+			// Everything is resolved.
 			break
+
+		// Filter out ignored search types.
+		searchesToEval = searchesToEval.filter(s => {
+			for (const type of step.ignoreSearchTypes)
+				if (s.hasType(type)) return false
+			return true
+		})
+		if (!searchesToEval.length)
+			// If this filtered out everything, nothing to do on this step.
+			continue
 
 		const stepSearch = step.searchFunction
 		const stepHandlerCallback = step.dataHandler

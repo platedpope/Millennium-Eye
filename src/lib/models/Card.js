@@ -4,9 +4,10 @@ const sharp = require('sharp')
 const sanitize = require('sanitize-filename') 
 const { MessageEmbed } = require('discord.js')
 
-const { EmbedIcons, EmbedColors, BanlistStatus, KONAMI_CARD_LINK, KONAMI_REQUEST_LOCALE, LocaleEmojis, KONAMI_QA_LINK, YGORG_CARD_LINK } = require('./Defines')
+const { EmbedIcons, EmbedColors, BanlistStatus, KONAMI_CARD_LINK, KONAMI_REQUEST_LOCALE, LocaleEmojis, KONAMI_QA_LINK, YGORG_CARD_LINK, Locales, LinkMarkersIndexMap } = require('./Defines')
 const { searchPropertyArray, searchPropertyToLocaleIndex } = require('handlers/YGOrgDBHandler')
 const { logError, breakUpDiscordMessage } = require('lib/utils/logging')
+const { findYugipediaProperty } = require('lib/utils/regex')
 
 class Card {
 	/**
@@ -206,18 +207,15 @@ class Card {
 		}
 
 		// Gather art data if necessary.
-		if (!card.imageData.size) {
-			const getArtData = 'SELECT artId, artwork FROM card_artwork WHERE cardId = ?'
-			const artRows = db.prepare(getArtData).all(card.dbId)
-			for (const r of artRows) 
-				card.addImageData(r.artId, r.artwork, true)
-		}
+		const getArtData = 'SELECT artId, artwork FROM card_artwork WHERE cardId = ?'
+		const artRows = db.prepare(getArtData).all(card.dbId)
+		for (const r of artRows) 
+			card.addImageData(r.artId, r.artwork, true)
 
 		// TODO: Gather pricing data.
 
 		return card
 	}
-
 	/**
 	 * Takes data from the YGOrg DB and integrates it with a card.
 	 * This can do work on a card that already has some data, so it must only merge new data rather 
@@ -282,6 +280,183 @@ class Card {
 	}
 
 	/**
+	 * 
+	 * @param {*} apiData 
+	 * @param {Card} card 
+	 */
+	static fromYugipediaApi(apiData, card) {
+		if ('categories' in apiData) {
+			const categories = apiData.categories
+			// Categories can tell us a lot about where this card has been released.
+			let hasOcgCategory = false
+			let hasTcgCategory = false
+			for (const c of categories) {
+				if (c.title === 'Category:Anime cards' ||
+					c.title === 'Category:Manga cards' ||
+					c.title === 'Category.Video game cards with no OCG/TCG counterpart')
+				{
+					// Any of these categories automatically mean a card isn't in any CG.
+					card.notInCg = true
+					// Reset these in case we found something wrong beforehand.
+					hasOcgCategory = false
+					hasTcgCategory = false
+					break
+				}
+				else if (c.title === 'Category:OCG cards') {
+					hasOcgCategory = true
+				}
+				else if (c.title === 'Category:TCG cards') {
+					hasTcgCategory = true
+				}
+			}
+
+			if (!hasOcgCategory)
+				card.ocgList = -1
+			if (!hasTcgCategory)
+				card.tcgList = -1
+		}
+		if ('revisions' in apiData) {
+			// This is the wikitext (i.e., data) associated with the page. 
+			let revData = apiData.revisions[0]['content']
+			// Welcome to parsing hell. First, strip out all the useless garbage wikitext formatting.
+			revData = revData.replace(/(\[\[[^\]\]]*\|)|(\]\])|(\[)/gs, '')	// Forgive me father, I have sinned.
+				.replace(/<br\s*\/?>/gs, '\n')
+				.replace(/{{PAGENAME}}/gs, apiData.title)
+				.replace(/<.*?>/gs, '')
+
+			// Name(s)
+			// EN name is always the title of the page.
+			if (!card.name.get('en'))
+				card.name.set('en', apiData.title)
+			// Go through the other locales.
+			for (const loc in Locales) {
+				if (card.name.get(loc)) continue
+				if (loc === 'en') continue
+				// Skip parsing Japanese name, just looking at that thing's wikitext gives me a headache.
+				if (loc == 'ja') continue
+				
+				let locName = findYugipediaProperty(`${loc}_name`, revData)
+				if (locName)
+					card.name.set(loc, locMatch)
+			}
+			// Database ID
+			if (!card.notInCg && !card.dbId) {
+				card.dbId = findYugipediaProperty('database_id', revData, true)
+			}
+			// Passcode
+			if (!card.passcode) {
+				card.passcode = findYugipediaProperty('password', revData, true)
+			}
+			// Card Type (only appears for Spells/Traps)
+			if (!card.cardType) {
+				let cardType = findYugipediaProperty('card_type', revData)
+				if (cardType) {
+					card.cardType = cardType.toLowerCase()
+					// Property (also only appears for Spells/Traps)
+					let property = findYugipediaProperty('property', revData)
+					if (property) {
+						property = property.toLowerCase()
+						// Yugipedia stores Quick-Play spell property as "Quick-Play", but the bot uses "quickplay".
+						if (property === 'quick-play')
+							property = 'quickplay'
+						card.property = property
+					}
+				}
+				// Assume everything else is a monster.
+				else card.cardType === 'monster'
+			}
+			// Effect(s)
+			// EN effect is "lore", while the others are "<locale>_lore".
+			if (!card.effect.get('en')) {
+				let enEffect = findYugipediaProperty('lore', revData)
+				if (enEffect)
+					card.effect.set('en', enEffect)
+			}
+			// Go through the other locales.
+			for (const loc in Locales) {
+				if (card.effect.get(loc)) continue
+				if (loc === 'en') continue
+
+				let locEffect = findYugipediaProperty(`${loc}_lore`, revData)
+				if (locEffect)
+					card.effect.set(loc, locEffect)
+			}
+			// Now that we know whether something is a monster, check monster-specific fields.
+			if (card.cardType === 'monster') {
+				// Monster Types
+				if (!card.types.size) {
+					let types = findYugipediaProperty('types', revData)
+					if (types)
+						// Yugipedia formats Monster Types as a single line, separated with slashes, but the bot uses an array.
+						card.types = types.split(' / ')
+				}
+				// Attribute
+				if (!card.attribute) {
+					let attribute = findYugipediaProperty('attribute', revData)
+					if (attribute)
+						// Yugipedia formats Attribute in all caps, but the bot uses all lowercase.
+						card.attribute = attribute.toLowerCase()
+				}
+				// Level, Rank, Link Markers
+				if (!card.levelRank || !card.linkMarkers.length) {
+					let lookup = findYugipediaProperty('level', revData)
+					if (lookup) card.levelRank = lookup
+					else {
+						lookup = findYugipediaProperty('rank', revData)
+						if (lookup) card.levelRank = lookup
+						else {
+							lookup = findYugipediaProperty('link_arrows', revData)
+							if (lookup) {
+								// Yugipedia formats Link Markers as a single line, by named location (e.g. Bottom-Left), separated by commas,
+								// but the bot expects an array of numbers (starting at 1 in bottom left).
+								for (const marker of lookup.split(', '))
+									card.linkMarkers.push(LinkMarkersIndexMap[marker])
+							}
+						}
+					}
+				}
+				// ATK
+				if (!card.attack) {
+					card.attack = findYugipediaProperty('atk', revData, true)
+				}
+				// DEF
+				if (!card.defense) {
+					card.defense = findYugipediaProperty('def', revData, true)
+				}
+				// Pendulum Effect(s)
+				// EN effect is "pendulum_effect", while the others are "<locale>_pendulum_effect".
+				if (!card.pendEffect.get('en')) {
+					let enEffect = findYugipediaProperty('pendulum_effect')
+					if (enEffect)
+						card.pendEffect.set('en', enEffect)
+				}
+				// Go through the other locales.
+				for (const loc in Locales) {
+					if (card.pendEffect.get(loc)) continue
+					if (loc === 'en') continue
+
+					let locEffect = findYugipediaProperty(`${loc}_pendulum_effect`, revData)
+					if (locEffect)
+						card.pendEffect.set(loc, locEffect)
+				}
+				// Pendulum Scale
+				if (!card.pendScale) {
+					card.pendScale = findYugipediaProperty('pendulum_scale')
+				}
+			}
+
+			// We could find print dates while we're here, but I really, REALLY don't want to implement that right now.
+			// That's a problem for Future Me.
+		}
+		// Card Art
+		if ('original' in apiData) {
+			const imageData = apiData.original
+			// Use a placeholder art ID (100) for Yugipedia images.
+			card.addImageData(100, imageData.source, false, true)
+		}
+	}
+
+	/**
 	 * Generic wrapper for generating any type of embed.
 	 * @param {Object} options Relevant options (type, locale, etc.) that are passed on to more specific embed functions.
 	 */
@@ -329,7 +504,7 @@ class Card {
 
 		finalEmbed.setAuthor(cardName, colorIcon[1], titleUrl)
 		finalEmbed.setColor(colorIcon[0])
-		const imageAttach = this.setEmbedImage(finalEmbed, 1)
+		const imageAttach = this.setEmbedImage(finalEmbed)
 
 		// Generate stat description.
 		// Level/Rank
@@ -596,6 +771,9 @@ class Card {
 	 * @returns The URL for the attachment, if any (null if no attachment).
 	 */
 	setEmbedImage(embed, id, thumbnail = true) {
+		if (!id && this.imageData.size) 
+			id = this.imageData.keys().next().value
+		
 		let attach = null
 		const imagePath = this.imageData.get(id)
 
@@ -712,10 +890,17 @@ class Card {
 	 * Adds a given image to this card's image data. If it doesn't exist on the file system,
 	 * it will save the image. If it's from Neuron, it will also crop the image to include just the art.
 	 * @param {Number} id The ID of the image.
-	 * @param img The raw image data. 
+	 * @param img The raw image data or URL.
 	 * @param {Boolean} fromNeuron Whether this image comes from Neuron.
+	 * @param {Boolean} url Whether this image is a URL rather than raw data.
 	 */
-	addImageData(id, img, fromNeuron) {
+	addImageData(id, img, fromNeuron, url = false) {
+		// If this is a URL, we don't need to save this at all, just set it.
+		if (url) {
+			this.imageData.set(id, img)
+			return
+		}
+
 		const artPath = `${process.cwd()}/data/card_images`
 		if (this.dbId)
 			var artFilename = `${this.dbId}_${id}`

@@ -27,6 +27,31 @@ function escRegex(string) {
 	return string.replace(/[.*+\-?^${}()|[\]\\]/g, '\\$&')
 }
 
+/**
+ * Helper function to construct a regex to find the given property
+ * within a bunch of Yugipedia wikitext.
+ * @param {String} prop The property to find. 
+ * @param {String} data The wikitext to parse. 
+ * @param {Boolean} toInt Whether to convert the final value to an integer.
+ * @returns {String | Number} The result of the match, or null if nothing was found.
+ */
+function findYugipediaProperty(prop, data, toInt = false) {
+	let retval = null
+
+	const propRegex = new RegExp(`^\\| ${prop}\\s*= (.*)$`, 'm')
+	let match = data.match(propRegex)
+	if (match && match[1]) {
+		match = match[1]
+		match = match.trim()
+		if (match) {
+			if (toInt) match = parseInt(match, 10)
+			retval = match
+		}
+	}
+
+	return retval
+}
+
 module.exports = {
-	setupQueryRegex, escRegex
+	setupQueryRegex, escRegex, findYugipediaProperty
 }

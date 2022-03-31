@@ -1,5 +1,4 @@
 const munkres = require('munkres-js')
-const { logger } = require('./logging')
 
 class CardDataFilter {
 	static tokenRegex = /[一-龠]+|[ぁ-ゔ]+|[ァ-ヴー]+|[a-zA-Z0-9]+|[ａ-ｚＡ-Ｚ０-９]+|[々〆〤]|[가-힣]/ug

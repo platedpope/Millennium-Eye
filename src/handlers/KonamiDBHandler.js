@@ -11,9 +11,9 @@ const konamiDb = new Database(KONAMI_DB_PATH)
  * Search the Konami (i.e., official) database to resolve our card data.
  * @param {Array<Search>} searches The array of relevant searches to evaluate.
  * @param {Query} qry The query that contains all the relevant searches.
- * @param {Function} callback The callback for handling the data produced by this search.
+ * @param {Function} dataHandlerCallback The callback for handling the data produced by this search.
  */
-function searchKonamiDb(searches, qry, callback) {
+function searchKonamiDb(searches, qry, dataHandlerCallback) {
 	// Keep track of the searches that we've resolved during this trip through the database.
 	const resolvedSearches = []
 	const termsToUpdate = []
@@ -22,8 +22,6 @@ function searchKonamiDb(searches, qry, callback) {
 	// Iterate through the array backwards because we might modify it as we go.
 	for (let i = searches.length - 1; i >= 0; i--) {
 		const currSearch = searches[i]
-		// Skip QA searches, their terms aren't card database IDs.
-		if (currSearch.hasType('q')) continue
 		
 		// If the search term is a number, then it's a database ID.
 		if (Number.isInteger(currSearch.term)) {
@@ -43,6 +41,9 @@ function searchKonamiDb(searches, qry, callback) {
 
 			const bestMatch = searchNameToIdIndex(currSearch.term, localesToSearch)
 			for (const id in bestMatch) {
+				const score = bestMatch[id]
+				if (score < 0.5) break	// Ignore scores this low, they mean we weren't really sure, this was just the least bad.
+
 				const dataRows = getDbId.all(id)
 				if (dataRows.length) {
 					currSearch.tempData = dataRows
@@ -52,9 +53,7 @@ function searchKonamiDb(searches, qry, callback) {
 						const mergedSearch = qry.updateSearchTerm(currSearch.term, repRow.id)
 						if (!mergedSearch) {
 							resolvedSearches.push(currSearch)
-							// Only update search terms at >= 0.5 score. Any less and we really weren't sure, this was just the least bad result.
-							if (bestMatch[id] >= 0.5)
-								termsToUpdate.push(currSearch)
+							termsToUpdate.push(currSearch)
 						}
 					}
 				}
@@ -62,7 +61,7 @@ function searchKonamiDb(searches, qry, callback) {
 		}
 	}
 
-	callback(resolvedSearches, termsToUpdate)
+	dataHandlerCallback(resolvedSearches, termsToUpdate)
 }
 
 /**

@@ -1,11 +1,12 @@
 const axios = require('axios')
 const Database = require('better-sqlite3')
 
-const Search = require('lib/models/Search')
-const { Locales, YGORG_NAME_ID_INDEX, YGORG_PROPERTY_METADATA, YGORG_DB_PATH, YGORG_MANIFEST, YGORG_QA_DATA_API, API_TIMEOUT, YGORG_CARD_DATA_API, YGORG_ARTWORK_API } = require('lib/models/Defines')
-const { evictFromBotCache, botDb } = require('handlers/BotDBHandler')
+const { evictFromBotCache } = require('handlers/BotDBHandler')
 const { logError, logger } = require('lib/utils/logging')
 const { CardDataFilter } = require('lib/utils/search')
+const Search = require('lib/models/Search')
+const Query = require('lib/models/Query')
+const { Locales, YGORG_NAME_ID_INDEX, YGORG_PROPERTY_METADATA, YGORG_DB_PATH, YGORG_MANIFEST, YGORG_QA_DATA_API, API_TIMEOUT, YGORG_CARD_DATA_API, YGORG_ARTWORK_API } = require('lib/models/Defines')
 
 const ygorgDb = new Database(YGORG_DB_PATH)
 
@@ -66,7 +67,7 @@ async function processManifest(newRevision) {
 				if ('card' in changes) {
 					const evictIds = Object.keys(changes.card)
 					// Delete any FAQ data from YGOrg DB.
-					const delFaq = ygorgDb.prepare('DELETE FROM faqData WHERE dbId = ?')
+					const delFaq = ygorgDb.prepare('DELETE FROM faqData WHERE cardId = ?')
 					const delMany = ygorgDb.transaction(ids => {
 						for (const id of ids) delFaq.run(id)
 					})
@@ -115,9 +116,11 @@ async function processManifest(newRevision) {
  * Search the YGOrg database to resolve card data.
  * This will both look in our local database for QA or FAQ data,
  * as well as query the API as necessary to resolve any other data.
- * @param {Array<Search>} searches
+ * @param {Array<Search>} searches The array of searches to evaluate.
+ * @param {Query} qry The query that contains all these searches.
+ * @param {Function} dataHandlerCallback The callback for handling the data produced by this search.
  */
-async function searchYgorgDb(searches, qry, callback) {
+async function searchYgorgDb(searches, qry, dataHandlerCallback) {
 	const qaSearches = {
 		'db': [],
 		'api': [],
@@ -136,7 +139,9 @@ async function searchYgorgDb(searches, qry, callback) {
 		if (!isQaSearch && !isFaqSearch) {
 			// Only FAQ and QA searches have relevant data to be found in here.
 			// Anything else is going to need API work.
-			cardApiSearches.push(currSearch)
+			// Only push to the API if we have an ID to work with, though.
+			if (Number.isInteger(currSearch.term))
+				cardApiSearches.push(currSearch)
 			continue
 		}
 		
@@ -164,14 +169,15 @@ async function searchYgorgDb(searches, qry, callback) {
 					}
 			}
 			else
-				// If there's nothing in the DB, go to the API.
-				cardApiSearches.push(currSearch)
+				// If there's nothing in the DB, go to the API, but only if we have an ID we're working with.
+				if (Number.isInteger(currSearch.term))
+					cardApiSearches.push(currSearch)
 		}
 	}
 
 	// If we don't have anything to do with the API, just bail out early.
 	if (!qaApiSearches.length && !cardApiSearches.length && qaSearches.db.length) {
-		await callback(qaSearches)
+		await dataHandlerCallback(qaSearches)
 		return
 	}
 
@@ -185,7 +191,7 @@ async function searchYgorgDb(searches, qry, callback) {
 		}).then(r => {
 			if (r.status === 200) return r
 		}).catch(err => {
-			throw new Error(`YGOrg API card query for ID ${cardId} returned nothing.`)
+			throw new Error(`YGOrg API card query for ruling ID ${qaId} returned nothing.`)
 		})
 
 		qaRequests.push(req)
@@ -254,7 +260,7 @@ async function searchYgorgDb(searches, qry, callback) {
 		}
 	}
 
-	await callback(qaSearches, cardSearches)
+	await dataHandlerCallback(qaSearches, cardSearches)
 }
 
 /**
