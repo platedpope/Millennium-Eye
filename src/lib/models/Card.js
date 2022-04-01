@@ -2,6 +2,7 @@ const fs = require('fs')
 const path = require('path')
 const sharp = require('sharp')
 const sanitize = require('sanitize-filename') 
+const deasync = require('deasync')
 const { MessageEmbed } = require('discord.js')
 
 const { EmbedIcons, EmbedColors, BanlistStatus, KONAMI_CARD_LINK, KONAMI_REQUEST_LOCALE, LocaleEmojis, KONAMI_QA_LINK, YGORG_CARD_LINK, Locales, LinkMarkersIndexMap } = require('./Defines')
@@ -976,7 +977,7 @@ class Card {
 	 * @param {Boolean} fromNeuron Whether this image comes from Neuron.
 	 * @param {Boolean} url Whether this image is a URL rather than raw data.
 	 */
-	async addImageData(id, img, fromNeuron, url = false) {
+	addImageData(id, img, fromNeuron, url = false) {
 		// If this is a URL, we don't need to save this at all, just set it.
 		if (url) {
 			this.imageData.set(id, img)
@@ -1008,11 +1009,16 @@ class Card {
 						artCropDims = { 'top': 67, 'left': 18, 'width': 220, 'height': 177 }
 				}
 				
-				await sharp(img).extract(artCropDims).toFile(fullArtPath)
-				.catch(err => {
-					logError(err, 'Failed to save card cropped image.')
-					throw err
+				// This is really ugly, but I realized too late this was asynchronous and it's lead to some scenarios
+				// where the card embed is generated before the image is saved.
+				// Changing this to asynchronous would change a whole lot of other functions up the tree, so
+				// I'm just keeping this synchronous.
+				let sync = true
+				sharp(img).extract(artCropDims).toFile(fullArtPath, (err, info) => {
+					if (err) logError(err, 'Failed to save card cropped image.')
+					sync = false
 				})
+				while (sync) deasync.sleep(100)
 			}
 			else
 				fs.writeFileSync(fullArtPath, img)
