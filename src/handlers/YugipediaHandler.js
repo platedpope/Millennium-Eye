@@ -49,9 +49,9 @@ async function searchYugipedia(searches, qry, dataHandlerCallback) {
 		if (responseData && Object.keys(responseData).length) 
 			if ('query' in responseData) {
 				const qryData = responseData.query
-				apiSearch.tempData = qryData
+				apiSearch.rawData = qryData
 			}
-		if (apiSearch.tempData === undefined)
+		if (apiSearch.rawData === undefined)
 			logger.info(`Yugipedia API query for term ${apiSearch.term} found nothing.`)
 	}
 

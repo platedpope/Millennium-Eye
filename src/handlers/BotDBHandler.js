@@ -71,7 +71,7 @@ function searchTermCache(searches, qry, dataHandlerCallback) {
 	let resolvedBotSearches = []
 	let termUpdates = []
 	if (cachedBotData.length) {
-		const botSearchResults = searchBotDb(cachedBotData, qry, db)
+		const botSearchResults = searchBotDb(cachedBotData, qry)
 		resolvedBotSearches = botSearchResults.resolved
 		termUpdates = botSearchResults.termUpdates
 	}
@@ -108,18 +108,18 @@ function searchBotDb(searches, qry) {
 		if (Number.isInteger(currSearch.term)) {
 			const dataRows = botDb.prepare(getDbId).all(currSearch.term)
 			if (dataRows.length) {
-				currSearch.data = dataRows
+				currSearch.rawData = dataRows
 				searchResults.resolved.push(currSearch)
 			}
 			else {
 				// DB ID didn't give anything, move to passcode.
 				const dataRows = botDb.prepare(getPasscode).all(currSearch.term)
 				if (dataRows.length) {
-					currSearch.data = currSearch.dataRows
+					currSearch.rawData = dataRows
 					// If we have a better term, update where necessary.
-					const repRow = dataRows[0]
-					if (repRow.dbId) {
-						const mergedSearch = qry.updateSearchTerm(currSearch.term, repRow.dbId)
+					const dbId = dataRows[0].dbId
+					if (dbId) {
+						const mergedSearch = qry.updateSearchTerm(currSearch.term, dbId)
 						if (!mergedSearch) {
 							searchResults.resolved.push(currSearch)
 							searchResults.termUpdates.push(currSearch)
@@ -130,12 +130,12 @@ function searchBotDb(searches, qry) {
 			
 		}
 		else {
+			// Only thing this can be is a card name.
 			const dataRows = botDb.prepare(getDataName).all(currSearch.term)
 			if (dataRows.length) {
-				currSearch.data = dataRows
+				currSearch.rawData = dataRows
 				// If we have a better term, update where necessary.
-				const repRow = dataRows[0]
-				const betterTerm = repRow.dbId ?? repRow.passcode
+				const betterTerm = dataRows[0].dbId ?? dataRows[0].passcode
 				if (betterTerm) {
 					const mergedSearch = qry.updateSearchTerm(currSearch.term, betterTerm)
 					if (!mergedSearch) {

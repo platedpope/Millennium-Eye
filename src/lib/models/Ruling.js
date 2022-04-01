@@ -18,65 +18,6 @@ class Ruling {
 	}
 
 	/**
-	 * Constructs and returns a populated Ruling object using data from the YGOrg DB.
-	 * This could be a case handled in the constructor, but I didn't want to have a constructor
-	 * that was 5 million lines long with multiple special cases.
-	 * @param {Array} dbRows Rows of data returned from the qaData YGOrg DB table. 
-	 * @param db An existing database connection to the YGOrg DB.
-	 * @returns {Ruling} The evaluated Ruling object.
-	 */
-	static fromYgorgDb(dbRows, db) {
-		const qa = new Ruling()
-		// Just use the first row as a representative for all the data that isn't locale-sensitive.
-		const repRow = dbRows[0]
-
-		// Map locale-sensitive data.
-		for (const r of dbRows) {
-			qa.title.set(r.locale, r.title)
-			qa.question.set(r.locale, r.question)
-			qa.answer.set(r.locale, r.answer)
-			qa.date.set(r.locale, r.date)
-		}
-		qa.id = repRow.qaId
-
-		// Grab any associated cards from the junction table.
-		const dbCards = db.prepare('SELECT * FROM qaCards WHERE qaId = ?').all(qa.id)
-		if (dbCards.length)
-			for (const c of dbCards)
-				qa.cards.push(c.cardId)
-
-		return qa
-	}
-
-	/**
-	 * Constructs and returns a populated Ruling object using data from the YGOrg API.
-	 * This could be a case handled in the constructor, but I didn't want to have a constructor
-	 * that was 5 million lines long with multiple special cases.
-	 * @param {Object} apiData The data returned from the YGOrg DB API request.
-	 * @returns {Ruling} The evaluated Ruling object. 
-	 */
-	static fromYgorgQaApi(apiData) {
-		const qa = new Ruling()
-
-		const qaData = apiData.qaData
-		for (const locale in qaData) {
-			// For some reason QA IDs are buried in each locale. Just use the first one we come across,
-			// the rest are always the same.
-			if (!qa.id) qa.id = qaData[locale].id
-
-			qa.title.set(locale, qaData[locale].title)
-			qa.question.set(locale, qaData[locale].question)
-			qa.answer.set(locale, qaData[locale].answer)
-			qa.date.set(locale, qaData[locale].thisSrc.date)
-		}
-
-		qa.cards = apiData.cards
-		qa.tags = apiData.tags
-
-		return qa
-	}
-
-	/**
 	 * Generic wrapper for generating any type of embed.
 	 * @param {Object} options Relevant options (type, locale, etc.) that are passed on to more specific embed functions.
 	 */
@@ -94,7 +35,6 @@ class Ruling {
 
 		return embedData
 	}
-
 
 	/**
 	 * Generate an embed containing the data for this ruling in the given locale.

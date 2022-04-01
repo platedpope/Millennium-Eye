@@ -236,7 +236,7 @@ async function searchYgorgDb(searches, qry, dataHandlerCallback) {
 			}
 
 			if (qaResponse.value.data && Object.keys(qaResponse.value.data).length) {
-				qaSearch.data = qaResponse.value.data
+				qaSearch.rawData = qaResponse.value.data
 				qaSearches.api.push(qaSearch)
 			}
 		}
@@ -254,7 +254,7 @@ async function searchYgorgDb(searches, qry, dataHandlerCallback) {
 			}
 
 			if (cardResponse.value.data && Object.keys(cardResponse.value.data).length) {
-				cardSearch.tempData = cardResponse.value.data
+				cardSearch.rawData = cardResponse.value.data
 				cardSearches.push(cardSearch)
 			}
 		}
@@ -323,7 +323,6 @@ async function searchArtworkRepo(artSearches) {
 		}
 	
 	// Process the data we received.
-	const newImageData = []
 	for (const idx in repoResponses) {
 		const origSearch = artSearches[idx]
 		if (repoResponses[idx]) {
@@ -343,7 +342,6 @@ async function searchArtworkRepo(artSearches) {
 					await origSearch.data.addImageData(artId, resp.value.data, true)
 				}
 			}
-			newImageData.push(origSearch)
 		}
 	}
 }

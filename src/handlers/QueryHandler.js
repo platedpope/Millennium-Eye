@@ -9,8 +9,8 @@ const { logger, logError } = require('lib/utils/logging')
 const { searchTermCache } = require('./BotDBHandler')
 const { searchKonamiDb } = require('./KonamiDBHandler')
 const { searchYgorgDb } = require('./YGOrgDBHandler')
-const { convertBotDataToSearchData, convertKonamiDataToSearchData, convertYgorgDataToSearchData, convertYugipediaDataToSearchData } = require('./DataHandler')
 const { searchYugipedia } = require('./YugipediaHandler')
+const { convertBotDataToSearchData, convertKonamiDataToSearchData, convertYgorgDataToSearchData, convertYugipediaDataToSearchData } = require('./DataHandler')
 
 // Used to monitor how many searches a user has queried the bot over a period of time (default 1 min).
 // If a user passes the acceptable number over the course of that minute, no future searches within that minute are allowed.
@@ -61,7 +61,6 @@ async function processQuery(qry) {
 		if (!searchesToEval.length)
 			// Everything is resolved.
 			break
-
 		// Filter out ignored search types.
 		searchesToEval = searchesToEval.filter(s => {
 			for (const type of step.ignoreSearchTypes)

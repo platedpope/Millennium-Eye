@@ -35,10 +35,10 @@ const Ruling = require('./Ruling')
 		 */
 		this.data = undefined
 
-		// This is used to store any data we found while making our way through 
-		// databases/APIs and is converted into a Card or Ruling stored in this.data.
+		// This is used to store any raw data we found while making our way through databases/APIs.
+		// It is then converted into a proper Card or Ruling, depending on what produced the data.
 		// It is voided after use.
-		this.tempData = undefined
+		this.rawData = undefined
 	}
 
 	/**

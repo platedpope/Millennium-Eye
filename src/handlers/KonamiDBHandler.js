@@ -27,7 +27,7 @@ function searchKonamiDb(searches, qry, dataHandlerCallback) {
 		if (Number.isInteger(currSearch.term)) {
 			const dataRows = getDbId.all(currSearch.term)
 			if (dataRows.length) {
-				currSearch.tempData = dataRows
+				currSearch.rawData = dataRows
 				resolvedSearches.push(currSearch)
 			}
 		}
@@ -35,9 +35,8 @@ function searchKonamiDb(searches, qry, dataHandlerCallback) {
 			// Otherwise, try to match based on the name index.
 			// Always search the EN index. If this search has any other locales, use them too.
 			const localesToSearch = ['en']
-			currSearch.localeToTypesMap.forEach((types, locale) => {
+			for (const locale of currSearch.localeToTypesMap.keys())
 				if (!localesToSearch.includes(locale)) localesToSearch.push(locale)
-			})
 
 			const bestMatch = searchNameToIdIndex(currSearch.term, localesToSearch)
 			for (const id in bestMatch) {
@@ -46,11 +45,11 @@ function searchKonamiDb(searches, qry, dataHandlerCallback) {
 
 				const dataRows = getDbId.all(id)
 				if (dataRows.length) {
-					currSearch.tempData = dataRows
-					const repRow = dataRows[0]
+					currSearch.rawData = dataRows
 					// We should have a better search term now.
-					if (repRow.id) {
-						const mergedSearch = qry.updateSearchTerm(currSearch.term, repRow.id)
+					const dbId = dataRows[0].id
+					if (dbId) {
+						const mergedSearch = qry.updateSearchTerm(currSearch.term, dbId)
 						if (!mergedSearch) {
 							resolvedSearches.push(currSearch)
 							termsToUpdate.push(currSearch)
