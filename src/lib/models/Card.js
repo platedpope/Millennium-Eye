@@ -534,14 +534,20 @@ class Card {
 				
 				// This is really ugly, but I realized too late this was asynchronous and it's lead to some scenarios
 				// where the card embed is generated before the image is saved.
-				// Changing this to asynchronous would change a whole lot of other functions up the tree, so
-				// I'm just keeping this synchronous.
-				let sync = true
-				sharp(img).extract(artCropDims).toFile(fullArtPath, (err, info) => {
-					if (err) logError(err, 'Failed to save card cropped image.')
-					sync = false
-				})
-				while (sync) deasync.sleep(100)
+				// As such, I'm changing this to synchronous for saving the FIRST art file. The rest can stay async.
+				if (id === 1) {
+					let sync = true
+					sharp(img).extract(artCropDims).toFile(fullArtPath, err => {
+						if (err) logError(err, 'Failed to save card cropped image.')
+						sync = false
+					})
+					while (sync) deasync.sleep(100)
+				}
+				else {
+					sharp(img).extract(artCropDims).toFile(fullArtPath, err => {
+						if (err) logError(err, 'Failed to save card cropped image.')
+					})
+				}
 			}
 			else
 				fs.writeFileSync(fullArtPath, img)
