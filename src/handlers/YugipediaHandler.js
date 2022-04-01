@@ -1,6 +1,6 @@
 const axios = require('axios')
 const { YUGIPEDIA_API, YUGIPEDIA_API_PARAMS, API_TIMEOUT, YUGIPEDIA_API_IMAGE_PARAMS } = require('lib/models/Defines')
-const { logError } = require('lib/utils/logging')
+const { logError, logger } = require('lib/utils/logging')
 const Search = require('lib/models/Search')
 const Query = require('lib/models/Query')
 
@@ -41,7 +41,7 @@ async function searchYugipedia(searches, qry, dataHandlerCallback) {
 		const apiSearch = searches[i]
 
 		if (apiResponse.status === 'rejected') {
-			logError(apiResponse.reason, `Yugipedia API query for term ${s.term} failed.`)
+			logError(apiResponse.reason, `Yugipedia API query for term ${apiSearch.term} failed.`)
 			continue
 		}
 
@@ -52,7 +52,7 @@ async function searchYugipedia(searches, qry, dataHandlerCallback) {
 				apiSearch.tempData = qryData
 			}
 		if (apiSearch.tempData === undefined)
-			console.log(`Yugipedia API query for term ${apiSearch.term} found nothing.`)
+			logger.info(`Yugipedia API query for term ${apiSearch.term} found nothing.`)
 	}
 
 	dataHandlerCallback(searches, qry)

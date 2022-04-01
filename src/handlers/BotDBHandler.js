@@ -17,6 +17,7 @@ const botDb = new Database(BOT_DB_PATH)
 function searchTermCache(searches, qry, dataHandlerCallback) {
 	// Track all searches in each location so we can divvy things up and query them all at once.
 	const cachedBotData = []
+	const cachedKonamiData = []
 	/* TODO
 	const cachedPriceData = []
 	*/
@@ -60,15 +61,22 @@ function searchTermCache(searches, qry, dataHandlerCallback) {
 			// Grab anything cached in the bot database.
 			if (repRow.location === 'bot')
 				cachedBotData.push(currSearch)
+			if (repRow.location === 'konami')
+				cachedKonamiData.push(currSearch)
 		}
 		// If there's nothing in the cache, nothing more to do with this search for now.
 	}
 
 	// Resolve bot data.
+	let resolvedBotSearches = []
+	let termUpdates = []
 	if (cachedBotData.length) {
 		const botSearchResults = searchBotDb(cachedBotData, qry, db)
-		dataHandlerCallback(botSearchResults.resolved, botSearchResults.termUpdates)
+		resolvedBotSearches = botSearchResults.resolved
+		termUpdates = botSearchResults.termUpdates
 	}
+	
+	dataHandlerCallback(resolvedBotSearches, termUpdates, cachedKonamiData)
 
 	/* TODO
 	if (cachedPriceData.length)
@@ -84,13 +92,14 @@ function searchTermCache(searches, qry, dataHandlerCallback) {
  * @returns {Array<Search>} The array of Searches that had data resolved.
  */
 function searchBotDb(searches, qry) {
+	const searchResults = {
+		'resolved': [],
+		'termUpdates': []
+	}
+
 	const getDbId = 'SELECT * FROM dataCache WHERE dbId = ?'
 	const getPasscode = 'SELECT * FROM dataCache WHERE passcode = ?'
 	const getDataName = 'SELECT * FROM dataCache WHERE dataName = ?'
-
-	// Keep track of the searches that we've resolved during this trip through the database.
-	const resolvedSearches = []
-	const termsToUpdate = []
 
 	// Iterate through the array backwards because we might modify it as we go.
 	for (let i = searches.length - 1; i >= 0; i--) {
@@ -100,7 +109,7 @@ function searchBotDb(searches, qry) {
 			const dataRows = botDb.prepare(getDbId).all(currSearch.term)
 			if (dataRows.length) {
 				currSearch.data = dataRows
-				resolvedSearches.push(currSearch)
+				searchResults.resolved.push(currSearch)
 			}
 			else {
 				// DB ID didn't give anything, move to passcode.
@@ -112,8 +121,8 @@ function searchBotDb(searches, qry) {
 					if (repRow.dbId) {
 						const mergedSearch = qry.updateSearchTerm(currSearch.term, repRow.dbId)
 						if (!mergedSearch) {
-							resolvedSearches.push(currSearch)
-							termsToUpdate.push(currSearch)
+							searchResults.resolved.push(currSearch)
+							searchResults.termUpdates.push(currSearch)
 						}
 					}
 				}
@@ -130,18 +139,15 @@ function searchBotDb(searches, qry) {
 				if (betterTerm) {
 					const mergedSearch = qry.updateSearchTerm(currSearch.term, betterTerm)
 					if (!mergedSearch) {
-						resolvedSearches.push(currSearch)
-						termsToUpdate.push(currSearch)
+						searchResults.resolved.push(currSearch)
+						searchResults.termUpdates.push(currSearch)
 					}
 				}
 			}
 		}
 	}
 
-	return {
-		'resolved': resolvedSearches,
-		'termUpdates': termsToUpdate
-	}
+	return searchResults
 }
 
 /**
@@ -172,8 +178,8 @@ function addToBotDb(searchData) {
 	if (!searchData.length) return
 	
 	const insertDataCache = botDb.prepare(`
-		INSERT OR REPLACE INTO dataCache(dataName, locale, dbId, passcode, cardType, property, attribute, levelRank, attack, defense, effect, pendEffect, pendScale, requirement, notInCg)
-		VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		INSERT OR REPLACE INTO dataCache(dataName, locale, dbId, passcode, cardType, property, attribute, levelRank, attack, defense, effect, pendEffect, pendScale, notInCg)
+		VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`)
 	const insertCardTypes = botDb.prepare(`
 		INSERT OR REPLACE INTO cardDataTypes(dbId, passcode, fullName, type)
@@ -196,11 +202,10 @@ function addToBotDb(searchData) {
 	let insertAllData = botDb.transaction(searches => {
 		for (const s of searches) {
 			const c = s.data
-			logError(c, `Inserting data:`)
 			c.name.forEach((n, l) => {
 				insertDataCache.run(
 					n, l, c.dbId, c.passcode, c.cardType, c.property, c.attribute, c.levelRank, c.attack,
-					c.defense, c.effect.get(l), c.pendEffect.get(l), c.pendScale, c.requirement, c.notInCg
+					c.defense, c.effect.get(l) || null, c.pendEffect.get(l) || null, c.pendScale, c.notInCg
 				)
 			})
 			// Update types and link markers as necessary too.

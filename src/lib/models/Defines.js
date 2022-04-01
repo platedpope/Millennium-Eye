@@ -24,9 +24,8 @@ module.exports = {
 		rvprop: 'content',
 		cllimit: 50,
 		piprop: 'original',
-		rvlimit: 1,
 		generator: 'search',
-		gsrlimit: 1,
+		gsrlimit: 10,
 		gsrwhat: 'title'
 		// There's also a "gsrsearch" property that is used for the actual search value.
 		// That value is filled in at runtime, per search.

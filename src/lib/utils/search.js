@@ -29,24 +29,26 @@ class CardDataFilter {
 		const requestedMatches = {}
 		if (!this.ref) return requestedMatches
 
+		// Each result will be key 'id' = [score, name].
+		// We track name so we can sort by length on scores that are the same.
 		const filteredResult = {}
 		for (const k in this.idx) {
 			const score = (+this.filter(k)) || 0
 			if (score > 0)
 				// Save this, and if it's a better score than one we got for that ID previously, overwrite.
-				for (const id of this.idx[k]) {
+				for (const id of this.idx[k]) 
 					// Ignore negative IDs, they're used for Skills on YGOrg DB.
-					if (id > 0)
+					if (id > 0) 
 						filteredResult[id] = Math.max(score, filteredResult[id] || 0)
-				}
 		}
 
 		// Now sort the results.
 		// If scores are different, descending sort by score (i.e., higher scores first).
 		// If scores are the same, ascending sort by ID (i.e., lower IDs first).
-		const sortedResult = Object.entries(filteredResult).sort(([idA, scoreA], [idB, scoreB]) => {
-			return (scoreA !== scoreB) ? (scoreB - scoreA) : (idA - idB)
-		})
+		const sortedResult = Object.entries(filteredResult).sort(
+			([idA, scoreA], [idB, scoreB]) => {
+				return (scoreA !== scoreB) ? (scoreB - scoreA) : (idA - idB)
+			})
 		// Only include the number of requested matches.
 		sortedResult.splice(returnMatches)
 		for (const r of sortedResult)
@@ -58,6 +60,7 @@ class CardDataFilter {
 	/**
 	 * Computes the distance score between this filter's reference string and
 	 * the value passed in to this function.
+	 * THIS LOGIC IS SHAMELESSLY STOLEN FROM THE YGORG DB. THANKS GALLATRON :)
 	 * @param {String} val The value to calculate distance from.
 	 * @returns {Number} The distance score.
 	 */
@@ -71,7 +74,7 @@ class CardDataFilter {
 			for (let j = 0; j < hayWords.length; j++) {
 				let score = CardDataFilter.distanceScore(this.ref[i], hayWords[j])
 				// Penalize score for terms that are in a different place.
-				if (i !== j) score += 0.5
+				if (this.ref.length > 1 && i !== j) score += 0.5
 
 				costMatrix[i][j] = score
 			}
@@ -80,6 +83,8 @@ class CardDataFilter {
 		let sum = 0
 		for (const [i, j] of CardDataFilter.mr.compute(costMatrix))
 			sum += costMatrix[i][j]
+		// Penalize matches that are longer than our search term(s), i.e. missing words.
+		sum += Math.max(hayWords.length - this.ref.length, 0)/hayWords.length
 		
 		const MAX = CardDataFilter.MAX_DISTANCE * this.ref.length
 		return (MAX - sum) / MAX

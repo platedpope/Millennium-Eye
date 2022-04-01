@@ -3,8 +3,8 @@ const Query = require('lib/models/Query')
 const Ruling = require('lib/models/Ruling')
 const Search = require('lib/models/Search')
 const { logError } = require('lib/utils/logging')
-const { botDb, addToTermCache, addToBotDb } = require('./BotDBHandler')
-const { konamiDb } = require('./KonamiDBHandler')
+const { botDb, addToTermCache, addToBotDb, searchBotDb } = require('./BotDBHandler')
+const { konamiDb, searchKonamiDb } = require('./KonamiDBHandler')
 const { ygorgDb, addToYgorgDb, searchArtworkRepo } = require('./YGOrgDBHandler')
 
 /**
@@ -13,14 +13,15 @@ const { ygorgDb, addToYgorgDb, searchArtworkRepo } = require('./YGOrgDBHandler')
  * @param {Array<Search>} resolvedSearches Searches that were resolved during this run of the bot database.
  * @param {Array<Search>} termUpdates Searches for which we found better search terms that should be updated. 
  */
-function convertBotDataToSearchData(resolvedSearches, termUpdates) {
-	for (const s of resolvedSearches) {
+function convertBotDataToSearchData(resolvedBotSearches, termUpdates, konamiSearches) {
+	for (const s of resolvedBotSearches) {
 		const convertedCard = Card.fromBotDb(s.data, botDb)
 		s.data = convertedCard
 	}
-
 	if (termUpdates.length)
 		addToTermCache(termUpdates, 'bot')
+	if (konamiSearches.length) 
+		searchKonamiDb(konamiSearches, null, convertKonamiDataToSearchData)
 }
 
 /**
@@ -118,10 +119,20 @@ function convertYugipediaDataToSearchData(searches, qry) {
 		const qryData = s.tempData
 		if ('pages' in qryData) {
 			const pageData = qryData.pages
-			// This is an array, but we only ever want the first one.
-			const page = pageData[0]
+			// There can be multiple pages here. Search for the first one with a title that we can use.
+			// Default to the first, but we'll find another if it exists.
+			let bestPage = pageData[0]
+			for (const page of pageData) {
+				// Ignore ones with "(anime)" in their name unless our search term includes it.
+				// Otherwise they tend to saturate the first results.
+				if (page.title.includes('(anime)') && !s.term.includes('anime'))
+					continue
+				
+				bestPage = page
+			}
+
 			if (!(s.data instanceof Card)) s.data = new Card()
-			Card.fromYugipediaApi(page, s.data)
+			Card.fromYugipediaApi(bestPage, s.data)
 			s.tempData = undefined
 
 			// Did we get a better search term out of this?
@@ -138,9 +149,11 @@ function convertYugipediaDataToSearchData(searches, qry) {
 		}
 	}
 
-	// Only add these to the bot database if they're not in the Konami DB (i.e., no database ID.)
-	const newSearches = resolvedSearches.filter(s => !s.data.dbId) 
-
+	// If these have a DB ID, fill in some data like prints and banlist from the Konami DB.
+	const konamiSearches = resolvedSearches.filter(s => s.data.dbId)
+	searchKonamiDb(konamiSearches, qry, convertKonamiDataToSearchData)
+	// Otherwise, add them to the bot database.
+	const newSearches = resolvedSearches.filter(s => !s.data.dbId)
 	addToBotDb(newSearches)
 }
 

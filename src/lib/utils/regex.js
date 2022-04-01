@@ -38,7 +38,7 @@ function escRegex(string) {
 function findYugipediaProperty(prop, data, toInt = false) {
 	let retval = null
 
-	const propRegex = new RegExp(`^\\| ${prop}\\s*= (.*)$`, 'm')
+	const propRegex = new RegExp(`\\| ${prop}\\s*= (.*?)\\n(?:\\||})`, 's')
 	let match = data.match(propRegex)
 	if (match && match[1]) {
 		match = match[1]

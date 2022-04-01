@@ -251,6 +251,7 @@ class Query {
 						'type': t,
 						'locale': searchLocale,
 						'official': this.official,
+						'rulings': this.rulings,
 						'random': false
 					})
 					

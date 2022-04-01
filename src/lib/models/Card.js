@@ -40,6 +40,14 @@ class Card {
 		this.imageData = new Map()		// Image(s) associated with the card. Each key is an ID, with value a link to that image (either local file or on the web).
 		this.priceData = new Map()		// Any price data for this card. Valid keys are 'us' or 'eu', with values being the price data in that region.
 		this.faqData = new Map()		// Any FAQ data for this card. Each key is a locale, with value being the FAQ data for that locale.
+
+		// Data unique to Rush Duel cards.
+		// NOTE: These are not filled out or used yet. I can't be bothered.
+		this.rushDuel = null			// Whether this card is a Rush Duel card.
+		this.maximumAttack = null		// ATK of Maximum cards when Maximum Summoned.
+		this.effectType = null			// Effect type, e.g., Continuous, Multi-Choice, etc.
+		this.summCond = new Map()		// Summoning condition. Each key is a locale, with value as the summoning condition in that locale.
+		this.requirement = new Map()	// Requirement. Each key is a locale, with value as the Requirement in that locale.
 	}
 
 	/**
@@ -308,6 +316,11 @@ class Card {
 				else if (c.title === 'Category:TCG cards') {
 					hasTcgCategory = true
 				}
+				/* Not monitoring Rush Duel data yet.
+				else if (c.title === 'Category:Rush Duel cards') {
+					card.rushDuel = true
+				}
+				*/
 			}
 
 			if (!hasOcgCategory)
@@ -332,12 +345,26 @@ class Card {
 			for (const loc in Locales) {
 				if (card.name.get(loc)) continue
 				if (loc === 'en') continue
-				// Skip parsing Japanese name, just looking at that thing's wikitext gives me a headache.
-				if (loc == 'ja') continue
 				
 				let locName = findYugipediaProperty(`${loc}_name`, revData)
-				if (locName)
-					card.name.set(loc, locMatch)
+				if (locName) {
+					// Japanese name needs additional parsing, special case it.
+					// It's a goddamn mess due to furigana, which Yugipedia represents with
+					// "{{Ruby|<base>|<furigana>}}".
+					if (loc === 'ja') {
+						const jaRegex = /(?:{{Ruby\|(.+?)\|.*?}}|([^{}]+))/gm
+						const matches = [...locName.matchAll(jaRegex)]
+						// Taking the capture groups in order will give us the base characters we need, in order.
+						let jaName = ''
+						for (const m of matches) {
+							const goodMatch = m[1] ?? m[2]
+							jaName += goodMatch
+						}
+						locName = jaName
+					}
+
+					card.name.set(loc, locName)
+				}
 			}
 			// Database ID
 			if (!card.notInCg && !card.dbId) {
@@ -346,24 +373,6 @@ class Card {
 			// Passcode
 			if (!card.passcode) {
 				card.passcode = findYugipediaProperty('password', revData, true)
-			}
-			// Card Type (only appears for Spells/Traps)
-			if (!card.cardType) {
-				let cardType = findYugipediaProperty('card_type', revData)
-				if (cardType) {
-					card.cardType = cardType.toLowerCase()
-					// Property (also only appears for Spells/Traps)
-					let property = findYugipediaProperty('property', revData)
-					if (property) {
-						property = property.toLowerCase()
-						// Yugipedia stores Quick-Play spell property as "Quick-Play", but the bot uses "quickplay".
-						if (property === 'quick-play')
-							property = 'quickplay'
-						card.property = property
-					}
-				}
-				// Assume everything else is a monster.
-				else card.cardType === 'monster'
 			}
 			// Effect(s)
 			// EN effect is "lore", while the others are "<locale>_lore".
@@ -380,6 +389,25 @@ class Card {
 				let locEffect = findYugipediaProperty(`${loc}_lore`, revData)
 				if (locEffect)
 					card.effect.set(loc, locEffect)
+			}
+			// Card Type (only appears for Spells/Traps)
+			if (!card.cardType) {
+				let cardType = findYugipediaProperty('card_type', revData)
+				if (cardType) {
+					card.cardType = cardType.toLowerCase()
+					// Property (also only appears for Spells/Traps)
+					let property = findYugipediaProperty('property', revData)
+					if (property) {
+						property = property.toLowerCase()
+						// Yugipedia stores Quick-Play spell property as "Quick-Play", but the bot uses "quickplay".
+						if (property === 'quick-play')
+							property = 'quickplay'
+						card.property = property
+					}
+				}
+				// Assuming everything else with an effect is a monster.
+				else if (card.effect.size)
+					card.cardType = 'monster'
 			}
 			// Now that we know whether something is a monster, check monster-specific fields.
 			if (card.cardType === 'monster') {
@@ -399,10 +427,10 @@ class Card {
 				}
 				// Level, Rank, Link Markers
 				if (!card.levelRank || !card.linkMarkers.length) {
-					let lookup = findYugipediaProperty('level', revData)
+					let lookup = findYugipediaProperty('level', revData, true)
 					if (lookup) card.levelRank = lookup
 					else {
-						lookup = findYugipediaProperty('rank', revData)
+						lookup = findYugipediaProperty('rank', revData, true)
 						if (lookup) card.levelRank = lookup
 						else {
 							lookup = findYugipediaProperty('link_arrows', revData)
@@ -426,7 +454,7 @@ class Card {
 				// Pendulum Effect(s)
 				// EN effect is "pendulum_effect", while the others are "<locale>_pendulum_effect".
 				if (!card.pendEffect.get('en')) {
-					let enEffect = findYugipediaProperty('pendulum_effect')
+					let enEffect = findYugipediaProperty('pendulum_effect', revData)
 					if (enEffect)
 						card.pendEffect.set('en', enEffect)
 				}
@@ -441,10 +469,52 @@ class Card {
 				}
 				// Pendulum Scale
 				if (!card.pendScale) {
-					card.pendScale = findYugipediaProperty('pendulum_scale')
+					card.pendScale = findYugipediaProperty('pendulum_scale', revData, true)
 				}
 			}
+			// Fill out Rush Duel fields if necessary.
+			/* Not doing this yet. I can't be bothered.
+			if (card.rushDuel) {
+				// Requirement
+				// EN effect is "requirement", while the others are "<locale>_requirement".
+				if (!card.requirement.get('en')) {
+					let enRequirement = findYugipediaProperty('requirement', revData)
+					if (enRequirement)
+						card.requirement.set('en', enRequirement)
+				}
+				// Go through the other locales.
+				for (const loc in Locales) {
+					if (card.requirement.get(loc)) continue
+					if (loc === 'en') continue
 
+					let locRequirement = findYugipediaProperty(`${loc}_requirement`, revData)
+					if (locRequirement)
+						card.requirement.set(loc, locRequirement)
+				}
+				// Summoning Condition
+				// EN is "summonong_condition", while the others are "<locale>_summoning_condition".
+				if (!card.summCond.get('en')) {
+					let enSummCond = findYugipediaProperty('summoning_condition', revData)
+					if (enSummCond)
+						card.summCond.set('en', enSummCond)
+				}
+				// Go through the other locales.
+				for (const loc in Locales) {
+					if (card.summCond.get(loc)) continue
+					if (loc === 'en') continue
+
+					let locSummCond = findYugipediaProperty(`${loc}_summoning_condition`, revData)
+					if (locSummCond)
+						card.summCond.set(loc, locSummCond)
+				}
+				// TODO: Effect Type
+				// Maximum ATK
+				if (!card.maximumAttack) {
+					card.maximumAttack = findYugipediaProperty(`maximum_atk`, revData, true)
+				}
+			}
+			*/
+			
 			// We could find print dates while we're here, but I really, REALLY don't want to implement that right now.
 			// That's a problem for Future Me.
 		}
@@ -469,9 +539,13 @@ class Card {
 			var locale = options.locale
 		if ('official' in options)
 			var official = options.official
+		if ('rulings' in options)
+			var rulings = options.rulings
+		else
+			rulings = type === 'r'
 
-		if (type === 'i' || type === 'r') {
-			embedData = this.generateInfoEmbed(locale, type === 'r' ? true : false, official)
+		if (type === 'i' || type === 'r' || type === 'p') {
+			embedData = this.generateInfoEmbed(locale, rulings, official)
 		}
 		else if (type === 'a') {
 			embedData = this.generateArtEmbed(locale, official)
@@ -652,39 +726,47 @@ class Card {
 		// Set the description field to be the first and last print dates in this locale.
 		let introText = `${LocaleEmojis[locale]} ${locale.toUpperCase()} print data for this card:`
 		const sortedDates = this.sortPrintDates(locale)
-		const firstPrint = sortedDates[sortedDates.length-1]
-		const lastPrint = sortedDates[0]
 		const today = new Date()
+		if (sortedDates.length) {
+			const firstPrint = sortedDates[sortedDates.length-1]
+			const lastPrint = sortedDates[0]
 
-		let firstText = `First (oldest) print: **${firstPrint}**`
-		if (new Date(firstPrint) > today) firstText += ' *(not yet released)*'
-		let lastText = `Last (newest) print: **${lastPrint}**`
-		if (new Date(lastPrint) > today) lastText += ` *(not yet released)*`
+			var firstText = `First (oldest) print: **${firstPrint}**`
+			if (new Date(firstPrint) > today) firstText += ' *(not yet released)*'
+			var lastText = `Last (newest) print: **${lastPrint}**`
+			if (new Date(lastPrint) > today) lastText += ` *(not yet released)*`
+		}
+		else {
+			firstText = `First (oldest) print: **Not yet released**`
+			lastText = `Second (newest) print: **Not yet released**`
+		}
 
 		finalEmbed.setDescription(`${introText}\n● ${firstText}\n● ${lastText}`)
 
-		// Now add a field(s) for more detailed print data. Print dates *should* already be in order in the map.
-		// Add "lines" to our final product per print date, and then join them into a single string for making fields at the end.
-		const printLines = []
-		let currPrint = 1
 		let totalPrints = this.printData.get(locale).size
-		this.printData.get(locale).forEach((date, code) => {
-			printLines.push(`**${currPrint}.** ${code} -> ${date}`)
-			currPrint++
-		})
-		// If we have more than 5 prints, split based on commas rather than newlines so this embed isn't 5 million lines long.
-		const breakupDelimiter = totalPrints <= 5 ? '\n' : '|'
-		if (printLines.length > 5) 
-			var fullPrintData = printLines.join(' | ')
-		else fullPrintData = printLines.join('\n')
+		if (totalPrints > 0) {
+			// Now add a field(s) for more detailed print data. Print dates *should* already be in order in the map.
+			// Add "lines" to our final product per print date, and then join them into a single string for making fields at the end.
+			const printLines = []
+			let currPrint = 1
+			this.printData.get(locale).forEach((date, code) => {
+				printLines.push(`**${currPrint}.** ${code} -> ${date}`)
+				currPrint++
+			})
+			// If we have more than 5 prints, split based on commas rather than newlines so this embed isn't 5 million lines long.
+			const breakupDelimiter = totalPrints <= 5 ? '\n' : '|'
+			if (printLines.length > 5) 
+				var fullPrintData = printLines.join(' | ')
+			else fullPrintData = printLines.join('\n')
 
-		// Break things up if necessary, then add all the fields.
-		const fields = breakUpDiscordMessage(fullPrintData, 1024, breakupDelimiter)
-		for (let i = 0; i < fields.length; i++) {
-			finalEmbed.addField(
-				i === 0 ? `__Full Print Data (${totalPrints} ${totalPrints > 1 ? 'prints' : 'print'})__` : '__cont.__',
-				fields[i], false
-			)
+			// Break things up if necessary, then add all the fields.
+			const fields = breakUpDiscordMessage(fullPrintData, 1024, breakupDelimiter)
+			for (let i = 0; i < fields.length; i++) {
+				finalEmbed.addField(
+					i === 0 ? `__Full Print Data (${totalPrints} ${totalPrints > 1 ? 'prints' : 'print'})__` : '__cont.__',
+					fields[i], false
+				)
+			}
 		}
 
 		embedData.embed = finalEmbed
@@ -894,7 +976,7 @@ class Card {
 	 * @param {Boolean} fromNeuron Whether this image comes from Neuron.
 	 * @param {Boolean} url Whether this image is a URL rather than raw data.
 	 */
-	addImageData(id, img, fromNeuron, url = false) {
+	async addImageData(id, img, fromNeuron, url = false) {
 		// If this is a URL, we don't need to save this at all, just set it.
 		if (url) {
 			this.imageData.set(id, img)
@@ -926,7 +1008,7 @@ class Card {
 						artCropDims = { 'top': 67, 'left': 18, 'width': 220, 'height': 177 }
 				}
 				
-				sharp(img).extract(artCropDims).toFile(fullArtPath)
+				await sharp(img).extract(artCropDims).toFile(fullArtPath)
 				.catch(err => {
 					logError(err, 'Failed to save card cropped image.')
 					throw err
