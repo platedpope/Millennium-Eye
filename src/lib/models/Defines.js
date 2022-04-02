@@ -42,6 +42,7 @@ module.exports = {
 	YGORG_ARTWORK_API: `https://artworks.ygorganization.com`,
 	YGORG_NAME_ID_INDEX: 'https://db.ygorganization.com/data/idx/card/name',
 	YGORG_PROPERTY_METADATA: 'https://db.ygorganization.com/data/meta/mprop',
+	YUGIPEDIA_WIKI: `https://yugipedia.com/wiki`,
 	YUGIPEDIA_API: 'https://yugipedia.com/api.php',
 	// Bot data type definitions for easy reference.
 	QueryTypes: {

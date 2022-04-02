@@ -5,7 +5,7 @@ const sanitize = require('sanitize-filename')
 const deasync = require('deasync')
 const { MessageEmbed } = require('discord.js')
 
-const { EmbedIcons, EmbedColors, BanlistStatus, KONAMI_CARD_LINK, KONAMI_REQUEST_LOCALE, LocaleEmojis, KONAMI_QA_LINK, YGORG_CARD_LINK } = require('./Defines')
+const { EmbedIcons, EmbedColors, BanlistStatus, KONAMI_CARD_LINK, KONAMI_REQUEST_LOCALE, LocaleEmojis, KONAMI_QA_LINK, YGORG_CARD_LINK, YUGIPEDIA_WIKI } = require('./Defines')
 const { searchPropertyToLocaleIndex } = require('handlers/YGOrgDBHandler')
 const { logError, breakUpDiscordMessage } = require('lib/utils/logging')
 
@@ -347,25 +347,29 @@ class Card {
 	 * @returns {String} The generated URL.
 	 */
 	getEmbedTitleLink(locale, official) {
-		// TODO: We don't support non-database queries yet, but this will have to be changed when we do.
-		if (!this.dbId) return
+		let link = ''
 
-		let localeReleased = this.isReleased(locale)
-		const jaReleased = this.isReleased('ja')
-		if (!localeReleased) {
-			// If it's not released in this locale, look at EN.
-			localeReleased = this.isReleased('en')
-			if (localeReleased) locale = 'en'
-			// If not in EN, it's gotta be in JP. Only do this if official mode isn't being used.
-			else if (!official) {
-				localeReleased = jaReleased
-				locale = 'ja'
+		// If this has no database ID we know of, make it a Yugipedia link.
+		if (!this.dbId) {
+			const nameUrl = this.getNameYugipediaUrl()
+			link = `${YUGIPEDIA_WIKI}/${nameUrl}`
+		}
+		else {
+			let localeReleased = this.isReleased(locale)
+			const jaReleased = this.isReleased('ja')
+			if (!localeReleased) {
+				// If it's not released in this locale, look at EN.
+				localeReleased = this.isReleased('en')
+				if (localeReleased) locale = 'en'
+				// If not in EN, it's gotta be in JP. Only do this if official mode isn't being used.
+				else if (!official) {
+					localeReleased = jaReleased
+					locale = 'ja'
+				}
 			}
 		}
 
-		return `${KONAMI_CARD_LINK}${this.dbId}${KONAMI_REQUEST_LOCALE}${locale}`
-
-		// TODO: Generate Yugipedia page links for anything that's not on the database.
+		return link
 	}
 
 	/**
@@ -423,21 +427,21 @@ class Card {
 				locale = 'ja'
 			}
 		}
+		const nameLink = this.getNameYugipediaUrl()
 
 		let fieldText = ''
 
-		// Database links.
-		const cardKonamiInfoLink = `${KONAMI_CARD_LINK}${this.dbId}${KONAMI_REQUEST_LOCALE}${locale}`
-		const cardKonamiRulingsLink = `${KONAMI_QA_LINK}${this.dbId}${KONAMI_REQUEST_LOCALE}ja`
-		const cardYgorgCardLink = `${YGORG_CARD_LINK}${this.dbId}:en`
-		if (official)
-			// Official mode only gives card database links to the given locale, or EN if that locale is unreleased.
-			fieldText += `Konami: [card](${cardKonamiInfoLink}) (${LocaleEmojis[locale]})`
-		else {
-			fieldText += `Konami: [card](${cardKonamiInfoLink}) (${LocaleEmojis[locale]})`
-			if (jaReleased) fieldText += ` **·** [faq](${cardKonamiRulingsLink}) (${LocaleEmojis.ja})`
-			fieldText += ` | YGOrg: [card/rulings](${cardYgorgCardLink}) (${LocaleEmojis['en']})`
-			// TODO: Include Yugipedia links in this?
+		// Information links. Don't print these for official mode, the card name is already a link to the Konami DB in that case.
+		if (!official) {
+			/*
+			const cardKonamiInfoLink = `${KONAMI_CARD_LINK}${this.dbId}${KONAMI_REQUEST_LOCALE}${locale}`
+			const cardKonamiRulingsLink = `${KONAMI_QA_LINK}${this.dbId}${KONAMI_REQUEST_LOCALE}ja`
+			*/
+			const cardYgorgCardLink = `${YGORG_CARD_LINK}${this.dbId}:en`
+			const cardYugipediaCardLink = `${YUGIPEDIA_WIKI}/${nameLink}`
+
+			// const konamiLinks = `${LocaleEmojis[locale]} [card](${cardKonamiInfoLink})` + jaReleased ? `, ${LocaleEmojis.ja} [faq/qa](${cardKonamiRulingsLink})` : ''
+			fieldText += `YGOrg (${LocaleEmojis.en} [card/faq/qa](${cardYgorgCardLink})) **·** Yugipedia (${LocaleEmojis.en} [card](${cardYugipediaCardLink}))`
 		}
 
 		// Most recent print date.
@@ -607,6 +611,15 @@ class Card {
 		}
 
 		return sortedPrintDates
+	}
+
+	/**
+	 * Converts this card's name in the given locale to something that can be used to construct a Yugipedia URL.
+	 * @param {String} locale The locale to use when converting the name. 
+	 * @returns {String} The name in the given locale converted to a URL-friendly format. 
+	 */
+	getNameYugipediaUrl(locale = 'en') {
+		return this.name.get(locale).replace(/\s/g, '_').replace(/\?/g, '%3F')
 	}
 
 	/**
