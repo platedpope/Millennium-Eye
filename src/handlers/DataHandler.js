@@ -257,13 +257,13 @@ async function convertYgorgDataToSearchData(qaSearches, cardSearches = []) {
 		s.data = new Ruling()
 		populateRulingFromYgorgDb(s.rawData, s.data)
 		s.rawData = undefined
-		await populateRulingAssociatedCardsData(convertedRuling, [...s.localeToTypesMap.keys()])
+		await populateRulingAssociatedCardsData(s.data, [...s.localeToTypesMap.keys()])
 	}
 	for (const s of qaSearches.api) {
 		s.data = new Ruling()
 		populatedRulingFromYgorgApi(s.rawData, s.data)
 		s.rawData = undefined
-		await populateRulingAssociatedCardsData(convertedRuling, [...s.localeToTypesMap.keys()])
+		await populateRulingAssociatedCardsData(s.data, [...s.localeToTypesMap.keys()])
 	}
 	// Process the cards we got from the API.
 	const cardsWithoutArt = []

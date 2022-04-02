@@ -73,8 +73,7 @@ class Ruling {
 			replacedTitle = truncTitle[0]
 		}
 		// Maximum field length is 1024 characters. Break up answers before they're too long.
-		// Break on punctuation for maximum reliability.
-		replacedAnswer = breakUpDiscordMessage(replacedAnswer, 1024, '.')
+		replacedAnswer = breakUpDiscordMessage(replacedAnswer, 1024, '\n')
 
 		const finalEmbed = new MessageEmbed()
 

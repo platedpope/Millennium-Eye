@@ -44,6 +44,8 @@ module.exports = {
 	YGORG_PROPERTY_METADATA: 'https://db.ygorganization.com/data/meta/mprop',
 	YUGIPEDIA_WIKI: `https://yugipedia.com/wiki`,
 	YUGIPEDIA_API: 'https://yugipedia.com/api.php',
+	TCGPLAYER_API: 'https://api.tcgplayer.com',
+	TCGPLAYER_API_VERSION: 'v1.39.0',
 	// Bot data type definitions for easy reference.
 	QueryTypes: {
 		'i': 'info',

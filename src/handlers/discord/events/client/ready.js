@@ -6,6 +6,7 @@ const Event = require('lib/models/Event')
 const { clearBotCache } = require('handlers/BotDBHandler')
 const { cacheNameToIdIndex, cacheManifestRevision, cachePropertyMetadata } = require('handlers/YGOrgDBHandler')
 const { updateKonamiDb } = require('handlers/KonamiDBHandler')
+const { cacheSearchManifest } = require('handlers/TCGPlayerHandler')
 
 module.exports = new Event({
 	event: 'ready', 
@@ -72,13 +73,15 @@ module.exports = new Event({
 			await updateKonamiDb()
 			setInterval(updateKonamiDb, 24 * 60 * 60 * 1000)
 		}
-
+		// YGOrg manifest.
 		cacheManifestRevision()
 		// YGOrg name->ID search index. Set this up on launch, but doesn't need a periodic, 
 		// will be refreshed as necessary during runtime.
 		await cacheNameToIdIndex()
 		// YGOrg locale property metadata. Set this up on launch, but it's static, don't need to update periodically.
 		await cachePropertyMetadata()
+		// TCGPlayer search manifest.
+		await cacheSearchManifest()
 
 		// Set bot presence.
 		bot.user.setActivity('/help for info!', { type: 'WATCHING' })

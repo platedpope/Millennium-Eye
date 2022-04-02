@@ -73,10 +73,11 @@ function generateError(logMessage, channelResponse) {
 /**
  * Helper function for logging a JS object to Discord.
  * @param {Object} obj The object to be logged.
+ * @param {Number} depth The depth to use for inspect. 
  */
-function prepareDiscordLogJsMessage(obj) {
+function prepareDiscordLogJsMessage(obj, depth = 4) {
 	const formattedMsgs = []
-	const objString = inspect(obj, { depth: null })
+	const objString = inspect(obj, { depth: depth })
 	
 	const objMsgs = breakUpDiscordMessage(objString)
 	for (const m of objMsgs)
