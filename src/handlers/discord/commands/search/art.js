@@ -2,7 +2,7 @@ const Command = require('lib/models/Command')
 const { CommandTypes } = require('lib/models/Defines')
 const Query = require('lib/models/Query')
 const Search = require('lib/models/Search')
-const { processSearches, sendReply, processQuery } = require('handlers/QueryHandler')
+const { sendReply, processQuery } = require('handlers/QueryHandler')
 const { MessageActionRow, MessageSelectMenu } = require('discord.js')
 
 /**

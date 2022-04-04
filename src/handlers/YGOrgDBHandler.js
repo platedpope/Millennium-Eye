@@ -1,11 +1,11 @@
 const axios = require('axios')
 const Database = require('better-sqlite3')
 
-const { evictFromBotCache } = require('handlers/BotDBHandler')
 const { logError, logger } = require('lib/utils/logging')
 const { CardDataFilter } = require('lib/utils/search')
 const Search = require('lib/models/Search')
 const Query = require('lib/models/Query')
+const { evictFromBotCache } = require('handlers/BotDBHandler')
 const { Locales, YGORG_NAME_ID_INDEX, YGORG_PROPERTY_METADATA, YGORG_DB_PATH, YGORG_MANIFEST, YGORG_QA_DATA_API, API_TIMEOUT, YGORG_CARD_DATA_API, YGORG_ARTWORK_API } = require('lib/models/Defines')
 
 const ygorgDb = new Database(YGORG_DB_PATH)
@@ -73,7 +73,6 @@ async function processManifest(newRevision) {
 					})
 					delMany(evictIds)
 					// Delete any bot-specific data.
-					// This is here to avoid circular dependency. Not pretty...
 					evictFromBotCache(evictIds)
 
 					logger.info(`Evicted all FAQ and cached bot data associated with database IDs: ${evictIds.join(', ')}`)
@@ -214,13 +213,13 @@ async function searchYgorgDb(searches, qry, dataHandlerCallback) {
 		var qaApiData = await Promise.allSettled(qaRequests)
 		const goodReq = qaApiData.find(r => r.status === 'fulfilled')
 		if (goodReq)
-			processManifest(goodReq.value.headers['x-cache-revision'])
+			await processManifest(goodReq.value.headers['x-cache-revision'])
 	}
 	if (cardRequests.length) {
 		var cardApiData = await Promise.allSettled(cardRequests)
 		const goodReq = cardApiData.find(r => r.status === 'fulfilled')
 		if (goodReq)
-			processManifest(goodReq.value.headers['x-cache-revision'])
+			await processManifest(goodReq.value.headers['x-cache-revision'])
 	}
 	
 	if (qaApiData) {
@@ -347,6 +346,145 @@ async function searchArtworkRepo(artSearches) {
 }
 
 /**
+ * Populates a Ruling's data with data from the local YGOrg DB.
+ * @param {Array} dbRows Rows of data returned from the qaData YGOrg DB table.
+ * @param {Ruling} ruling The ruling to populate with data.
+ */
+ function populateRulingFromYgorgDb(dbRows, ruling) {
+	// Just use the first row as a representative for all the data that isn't locale-sensitive.
+	const repRow = dbRows[0]
+
+	// Map locale-sensitive data.
+	for (const r of dbRows) {
+		ruling.title.set(r.locale, r.title)
+		ruling.question.set(r.locale, r.question)
+		ruling.answer.set(r.locale, r.answer)
+		ruling.date.set(r.locale, r.date)
+	}
+	ruling.id = repRow.qaId
+
+	// Grab any associated cards from the junction table.
+	const dbCards = ygorgDb.prepare('SELECT * FROM qaCards WHERE qaId = ?').all(ruling.id)
+	if (dbCards.length)
+		for (const c of dbCards)
+			ruling.cards.push(c.cardId)
+}
+
+/**
+ * Populates a Ruling's data with data from the YGOrg DB API.
+ * @param {Object} apiData The API data returned from the YGOrg API for this ruling ID.
+ * @param {Ruling} ruling The ruling to populate with data.
+ */
+function populatedRulingFromYgorgApi(apiData, ruling) {
+	const qaData = apiData.qaData
+	for (const locale in qaData) {
+		// For some reason QA IDs are buried in each locale. Just use the first one we come across,
+		// the rest are always the same.
+		if (!ruling.id) ruling.id = qaData[locale].id
+
+		ruling.title.set(locale, qaData[locale].title)
+		ruling.question.set(locale, qaData[locale].question)
+		ruling.answer.set(locale, qaData[locale].answer)
+		ruling.date.set(locale, qaData[locale].thisSrc.date)
+	}
+
+	ruling.cards = apiData.cards
+	ruling.tags = apiData.tags
+}
+
+/**
+ * Populates a Ruling's associated cards (stored as database IDs) with actual Card data.
+ * @param {Ruling} ruling The ruling with cards to convert.
+ * @param {Array<String>} locales The locales that the ruling was queried in, so we can attempt to match these for the cards as well.
+ */
+async function populateRulingAssociatedCardsData(ruling, locales) {
+	// This is in here to avoid a circular dependency. Not ideal, but easy.
+	const { processSearches } = require('handlers/QueryHandler')
+	
+	const cardSearches = []
+	for (const cid of ruling.cards) {
+		const newSearch = new Search(cid)
+		for (const l of locales)
+			// Type doesn't matter, but we need to track the important locales for this search.
+			newSearch.addTypeToLocale('i', l)
+		cardSearches.push(newSearch)
+	}
+
+	await processSearches(cardSearches)
+
+	const convertedCardData = []
+	for (const s of cardSearches) 
+		convertedCardData.push(s.data)
+	
+	ruling.cards = convertedCardData
+}
+
+/**
+ * Populates a Card's data with data from the YGOrg DB API.
+ * This function will not overwrite any data that is already present in the Card that is passed.
+ * @param apiData The response from a card data API query on the YGOrg DB. 
+ * @param {Card} card The card to set data for. 
+ */
+ function populateCardFromYgorgApi(apiData, card) {
+	// Database ID is at the uppermost level.
+	card.dbId = apiData.cardId
+	// Descend into card data to populate all the fields we can.
+	const apiCardData = apiData.cardData
+	if (apiCardData) {
+		for (const locale in apiCardData) {
+			const localeCardData = apiCardData[locale]
+			// Map the locale-specific values.
+			if (!card.name.has(locale)) card.name.set(locale, localeCardData.name)
+			if (!card.effect.has(locale)) card.effect.set(locale, localeCardData.effectText)
+			if ('pendulumEffectText' in localeCardData)
+				if (!card.pendEffect.has(locale)) card.pendEffect.set(locale, localeCardData.pendulumEffectText)
+			// Parse print dates too.
+			if ('prints' in localeCardData) {
+				const apiPrints = localeCardData.prints
+				if (!card.printData.has(locale)) card.printData.set(locale, new Map())
+				for (const p of apiPrints)
+					card.printData.get(locale).set(p.code, p.date)
+			}
+			// Some non-locale-specific values are repeated per locale. Just use them the first time we see them.
+			if (!card.cardType) card.cardType = localeCardData.cardType
+			// Parse monster-specific stats.
+			if (card.cardType === 'monster') {
+				if (!card.attribute && 'attribute' in localeCardData) card.property = localeCardData.attribute
+				if (!card.levelRank && !card.linkMarkers.length) {
+					if ('level' in localeCardData) card.levelRank = localeCardData.level
+					else if ('rank' in localeCardData) card.levelRank = localeCardData.rank
+					else if ('linkArrows' in localeCardData) {
+						const arrows = localeCardData.linkArrows
+						for (let i = 0; i < arrows.length; i++)
+							card.linkMarkers.push(parseInt(arrows.charAt(i), 10))	
+					}
+				}
+				if (!card.types.length && 'properties' in localeCardData)
+					for (const prop of localeCardData.properties)
+						card.types.push(searchPropertyArray(prop, 'en'))
+				if (!card.attack && 'atk' in localeCardData) card.attack = localeCardData.atk
+				if (!card.defense && 'def' in localeCardData) card.defense = localeCardData.def
+				if (!card.pendScale && 'pendulumScale' in localeCardData) card.pendScale = localeCardData.pendulumScale
+			}
+			// Parse Spell/Trap specific stats.
+			else {
+				if (!card.property && 'property' in localeCardData) card.property = localeCardData.property
+			}
+			
+		}
+	}
+	// YGOrg API also returns FAQ data for card queries, may as well populate that while we're here too.
+	const apiFaqData = apiData.faqData
+	if (apiFaqData) {
+		for (const entry of apiFaqData.entries)
+			for (const locale in entry) {
+				if (!card.faqData.has(locale)) card.faqData.set(locale, [])
+				card.faqData.get(locale).push(entry[locale])
+			}
+	}
+}
+
+/**
  * Add (or replace) the given values in the YGOrg DB.
  * @param {Array<Search>} qas Search data containing new QAs to add.
  * @param {Array<Search>} faqCards Search data containing new FAQ data to add.
@@ -411,7 +549,7 @@ async function cacheNameToIdIndex(locales = Object.keys(Locales)) {
 	// Look at the manifest revision first so we evict anything before repopulating.
 	const goodReq = indices.find(i => i.status === 'fulfilled')
 	if (goodReq)
-		processManifest(goodReq.value.headers['x-cache-revision'])
+		await processManifest(goodReq.value.headers['x-cache-revision'])
 
 	for (let i = 0; i < indices.length; i++) {
 		const index = indices[i]
@@ -592,5 +730,7 @@ function searchPropertyArray(index, locale) {
 }
 
 module.exports = {
-	ygorgDb, cacheManifestRevision, searchYgorgDb, searchArtworkRepo, addToYgorgDb, cacheNameToIdIndex, searchNameToIdIndex, cachePropertyMetadata, searchPropertyToLocaleIndex, searchPropertyArray
+	cacheManifestRevision, searchYgorgDb, searchArtworkRepo, addToYgorgDb, 
+	populateCardFromYgorgApi, populateRulingFromYgorgDb, populatedRulingFromYgorgApi, populateRulingAssociatedCardsData,
+	cacheNameToIdIndex, searchNameToIdIndex, cachePropertyMetadata, searchPropertyToLocaleIndex, searchPropertyArray
 }

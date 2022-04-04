@@ -5,9 +5,10 @@ const sanitize = require('sanitize-filename')
 const deasync = require('deasync')
 const { MessageEmbed } = require('discord.js')
 
-const { EmbedIcons, EmbedColors, BanlistStatus, KONAMI_CARD_LINK, KONAMI_REQUEST_LOCALE, LocaleEmojis, KONAMI_QA_LINK, YGORG_CARD_LINK, YUGIPEDIA_WIKI } = require('./Defines')
+const { EmbedIcons, EmbedColors, BanlistStatus, LocaleEmojis, YGORG_CARD_LINK, YUGIPEDIA_WIKI } = require('./Defines')
 const { searchPropertyToLocaleIndex } = require('handlers/YGOrgDBHandler')
 const { logError, breakUpDiscordMessage } = require('lib/utils/logging')
+const { TCGPlayerProduct } = require('./TCGPlayer')
 
 class Card {
 	/**
@@ -38,7 +39,10 @@ class Card {
 		this.notInCg = null				// True if the card isn't from the TCG or OCG; from anime/manga/game instead.
 		this.printData = new Map()		// Data about when this card was printed and in which sets. Each key is a locale, with value a further map of print code -> print date.
 		this.imageData = new Map()		// Image(s) associated with the card. Each key is an ID, with value a link to that image (either local file or on the web).
-		this.priceData = new Map()		// Any price data for this card. Valid keys are 'us' or 'eu', with values being the price data in that region.
+		/**
+		 * @type {Array<TCGPlayerProduct>}
+		 */
+		this.priceData = []				// The TCGPlayer product data associated with this card, which contain price info.
 		this.faqData = new Map()		// Any FAQ data for this card. Each key is a locale, with value being the FAQ data for that locale.
 
 		// Data unique to Rush Duel cards.

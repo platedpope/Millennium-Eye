@@ -3,10 +3,10 @@ const { logger, logError } = require ('lib/utils/logging')
 const { updateCommandPermissions } = require('lib/utils/permissions')
 const { MillenniumEyeBot } = require('lib/models/MillenniumEyeBot')
 const Event = require('lib/models/Event')
-const { clearBotCache } = require('handlers/BotDBHandler')
+const { clearBotCache, addTcgplayerDataToDb, loadCachedPriceData } = require('handlers/BotDBHandler')
 const { cacheNameToIdIndex, cacheManifestRevision, cachePropertyMetadata } = require('handlers/YGOrgDBHandler')
 const { updateKonamiDb } = require('handlers/KonamiDBHandler')
-const { cacheSearchManifest } = require('handlers/TCGPlayerHandler')
+const { cacheSetInfo } = require('handlers/TCGPlayerHandler')
 
 module.exports = new Event({
 	event: 'ready', 
@@ -68,6 +68,8 @@ module.exports = new Event({
 		// Bot cache clear: once per week.
 		clearBotCache(true)
 		setInterval(clearBotCache, 7 * 24 * 60 * 60 * 1000, true)
+		// Price data.
+		loadCachedPriceData()
 		if (!config.testMode) {
 			// Konami database update: once per day.
 			await updateKonamiDb()
@@ -80,8 +82,8 @@ module.exports = new Event({
 		await cacheNameToIdIndex()
 		// YGOrg locale property metadata. Set this up on launch, but it's static, don't need to update periodically.
 		await cachePropertyMetadata()
-		// TCGPlayer search manifest.
-		await cacheSearchManifest()
+		// Cache all TCGPlayer sets too.
+		await cacheSetInfo(addTcgplayerDataToDb)
 
 		// Set bot presence.
 		bot.user.setActivity('/help for info!', { type: 'WATCHING' })

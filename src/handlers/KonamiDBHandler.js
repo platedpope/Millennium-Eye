@@ -64,6 +64,80 @@ function searchKonamiDb(searches, qry, dataHandlerCallback) {
 }
 
 /**
+ * Populates a Card's data with data from the Konami database.
+ * This function will not overwrite any data that is already present in the Card that is passed.
+ * @param {Array<konamiCardDataRow>} dbRows Rows of data returned from the card_data Konami DB table.
+ * @param {Card} card The card to populate with data.
+ */
+ function populateCardFromKonamiData(dbRows, card) {
+	// Just use the first row as a representative for all the stats that aren't locale-sensitive.
+	const repRow = dbRows[0]
+	
+	// Map locale-sensitive rows.
+	for (const r of dbRows) {
+		if (!card.name.has(r.locale)) card.name.set(r.locale, r.name)
+		if (!card.effect.has(r.locale)) card.effect.set(r.locale, r.effect_text)
+		if (r.pendulum_text)
+			if (!card.pendEffect.has(r.locale)) card.pendEffect.set(r.locale, r.pendulum_text)
+	}
+	card.dbId = repRow.id
+	if (!card.cardType) card.cardType = repRow.card_type
+	if (!card.property) card.property = repRow.en_property
+	if (!card.attribute) card.attribute = repRow.en_attribute
+	if (!card.levelRank) card.levelRank = repRow.level ?? repRow.rank
+	if (!card.attack) card.attack = repRow.atk 
+	if (!card.defense) card.defense = repRow.def 
+	if (!card.pendScale) card.pendScale = repRow.pendulum_scale
+	// Link markers are stored as a string, each character is a number
+	// indicating the position of the marker (starting at bottom left).
+	if (repRow.link_arrows && !card.linkMarkers.length)
+		for (let i = 0; i < repRow.link_arrows.length; i++)
+			card.linkMarkers.push(parseInt(repRow.link_arrows.charAt(i), 10))
+	// Grab monster types from the junction table if necessary.
+	if (card.cardType === 'monster' && !card.types.length) {
+		const getCardTypes = `SELECT property FROM card_properties
+							  WHERE cardId = ? AND locale = 'en'
+							  ORDER BY position`
+		const typeRows = konamiDb.prepare(getCardTypes).all(card.dbId)
+		for (const r of typeRows) card.types.push(r.property)
+	}
+
+	// Gather print data.
+	const getPrintData = `SELECT printCode, printDate, locale 
+						  FROM card_prints WHERE cardId = ?
+						  ORDER BY printDate`
+	const printRows = konamiDb.prepare(getPrintData).all(card.dbId)
+	for (const r of printRows) {
+		// Sometimes Konami DB messes up and puts a nbsp in something's print date...
+		if (r.printDate === '&nbsp;') continue
+
+		const printsInLocale = card.printData.get(r.locale)
+
+		if (printsInLocale) printsInLocale.set(r.printCode, r.printDate)
+		else {
+			card.printData.set(r.locale, new Map())
+			card.printData.get(r.locale).set(r.printCode, r.printDate)
+		}
+	}
+
+	// Gather banlist data.
+	const getBanlistData = 'SELECT cg, copies FROM banlist WHERE cardId = ?'
+	const banlistRows = konamiDb.prepare(getBanlistData).all(card.dbId)
+	for (const r of banlistRows) {
+		if (r.cg === 'tcg') card.tcgList = r.copies
+		else if (r.cg === 'ocg') card.ocgList = r.copies
+	}
+
+	// Gather art data if necessary.
+	const getArtData = 'SELECT artId, artwork FROM card_artwork WHERE cardId = ?'
+	const artRows = konamiDb.prepare(getArtData).all(card.dbId)
+	for (const r of artRows) 
+		card.addImageData(r.artId, r.artwork, true)
+
+	// TODO: Gather pricing data.
+}
+
+/**
  * Runs the Python scripts to update our local cached Konami database.
  */
 async function updateKonamiDb() {
@@ -99,5 +173,5 @@ async function updateKonamiDb() {
 }
 
 module.exports = {
-	konamiDb, searchKonamiDb, updateKonamiDb
+	searchKonamiDb, populateCardFromKonamiData, updateKonamiDb
 }

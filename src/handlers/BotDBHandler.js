@@ -4,8 +4,33 @@ const fs = require('fs')
 const Search = require('lib/models/Search')
 const { BOT_DB_PATH } = require('lib/models/Defines')
 const { logger, logError } = require('lib/utils/logging')
+const { TCGPlayerSet, TCGPlayerProduct } = require('lib/models/TCGPlayer')
 
 const botDb = new Database(BOT_DB_PATH)
+
+/**
+ * @typedef {Object} SetData
+ * @property {Number} setId
+ * @property {TCGPlayerSet} setData
+ */
+/**
+ * @typedef {Object} ProductData
+ * @property {Number} productId
+ * @property {TCGPlayerProduct} productData
+ */
+/**
+ * @typedef {Object} PriceData
+ * @property {SetData} sets
+ * @property {ProductData} products 
+ */
+
+/**
+ * @type {PriceData}
+ */
+const cachedPriceData = {
+	sets: {},
+	products: {}
+}
 
 /**
  * Search within the search term cache to find any matches for the given searches.
@@ -171,6 +196,95 @@ function addToTermCache(searchData, fromLoc) {
 }
 
 /**
+ * Populates a Card's data with data from the bot database.
+ * This function will not overwrite any data that already exists in the Card that is passed.
+ * @param {Array<botDataCacheRow>} dbRows Rows of data returned from the dataCache bot DB table.
+ * @param {Card} card The card with data to populate.
+ */
+ function populateCardFromBotData(dbRows, card) {
+	// Just use the first row as a representative for all the stats that aren't locale-sensitive.
+	const repRow = dbRows[0]
+	
+	// Map locale-sensitive rows.
+	for (const r of dbRows) {
+		if (!card.name.get(r.locale)) card.name.set(r.locale, r.dataName)
+		if (!card.name.get(r.locale)) card.effect.set(r.locale, r.effect)
+		if (r.pendEffect && !card.pendEffect.get(r.locale))
+			card.pendEffect.set(r.locale, r.pendEffect)
+	}
+	if (!card.dbId) card.dbId = repRow.dbId
+	if (!card.passcode) card.passcode = repRow.passcode
+	if (!card.cardType) card.cardType = repRow.cardType
+	if (!card.property) card.property = repRow.property
+	if (!card.attribute) card.attribute = repRow.attribute
+	if (!card.levelRank) card.levelRank = repRow.levelRank
+	if (!card.attack) card.attack = repRow.attack
+	if (!card.defense) card.defense = repRow.defense
+	if (!card.pendScale) card.pendScale = repRow.pendScale
+	if (!card.notInCg) card.notInCg = repRow.notInCg	
+
+	// Grab junction table values too. We can search in those based on DB ID, passcode, or name.
+	// Change what we're searching for based on what values we have:
+	// - if we have DB ID, use that,
+	// - if no DB ID but we have passcode, use that,
+	// - use name as a last resort.
+	if (card.dbId) {
+		var where = 'WHERE dbId = ?'
+		var searchParam = card.dbId
+	}
+	else if (card.passcode) {
+		where = 'WHERE passcode = ?'
+		searchParam = card.passcode
+	}
+	else {
+		where = 'WHERE name = ?'
+		searchParam = card.name
+	}
+
+	const getCardTypes = `SELECT type FROM cardDataTypes ${where}`
+	const getLinkMarkers = `SELECT marker FROM cardDataLinkMarkers ${where}`
+
+	// If this is a monster, get its types.
+	if (card.cardType === 'monster') {
+		let isLink = false
+		const typeRows = botDb.prepare(getCardTypes).all(searchParam)
+		for (const r of typeRows) {
+			card.types.push(r.type)
+			if (!isLink && r.type === 'Link') isLink = true
+		}
+
+		// If this is a Link Monster, get its markers.
+		if (isLink) {
+			const markerRows = botDb.prepare(getLinkMarkers).all(searchParam)
+			for (const r of markerRows) card.linkMarkers.push(r.marker)
+		}
+	}
+
+	// Gather art data.
+	const getImages = `SELECT artId, artPath FROM cardDataImages ${where}`
+	const imageRows = botDb.prepare(getImages).all(searchParam)
+	for (const r of imageRows) {
+		const localPath = r.artPath.includes('data/card_images')
+		card.addImageData(r.artId, r.artPath, localPath, !localPath)
+	}
+	
+	// Gather print data.
+	const getPrints = `SELECT printCode, locale, printDate FROM cardDataPrints ${where}`
+	const printRows = botDb.prepare(getPrints).all(searchParam)
+	for (const r of printRows) {
+		const printsInLocale = card.printData.get(r.locale)
+
+		if (printsInLocale) printsInLocale.set(r.printCode, r.printDate)
+		else {
+			card.printData.set(r.locale, new Map())
+			card.printData.get(r.locale).set(r.printCode, r.printDate)
+		}
+	}
+
+	// TODO: Gather pricing information as well.
+}
+
+/**
  * Adds card data to the bot database. If a card already exists with given data, it will update the existing one.
  * @param {Array<Search>} searchData The searches with card data to add to the bot database.
  */
@@ -228,18 +342,105 @@ function addToBotDb(searchData) {
 	})
 	insertAllData(searchData)
 
-
-	// Insert the new images into the bot DB.
-	botDb.transaction(imageSearches => {
-		for (const s of imageSearches)  {
-			const card = s.data
-			card.imageData.forEach((imgPath, id) => {
-				addImageData.run(card.dbId, card.passcode, card.name.get('en'), id, imgPath)
-			})
-		}
-	})
 	// Add search terms for all of these as well.
 	addToTermCache(searchData, 'bot', db)
+}
+
+/**
+ * Inserts the given product or set data (or searches containing said data) into the bot database.
+ * @param {Array<TCGPlayerSet|TCGPlayerProduct|Search>} tcgData The data to add to the database (or searches containing set data to add).
+ */
+function addTcgplayerDataToDb(tcgData) {
+	if (!tcgData.length) return
+	
+	const insertProductData = botDb.prepare(`
+		INSERT OR REPLACE INTO tcgplayerProducts(tcgplayerProductId, dbId, fullName, setId, printCode, rarity, cachedTimestamp)
+		VALUES(?, ?, ?, ?, ?, ?, ?)
+	`)
+	const insertSetData = botDb.prepare(`
+		INSERT OR REPLACE INTO tcgplayerSets(tcgplayerSetId, setCode, setFullName, cachedTimestamp)
+		VALUES(?, ?, ?, ?)
+	`)
+
+	let insertAllData = botDb.transaction(data => {
+		for (const s of data) {
+			if (s instanceof TCGPlayerSet) {
+				// Only insert set data here. That's all we have enough to do.
+				insertSetData.run(s.setId, s.setCode, s.fullName, s.cacheTime.toString())
+				cachedPriceData.sets[s.setId] = s
+			}
+			else if (s instanceof TCGPlayerProduct) {
+				// Insert product data here. Technically we have its set's data too, but in this context populating it is redundant.
+				insertProductData.run(s.productId, null, s.fullName, s.set.setId, s.printCode, s.rarity, s.cacheTime.toString())
+				cachedPriceData.products[s.productId] = s
+			}
+			else if (s instanceof Search) {
+				const cardData = s.data
+				for (const p of cardData.priceData) {
+					const pSet = p.set
+					insertProductData.run(
+						p.productId, s.dbId, s.name.get('en'), pSet.setId, p.printCode, p.rarity,
+						p.lowPrice, p.midPrice, p.highPrice, p.marketPrice)
+					insertSetData.run(pSet.setCode, pSet.fullname, pSet.setId)
+				}
+			}
+		}
+	})
+	insertAllData(tcgData)
+}
+
+function loadCachedPriceData() {
+	const getSetData = botDb.prepare('SELECT * FROM tcgplayerSets')
+	const getProductData = botDb.prepare('SELECT * FROM tcgplayerProducts')
+	const getProductPrices = botDb.prepare('SELECT * FROM tcgplayerProductPrices')
+
+	// Load set data first so products can reference it.
+	let dbRows = getSetData.all()
+	for (const r of dbRows) {
+		const tcgSet = new TCGPlayerSet()
+
+		tcgSet.setId = r.tcgplayerSetId
+		tcgSet.setCode = r.setCode
+		tcgSet.fullname = r.setFullName
+		tcgSet.cacheTime = new Date(r.cacheTimestamp)
+
+		cachedPriceData.sets[tcgSet.setId] = tcgSet
+	}
+	// Then load product data, associating it to sets along the way.
+	dbRows = getProductData.all()
+	for (const r of dbRows) {
+		const tcgProduct = new TCGPlayerProduct()
+
+		tcgProduct.productId = r.tcgplayerProductId
+		tcgProduct.rarity = r.rarity
+		tcgProduct.printCode = r.printCode
+		tcgProduct.cacheTime = new Date(r.cachedTimestamp)
+
+		// Associate this product and the set it's from.
+		const fromSet = cachedPriceData.sets[r.setId]
+		if (fromSet) {
+			tcgProduct.set = cachedPriceData.sets[r.setId]
+			fromSet.products.push(tcgProduct)
+		}
+	}
+	// Then load price data, associating it to products along the way.
+	// This probably won't end up doing much considering price data should be wiped often,
+	// but may as well check.
+	dbRows = getProductPrices.all()
+	for (const r of dbRows) {
+		const forProduct = cachedPriceData.products[r.tcgplayerProductId]
+		if (forProduct) {
+			forProduct.priceData.set(r.type, {
+				lowPrice: r.lowPrice,
+				midPrice: r.midPrice,
+				highPrice: r.highPrice,
+				marketPrice: r.marketPrice,
+				cacheTime: new Date(r.cachedTimestamp)
+			})
+		}
+	}
+
+	// Done loading these into the cache.
 }
 
 /**
@@ -289,5 +490,8 @@ function clearBotCache(clearKonamiTerms = false) {
 }
 
 module.exports = {
-	botDb, searchTermCache, searchBotDb, addToTermCache, addToBotDb, evictFromBotCache, clearBotCache
+	cachedPriceData,
+	searchTermCache, searchBotDb, populateCardFromBotData, 
+	addToTermCache, addToBotDb, addTcgplayerDataToDb,
+	loadCachedPriceData, evictFromBotCache, clearBotCache
 }
