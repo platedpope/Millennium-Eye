@@ -50,6 +50,10 @@ class TCGPlayerSet {
 
 		this.cacheTime = undefined		// A Date timestamp for when this set's data finished being cached.
 	}
+
+	getProductsWithoutPriceData() {
+		return this.products.filter(p => !p.priceData.size)
+	}
 }
 
 module.exports = {

@@ -42,7 +42,7 @@ class Card {
 		/**
 		 * @type {Array<TCGPlayerProduct>}
 		 */
-		this.priceData = []				// The TCGPlayer product data associated with this card, which contain price info.
+		this.products = []				// The TCGPlayer product data associated with this card, which contain price info.
 		this.faqData = new Map()		// Any FAQ data for this card. Each key is a locale, with value being the FAQ data for that locale.
 
 		// Data unique to Rush Duel cards.
@@ -624,6 +624,14 @@ class Card {
 	 */
 	getNameYugipediaUrl(locale = 'en') {
 		return this.name.get(locale).replace(/\s/g, '_').replace(/\?/g, '%3F')
+	}
+
+	/**
+	 * Returns the members of the products array of TCGPlayerProducts that do not have any price data.
+	 * @returns {Array<TCGPlayerProduct>}
+	 */
+	getProductsWithoutPriceData() {
+		return this.products.filter(p => !p.priceData.size)
 	}
 
 	/**

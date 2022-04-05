@@ -2,7 +2,7 @@ const Card = require('lib/models/Card')
 const Query = require('lib/models/Query')
 const Ruling = require('lib/models/Ruling')
 const Search = require('lib/models/Search')
-const { addToTermCache, addToBotDb, populateCardFromBotData } = require('./BotDBHandler')
+const { addToTermCache, addToBotDb, populateCardFromBotData, addTcgplayerDataToDb, searchTcgplayerData } = require('./BotDBHandler')
 const { searchKonamiDb, populateCardFromKonamiData } = require('./KonamiDBHandler')
 const { addToYgorgDb, searchArtworkRepo, populateCardFromYgorgApi, populateRulingFromYgorgDb, populatedRulingFromYgorgApi, populateRulingAssociatedCardsData } = require('./YGOrgDBHandler')
 
@@ -33,12 +33,17 @@ function convertBotDataToSearchData(resolvedBotSearches, termUpdates, konamiSear
  * @param {Array<Search>} termUpdates Searches for which we found better search terms that should be updated.
  */
 function convertKonamiDataToSearchData(resolvedSearches, termUpdates) {
+	const priceSearches = []
 	for (const s of resolvedSearches) {
 		if (!(s.data instanceof Card)) s.data = new Card()
 		populateCardFromKonamiData(s.rawData, s.data)
 		s.rawData = undefined
+		// Check if this search wanted price data now that we have a name/ID to search for.
+		if (s.hasType('$'))
+			priceSearches.push(s)
 	}
-
+	if (priceSearches.length)
+		searchTcgplayerData(priceSearches)
 	if (termUpdates.length)
 		addToTermCache(termUpdates, 'konami')
 }
@@ -134,6 +139,17 @@ function convertYugipediaDataToSearchData(searches, qry) {
 	addToBotDb(newSearches)
 }
 
+function cacheTcgplayerPriceData(searches) {
+	// Any searches that have price data in them are ones to put into the bot database.
+	const searchesWithPriceData = searches.filter(s => {
+		return s.data.products.length !== s.getProductsWithoutPriceData().length
+	})
+
+	addTcgplayerDataToDb(searchesWithPriceData)
+}
+
 module.exports = {
-	convertBotDataToSearchData, convertKonamiDataToSearchData, convertYgorgDataToSearchData, convertYugipediaDataToSearchData
+	convertBotDataToSearchData, convertKonamiDataToSearchData, 
+	convertYgorgDataToSearchData, convertYugipediaDataToSearchData,
+	cacheTcgplayerPriceData
 }

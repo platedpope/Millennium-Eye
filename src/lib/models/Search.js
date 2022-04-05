@@ -84,7 +84,8 @@ const Ruling = require('./Ruling')
 			// Broad case: if this is a Card and we don't have a name in this locale,
 			// pretty good bet we don't have the data resolved.
 			if (this.data instanceof Card)
-				if ( !this.data.name.has(locale) ) return false
+				if ( !this.data.name.has(locale) ) 
+					return false
 
 			const types = this.localeToTypesMap.get(locale)
 			// If this has 'r' or 'i'-type search, it needs name + effect text for this locale at a minimum.
@@ -99,13 +100,9 @@ const Ruling = require('./Ruling')
 			if (types.has('d'))
 				if (!(this.data.printData.has(locale)))
 					return false
-			const usPrice = types.has('$')
-			const euPrice = types.has('€')
-			// If this has '$' or '€'-type search, it needs corresponding price data.
-			if (usPrice || euPrice)
-				if (usPrice && !(this.data.priceData.has('us')))
-					return false
-				if (euPrice && !(this.data.priceData.has('eu')))
+			// If this has '$'-type search, it needs corresponding price data.
+			if (types.has('$'))
+				if (this.data.products.length === this.data.getProductsWithoutPriceData().length)
 					return false
 			// If this has 'f'-type search, it needs FAQ data for this locale.
 			if (types.has('f'))
@@ -161,10 +158,7 @@ const Ruling = require('./Ruling')
 				}
 				// Any '$' or '€'-type search should have corresponding price data.
 				else if (t === '$') {
-					if (!this.data.priceData.has('us'))
-						unresolvedType = true
-				else if (t === '€')
-					if (!this.data.priceData.has('eu'))
+					if (this.data.products.length === this.data.getProductsWithoutPriceData().length)
 						unresolvedType = true
 				}
 				// Any 'f'-type search should have FAQ data in this locale.

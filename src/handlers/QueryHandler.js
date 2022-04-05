@@ -10,7 +10,8 @@ const { searchTermCache } = require('./BotDBHandler')
 const { searchKonamiDb } = require('./KonamiDBHandler')
 const { searchYgorgDb } = require('./YGOrgDBHandler')
 const { searchYugipedia } = require('./YugipediaHandler')
-const { convertBotDataToSearchData, convertKonamiDataToSearchData, convertYgorgDataToSearchData, convertYugipediaDataToSearchData } = require('./DataHandler')
+const { convertBotDataToSearchData, convertKonamiDataToSearchData, convertYgorgDataToSearchData, convertYugipediaDataToSearchData, cacheTcgplayerPriceData } = require('./DataHandler')
+const { searchTcgplayer } = require('./TCGPlayerHandler')
 
 // Used to monitor how many searches a user has queried the bot over a period of time (default 1 min).
 // If a user passes the acceptable number over the course of that minute, no future searches within that minute are allowed.
@@ -40,6 +41,12 @@ const processSteps = [
 		'searchFunction': searchYugipedia,
 		'dataHandler': convertYugipediaDataToSearchData,
 		'useForOfficial': false,
+		'ignoreSearchTypes': ['q']
+	},
+	{
+		'searchFunction': searchTcgplayer,
+		'dataHandler': cacheTcgplayerPriceData,
+		'useForOfficial': true,
 		'ignoreSearchTypes': ['q']
 	}
 ]

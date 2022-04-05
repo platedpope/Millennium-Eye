@@ -1,8 +1,9 @@
 const axios = require('axios')
 const rateLimit = require('axios-rate-limit')
+const { performance } = require('perf_hooks')
 
 const config = require('config')
-const { cachedPriceData } = require('./BotDBHandler')
+const { getCachedProductData } = require('./BotDBHandler')
 const { TCGPLAYER_API, API_TIMEOUT, TCGPLAYER_API_VERSION } = require('lib/models/Defines')
 const { TCGPlayerSet, TCGPlayerProduct } = require('lib/models/TCGPlayer')
 const { logError, logger } = require('lib/utils/logging')
@@ -60,7 +61,11 @@ async function handlePagedRequest(apiRequestOptions, limitPerPage = 100) {
 		handleResponse(response.data)
 	}
 	catch (err) {
-		logError(err.response.data, 'Received failed paged result:', apiRequestOptions)
+		const errData = err.response.data
+		// Suppress "no products found" errors. Sometimes there just aren't any, not an error.
+		const noProductsFoundError = errData.errors && errData.errors.length && errData.errors[0] === 'No products were found.'
+		if (!noProductsFoundError)
+			logError(errData, 'Received failed paged result:', apiRequestOptions)
 	}
 
 	// While we've gathered less data than is available in total, keep requesting.
@@ -72,11 +77,14 @@ async function handlePagedRequest(apiRequestOptions, limitPerPage = 100) {
 		try {
 			numRequests++
 			let response = await apiCall(apiRequestOptions)
-			console.log(`Sent paged request ${numRequests}/${maxRequests}.`)
 			handleResponse(response.data)
 		}
 		catch(err) {
-			logError(err.response.data, 'Received failed paged result:', apiRequestOptions)
+			const errData = err.response.data
+			// Suppress "no products found" errors. Sometimes there just aren't any, not an error.
+			const noProductsFoundError = errData.errors && errData.errors.length && errData.errors[0] === 'No products were found.'
+			if (!noProductsFoundError)
+				logError(errData, 'Received failed paged result:', apiRequestOptions)
 		}
 	}
 	
@@ -170,7 +178,7 @@ async function cacheYgoCategory() {
 	return Promise.resolve(goodYgoCategory)
 }
 
-async function cacheSetInfo(dataHandlerCallback) {
+async function cacheSetProductData(dataHandlerCallback) {
 	// Nothing to do without knowing which catalog ID to search through.
 	if (!await cacheYgoCategory()) return
 
@@ -184,7 +192,6 @@ async function cacheSetInfo(dataHandlerCallback) {
 			categoryId: ygoCategoryId
 		}
 	}
-	
 	const setResults = await handlePagedRequest(apiRequestOptions)
 
 	// Something must have gone wrong.
@@ -195,14 +202,17 @@ async function cacheSetInfo(dataHandlerCallback) {
 
 	logger.info(`Found ${setResults.length} TCGPlayer sets to check for data!`)
 
+	const cachedProductData = getCachedProductData()
+
 	const updatedSets = []
 	// Gather the sets we need to cache or re-cache.
 	for (const s of setResults) {
-		const cachedSet = cachedPriceData.sets[s.groupId]
+		const cachedSet = cachedProductData.sets[s.groupId]
 		const modDate = new Date(s.modifiedOn)
 
 		if (!cachedSet) {
 			var setToModify = new TCGPlayerSet()
+			cachedProductData.sets[s.groupId] = setToModify
 		}
 		else if (cachedSet.cacheTime < modDate) {
 			setToModify = cachedSet
@@ -222,48 +232,32 @@ async function cacheSetInfo(dataHandlerCallback) {
 	// Immediately throw these to the data handler so we have at least set name/info cached.
 	dataHandlerCallback(updatedSets)
 
-	// Now start a slow crawl of set data.
-	// We will use sets we've updated to guide the product data we need to update as well.
-	cacheDataUpdateCrawl(dataHandlerCallback, updatedSets)
-}
-
-async function cacheDataUpdateCrawl(dataHandlerCallback, updatedSets = []) {
-	// Set data and price requests are paged, need to set up options beforehand.
-	const setDataRequestOptions = {
-		method: 'get',
-		url: `${TCGPLAYER_API_VERSION}/catalog/products`,
-		headers: requestHeaders,
-		params: {
-			getExtendedFields: true
-		}
-	}
-
-	// If we have sets that have been updated, go through those first to update any product data we need to.
+	// Now start a slow crawl of set data for the sets that were updated.
 	if (updatedSets.length) {
-		const handleSetDataResponse = (results, set) => {
-			if (!results.length) logError(`Set data crawl did not find any data for set ${set.setId} (name ${set.fullName}).`)
-
+		const handleSetDataResponse = results => {
 			// The results will be all the products in this set. Parse them and cache them.
 			const updatedProducts = []
+	
 			for (const p of results) {
-				const cachedProduct = cachedPriceData.products[p.productId]
+				const cachedProduct = cachedProductData.products[p.productId]
 				const modDate = new Date(p.modifiedOn)
-
+	
 				if (!cachedProduct) {
 					var prodToModify = new TCGPlayerProduct()
+					cachedProductData.products[p.productId] = prodToModify
 				}
 				else if (cachedProduct.cacheTime < modDate) {
 					prodToModify = cachedProduct
 				}
-
+	
 				if (prodToModify) {
 					prodToModify.productId = p.productId
 					prodToModify.fullName = p.name
-					prodToModify.set = cachedPriceData.sets[p.groupId]
+					prodToModify.set = cachedProductData.sets[p.groupId]
 					prodToModify.cacheTime = modDate
 					// Rarity and print code are in the extended fields.
 					for (const eField of p.extendedData) {
-						// Small efficiency boost: no need to keep iterating if we found what we need.
+						// There are quite a few extended fields, stop iterating once we've found what we need.
 						if (prodToModify.printCode && prodToModify.rarity) break
 						// Print code is stored as "Number".
 						if (eField.name === 'Number') {
@@ -276,11 +270,13 @@ async function cacheDataUpdateCrawl(dataHandlerCallback, updatedSets = []) {
 					updatedProducts.push(prodToModify)
 				}
 			}
-
+	
+			if (updatedProducts.length)
+				logger.info(`Updating product info for ${updatedProducts.length} products.`)
 			dataHandlerCallback(updatedProducts)
 		}
 
-		// Split the sets into batches of 3 to send requests about, one batch per second.
+		// Split the sets into batches of 3 to send requests about, max one batch per second (though a batch might take longer if it's paged).
 		// Some might be paged so they end up needing more requests. Even if not, 3 requests/sec leaves bandwidth for bot queries in the meantime.
 		const numPerBatch = 3
 		const numBatches = Math.ceil(updatedSets.length / numPerBatch) 
@@ -289,27 +285,106 @@ async function cacheDataUpdateCrawl(dataHandlerCallback, updatedSets = []) {
 			return updatedSets.slice(offset, offset + numPerBatch)
 		})
 
-		let allRequests = []
 		const timer = ms => new Promise(res => setTimeout(res, ms))
 		for (const setBatch of requestBatches) {
-			console.log(`Sending batch API requests for data on ${setBatch.length} sets...`)
+			let batchRequests = []
 			for (const set of setBatch) {
-				// Copy the object and change its params, otherwise if requests get buffered it could end up clobbering the group ID param.
-				const thisSetRequestOptions = JSON.parse(JSON.stringify(setDataRequestOptions))
-				thisSetRequestOptions.params.groupId = set.setId
-				const req = handlePagedRequest(thisSetRequestOptions)
-					.then(results => handleSetDataResponse(results, set))
-				allRequests.push(req)
+				// Set data and price requests are paged, need to set up options beforehand.
+				const setDataRequestOptions = {
+					method: 'get',
+					url: `${TCGPLAYER_API_VERSION}/catalog/products`,
+					headers: requestHeaders,
+					params: {
+						groupId: set.setId,
+						getExtendedFields: true
+					}
+				}
+				const req = handlePagedRequest(setDataRequestOptions)
+				batchRequests.push(req)
 			}
-			await timer(1000)
-		}
-		
-		allRequests = await Promise.allSettled(allRequests)
 
-		logger.info(`Finished product data updates for ${updatedSets.length} sets.`)
+			const startTime = performance.now()
+			// Throw all our results into one big array to process the results at once.
+			const allResults = []
+			batchRequests = await Promise.allSettled(batchRequests)
+			for (const req of batchRequests) {
+				// Something went wrong here, it should've already been logged out.
+				if (req.status === 'rejected') continue
+				if (!req.value.length) continue
+
+				allResults.push(...req.value)
+			}
+			handleSetDataResponse(allResults)
+			const totalTime = performance.now() - startTime
+			// Always wait a minimum of 1 second between batches.
+			if (totalTime < 1000)
+				await timer(1000 - totalTime)
+		}
+
+		logger.info(`Finished caching product data for ${updatedSets.length} updated sets.`)
 	}
 }
 
+/**
+ * Resolves price data for the given TCGPlayerProducts.
+ * @param {Array<TCGPlayerProduct>} products  
+ */
+async function getProductPriceData(products) {
+	// Make a map out of these for easy lookup once we have our results.
+	const prodMap = {}
+	for (const p of products)
+		prodMap[p.productId] = p
+	// Turn all the product IDs into a comma-separated string for the API request.
+	const prodIds = Object.keys(prodMap).join(',')
+
+	const handlePriceResponse = respData => {
+		for (const r of respData.results) {
+			// Skip the reuslts that have null price data due the type of print being non-existent (e.g., no 1st Edition prints).
+			if (!r.lowPrice || !r.midPrice || !r.highPrice || !r.marketPrice) continue
+
+			const prodId = r.productId
+			const origProduct = prodMap[prodId]
+			origProduct.priceData.set(r.subTypeName, {
+				lowPrice: r.lowPrice,
+				midPrice: r.midPrice,
+				highPrice: r.highPrice,
+				marketPrice: r.highPrice
+			})
+			origProduct.cacheTime = new Date()
+		}
+	}
+
+	try {
+		const resp = await apiCall.get(`${TCGPLAYER_API_VERSION}/pricing/product/${prodIds}`, {
+			headers: requestHeaders
+		})
+		handlePriceResponse(resp.data)
+	}
+	catch(err) {
+		logError(err.response, 'TCGPlayer price API query failed.', products)
+	}
+}
+
+async function searchTcgplayer(searches, qry, dataHandlerCallback) {
+	// The searches that made it this far don't have price data.
+	// Get the products within them that it so we can use them.
+	const productsWithoutPriceData = []
+	for (const s of searches) {
+		let prods = s.data.getProductsWithoutPriceData()
+		// Filter out any that don't have product IDs.
+		// We could look them up by name, but with all the product data caching we do, we shouldn't need to.
+		prods = prods.filter(p => p.productId)
+
+		productsWithoutPriceData.push(...prods)
+	}
+	
+	// Now we have all the products we need to grab data for, hit the API for that data.
+	await getProductPriceData(products)
+
+	// Done here.
+	dataHandlerCallback(searches)
+}
+
 module.exports = {
-	cacheSetInfo
+	cacheSetProductData, searchTcgplayer
 }

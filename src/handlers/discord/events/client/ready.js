@@ -6,7 +6,7 @@ const Event = require('lib/models/Event')
 const { clearBotCache, addTcgplayerDataToDb, loadCachedPriceData } = require('handlers/BotDBHandler')
 const { cacheNameToIdIndex, cacheManifestRevision, cachePropertyMetadata } = require('handlers/YGOrgDBHandler')
 const { updateKonamiDb } = require('handlers/KonamiDBHandler')
-const { cacheSetInfo } = require('handlers/TCGPlayerHandler')
+const { cacheSetInfo, cacheSetProductData } = require('handlers/TCGPlayerHandler')
 
 module.exports = new Event({
 	event: 'ready', 
@@ -68,8 +68,6 @@ module.exports = new Event({
 		// Bot cache clear: once per week.
 		clearBotCache(true)
 		setInterval(clearBotCache, 7 * 24 * 60 * 60 * 1000, true)
-		// Price data.
-		loadCachedPriceData()
 		if (!config.testMode) {
 			// Konami database update: once per day.
 			await updateKonamiDb()
@@ -82,8 +80,9 @@ module.exports = new Event({
 		await cacheNameToIdIndex()
 		// YGOrg locale property metadata. Set this up on launch, but it's static, don't need to update periodically.
 		await cachePropertyMetadata()
-		// Cache all TCGPlayer sets too.
-		await cacheSetInfo(addTcgplayerDataToDb)
+		// TCGPlayer set product data update: once per day.
+		await cacheSetProductData(addTcgplayerDataToDb)
+		setInterval(cacheSetProductData, 24 * 60 * 60 * 1000, addTcgplayerDataToDb)
 
 		// Set bot presence.
 		bot.user.setActivity('/help for info!', { type: 'WATCHING' })

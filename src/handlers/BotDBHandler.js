@@ -5,6 +5,7 @@ const Search = require('lib/models/Search')
 const { BOT_DB_PATH } = require('lib/models/Defines')
 const { logger, logError } = require('lib/utils/logging')
 const { TCGPlayerSet, TCGPlayerProduct } = require('lib/models/TCGPlayer')
+const Card = require('lib/models/Card')
 
 const botDb = new Database(BOT_DB_PATH)
 
@@ -25,14 +26,6 @@ const botDb = new Database(BOT_DB_PATH)
  */
 
 /**
- * @type {PriceData}
- */
-const cachedPriceData = {
-	sets: {},
-	products: {}
-}
-
-/**
  * Search within the search term cache to find any matches for the given searches.
  * If a match is found, then branch off to the correct logic for resolving that match to data.
  * @param {Array<Search>} searches The array of relevant searches to evaluate.
@@ -43,9 +36,7 @@ function searchTermCache(searches, qry, dataHandlerCallback) {
 	// Track all searches in each location so we can divvy things up and query them all at once.
 	const cachedBotData = []
 	const cachedKonamiData = []
-	/* TODO
-	const cachedPriceData = []
-	*/
+	const cachedTcgplayerData = []
 
 	const sqlQry = `SELECT dbId, passcode, fullName, location, locale
 					FROM termCache 
@@ -89,7 +80,11 @@ function searchTermCache(searches, qry, dataHandlerCallback) {
 			if (repRow.location === 'konami')
 				cachedKonamiData.push(currSearch)
 		}
-		// If there's nothing in the cache, nothing more to do with this search for now.
+		// If this is a $-type search, look at our cached TCGPlayer data too.
+		if (currSearch.hasType('$')) {
+			cachedTcgplayerData.push(currSearch)
+		}
+		// Otherwise, there's nothing here, so nothing to do.
 	}
 
 	// Resolve bot data.
@@ -100,12 +95,11 @@ function searchTermCache(searches, qry, dataHandlerCallback) {
 		resolvedBotSearches = botSearchResults.resolved
 		termUpdates = botSearchResults.termUpdates
 	}
+	if (cachedTcgplayerData.length) {
+		searchTcgplayerData(cachedTcgplayerData)
+	}
 	
 	dataHandlerCallback(resolvedBotSearches, termUpdates, cachedKonamiData)
-
-	/* TODO
-	if (cachedPriceData.length)
-	*/
 }
 
 /**
@@ -173,6 +167,102 @@ function searchBotDb(searches, qry) {
 	}
 
 	return searchResults
+}
+
+/**
+ * Search the bot database for any cached TCGPlayer data related to these searches.
+ * @param {Array<Search>} searches The searches to evaluate for cached TCGPlayer data. 
+ */
+function searchTcgplayerData(searches) {
+	for (const currSearch of searches) {
+		// Sanity check: non-$-type searches shouldn't be making it here, don't waste time on them if they do.
+		if (!currSearch.hasType('$')) continue
+
+		const searchData = currSearch.data
+		// We don't know what this is yet. The only thing we might be able to find at this point is a set, so look for that.
+		if (!searchData) {
+			let setQry = botDb.prepare(`SELECT * FROM tcgplayerSets WHERE setCode = ?`)
+			let setRow = setQry.get(currSearch.term)
+			if (!setRow) {
+				// Try set name next.
+				setQry = botDb.prepare('SELECT * FROM tcgplayerSets WHERE setFullName = ? COLLATE NOCASE')
+				setRow = setQry.get(currSearch.term)
+			}
+		
+			if (setRow) {
+				// Yep, this is a set. Just grab the data in here.
+				const productQry = botDb.prepare('SELECT * FROM tcgplayerProducts WHERE setId = ?')
+				const priceQry = botDb.prepare('SELECT * FROM tcgplayerProductPrices WHERE tcgplayerProductId = ?')
+
+				const tcgSet = new TCGPlayerSet()
+				currSearch.data = tcgSet
+				tcgSet.setId = setRow.tcgplayerSetId
+				tcgSet.setCode = setRow.setCode
+				tcgSet.fullName = setRow.setFullName
+				tcgSet.cacheTime = new Date(row.cachedTimestamp)
+				// Get its products.
+				const productRows = productQry.all(tcgSet.setId)
+				for (const r of productRows) {
+					const tcgProduct = new TCGPlayerProduct()
+					tcgProduct.productId = r.tcgplayerProductId
+					tcgProduct.fullName = r.fullName
+					tcgProduct.set = tcgSet
+					tcgProduct.rarity = r.rarity
+					tcgProduct.priceCode = r.printCode
+					tcgProduct.cacheTime = new Date(r.cachedTimestamp)
+					// Get the product's price data if we have it.
+					const priceRows = priceQry.all(tcgProduct.productId)
+					for (const p of priceRows) {
+						tcgProduct.priceData.set(p.type, {
+							lowPrice: p.lowPrice,
+							midPrice: p.midPrice,
+							highPrice: p.highPrice,
+							marketPrice: p.marketPrice,
+							cacheTime: p.cachedTimestamp
+						})
+					}
+					tcgSet.products.push(tcgProduct)
+				}
+			}
+		}
+		else if (searchData instanceof Card) {
+			// If we have a Card, then we need to try and fill out its products.
+			// Use either its DB ID (if we have it) or its English name as the search.
+			if (searchData.dbId) { 
+				var searchTerm = searchData.dbId
+				var where = 'WHERE dbId = ?'
+			}
+			else {
+				searchTerm = searchData.name.get('en')
+				where = 'WHERE fullname = ?'
+			}
+			
+			const productQry = botDb.prepare(`SELECT * FROM tcgplayerProducts ${where}`)
+			const priceQry = botDb.prepare('SELECT * FROM tcgplayerProductPrices WHERE tcgplayerProductId = ?')
+			const productRows = productQry.all(searchTerm)
+			for (const r of productRows) {
+				const tcgProduct = new TCGPlayerProduct()
+				tcgProduct.productId = r.tcgplayerProductId
+				tcgProduct.fullName = r.fullName
+				// Don't fill out the set, we don't need it.
+				tcgProduct.rarity = r.rarity
+				tcgProduct.priceCode = r.printCode
+				tcgProduct.cacheTime = new Date(r.cachedTimestamp)
+				// Get the product's price data if we have it.
+				const priceRows = priceQry.all(tcgProduct.productId)
+				for (const p of priceRows) {
+					tcgProduct.priceData.set(p.type, {
+						lowPrice: p.lowPrice,
+						midPrice: p.midPrice,
+						highPrice: p.highPrice,
+						marketPrice: p.marketPrice,
+						cacheTime: p.cachedTimestamp
+					})
+				}
+				searchData.products.push(tcgProduct)
+			}
+		}
+	}
 }
 
 /**
@@ -367,21 +457,17 @@ function addTcgplayerDataToDb(tcgData) {
 			if (s instanceof TCGPlayerSet) {
 				// Only insert set data here. That's all we have enough to do.
 				insertSetData.run(s.setId, s.setCode, s.fullName, s.cacheTime.toString())
-				cachedPriceData.sets[s.setId] = s
 			}
 			else if (s instanceof TCGPlayerProduct) {
 				// Insert product data here. Technically we have its set's data too, but in this context populating it is redundant.
 				insertProductData.run(s.productId, null, s.fullName, s.set.setId, s.printCode, s.rarity, s.cacheTime.toString())
-				cachedPriceData.products[s.productId] = s
 			}
 			else if (s instanceof Search) {
-				const cardData = s.data
-				for (const p of cardData.priceData) {
-					const pSet = p.set
+				const searchData = s.data
+				for (const p of searchData.products) {
 					insertProductData.run(
 						p.productId, s.dbId, s.name.get('en'), pSet.setId, p.printCode, p.rarity,
 						p.lowPrice, p.midPrice, p.highPrice, p.marketPrice)
-					insertSetData.run(pSet.setCode, pSet.fullname, pSet.setId)
 				}
 			}
 		}
@@ -389,7 +475,20 @@ function addTcgplayerDataToDb(tcgData) {
 	insertAllData(tcgData)
 }
 
-function loadCachedPriceData() {
+/**
+ * Loads all cached TCGPlayer product data from the database.
+ * This is primarily used by the TCGPlayer update crawler to find products that need to be updated.
+ * @returns {PriceData} 
+ */
+function getCachedProductData() {
+	/**
+	 * @type {PriceData}
+	 */
+	const cachedData = {
+		'sets': {},
+		'products': {}
+	}
+
 	const getSetData = botDb.prepare('SELECT * FROM tcgplayerSets')
 	const getProductData = botDb.prepare('SELECT * FROM tcgplayerProducts')
 	const getProductPrices = botDb.prepare('SELECT * FROM tcgplayerProductPrices')
@@ -402,9 +501,9 @@ function loadCachedPriceData() {
 		tcgSet.setId = r.tcgplayerSetId
 		tcgSet.setCode = r.setCode
 		tcgSet.fullname = r.setFullName
-		tcgSet.cacheTime = new Date(r.cacheTimestamp)
+		tcgSet.cacheTime = new Date(r.cachedTimestamp)
 
-		cachedPriceData.sets[tcgSet.setId] = tcgSet
+		cachedData.sets[tcgSet.setId] = tcgSet
 	}
 	// Then load product data, associating it to sets along the way.
 	dbRows = getProductData.all()
@@ -417,9 +516,9 @@ function loadCachedPriceData() {
 		tcgProduct.cacheTime = new Date(r.cachedTimestamp)
 
 		// Associate this product and the set it's from.
-		const fromSet = cachedPriceData.sets[r.setId]
+		const fromSet = cachedData.sets[r.setId]
 		if (fromSet) {
-			tcgProduct.set = cachedPriceData.sets[r.setId]
+			tcgProduct.set = cachedData.sets[r.setId]
 			fromSet.products.push(tcgProduct)
 		}
 	}
@@ -428,7 +527,7 @@ function loadCachedPriceData() {
 	// but may as well check.
 	dbRows = getProductPrices.all()
 	for (const r of dbRows) {
-		const forProduct = cachedPriceData.products[r.tcgplayerProductId]
+		const forProduct = cachedData.products[r.tcgplayerProductId]
 		if (forProduct) {
 			forProduct.priceData.set(r.type, {
 				lowPrice: r.lowPrice,
@@ -440,7 +539,7 @@ function loadCachedPriceData() {
 		}
 	}
 
-	// Done loading these into the cache.
+	return cachedData
 }
 
 /**
@@ -490,8 +589,7 @@ function clearBotCache(clearKonamiTerms = false) {
 }
 
 module.exports = {
-	cachedPriceData,
-	searchTermCache, searchBotDb, populateCardFromBotData, 
+	searchTermCache, searchBotDb, populateCardFromBotData, searchTcgplayerData, 
 	addToTermCache, addToBotDb, addTcgplayerDataToDb,
-	loadCachedPriceData, evictFromBotCache, clearBotCache
+	getCachedProductData, evictFromBotCache, clearBotCache
 }
