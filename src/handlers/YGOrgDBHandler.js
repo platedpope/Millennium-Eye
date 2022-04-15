@@ -476,11 +476,30 @@ async function populateRulingAssociatedCardsData(ruling, locales) {
 	// YGOrg API also returns FAQ data for card queries, may as well populate that while we're here too.
 	const apiFaqData = apiData.faqData
 	if (apiFaqData) {
-		for (const entry of apiFaqData.entries)
-			for (const locale in entry) {
-				if (!card.faqData.has(locale)) card.faqData.set(locale, [])
-				card.faqData.get(locale).push(entry[locale])
-			}
+		for (const effect in apiFaqData.entries)
+			for (const entry of effect)
+				for (const locale in entry) {
+					if (!card.faqData.has(locale)) card.faqData.set(locale, [])
+					card.faqData.get(locale).push({
+						'effectNumber': parseInt(effect, 10),
+						'effectType': 'normal',
+						'entryData': entry[locale],
+					})
+				}
+		// Check for pendulum effect entries too.
+		if ('pendEntries' in apiFaqData) {			
+			for (const effect in apiFaqData.pendEntries)
+				for (const entry of effect) 
+					for (const locale in entry) {
+						if (!card.faqData.has(locale)) card.faqData.set(locale, [])
+						card.faqData.get(locale).push({
+							'effectNumber': parseInt(effect, 10),
+							'effectType': 'pendulum',
+							'entryData': entry[locale],
+						})
+					}
+		}
+			
 	}
 }
 
@@ -507,13 +526,13 @@ function addToYgorgDb(qaSearches, faqSearches) {
 		insertAllQas(qaSearches)
 	}
 	if (faqSearches && faqSearches.length) {
-		const insertFaq = ygorgDb.prepare(`INSERT OR REPLACE INTO faqData(cardId, locale, data)
-									  VALUES(?, ?, ?)`)
+		const insertFaq = ygorgDb.prepare(`INSERT OR REPLACE INTO faqData(cardId, locale, effectNumber, effectType, data)
+									  VALUES(?, ?, ?, ?, ?)`)
 		let insertAllFaqs = ygorgDb.transaction(searchData => {
 			for (const s of searchData) {
 				const card = s.data
 				card.faqData.forEach((entries, locale) => {
-					for (const entry of entries) insertFaq.run(card.dbId, locale, entry)
+					for (const entry of entries) insertFaq.run(card.dbId, locale, entry.effectNumber, entry.effectType, entry.entryData)
 				})
 			}
 		})

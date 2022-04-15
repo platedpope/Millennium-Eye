@@ -1,10 +1,10 @@
 /**
  * @typedef {Object} Prices
- * @property lowPrice
- * @property midPrice
- * @property highPrice
- * @property marketPrice
- * @property cacheTime
+ * @property {Number} lowPrice
+ * @property {Number} midPrice
+ * @property {Number} highPrice
+ * @property {Number} marketPrice
+ * @property {Date} cacheTime
  */
 
 /**

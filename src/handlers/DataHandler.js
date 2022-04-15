@@ -5,6 +5,7 @@ const Search = require('lib/models/Search')
 const { addToTermCache, addToBotDb, populateCardFromBotData, addTcgplayerDataToDb, searchTcgplayerData } = require('./BotDBHandler')
 const { searchKonamiDb, populateCardFromKonamiData } = require('./KonamiDBHandler')
 const { addToYgorgDb, searchArtworkRepo, populateCardFromYgorgApi, populateRulingFromYgorgDb, populatedRulingFromYgorgApi, populateRulingAssociatedCardsData } = require('./YGOrgDBHandler')
+const { populateCardFromYugipediaApi } = require('./YugipediaHandler')
 
 /**
  * This is the callback data handler for turning data from the bot database into
@@ -142,7 +143,7 @@ function convertYugipediaDataToSearchData(searches, qry) {
 function cacheTcgplayerPriceData(searches) {
 	// Any searches that have price data in them are ones to put into the bot database.
 	const searchesWithPriceData = searches.filter(s => {
-		return s.data.products.length !== s.getProductsWithoutPriceData().length
+		return s.data.products.length !== s.data.getProductsWithoutPriceData().length
 	})
 
 	addTcgplayerDataToDb(searchesWithPriceData)

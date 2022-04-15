@@ -210,8 +210,9 @@ async function cacheSetProductData(dataHandlerCallback) {
 		const cachedSet = cachedProductData.sets[s.groupId]
 		const modDate = new Date(s.modifiedOn)
 
+		let setToModify = undefined
 		if (!cachedSet) {
-			var setToModify = new TCGPlayerSet()
+			setToModify = new TCGPlayerSet()
 			cachedProductData.sets[s.groupId] = setToModify
 		}
 		else if (cachedSet.cacheTime < modDate) {
@@ -242,8 +243,9 @@ async function cacheSetProductData(dataHandlerCallback) {
 				const cachedProduct = cachedProductData.products[p.productId]
 				const modDate = new Date(p.modifiedOn)
 	
+				let prodToModify = null
 				if (!cachedProduct) {
-					var prodToModify = new TCGPlayerProduct()
+					prodToModify = new TCGPlayerProduct()
 					cachedProductData.products[p.productId] = prodToModify
 				}
 				else if (cachedProduct.cacheTime < modDate) {
@@ -348,9 +350,9 @@ async function getProductPriceData(products) {
 				lowPrice: r.lowPrice,
 				midPrice: r.midPrice,
 				highPrice: r.highPrice,
-				marketPrice: r.highPrice
+				marketPrice: r.marketPrice,
+				cacheTime: new Date()
 			})
-			origProduct.cacheTime = new Date()
 		}
 	}
 
@@ -370,6 +372,11 @@ async function searchTcgplayer(searches, qry, dataHandlerCallback) {
 	// Get the products within them that it so we can use them.
 	const productsWithoutPriceData = []
 	for (const s of searches) {
+		// Not a TCGPlayer search, don't care about it.
+		if (!s.hasType('$')) continue
+		// Don't know what this is, nothing to search for.
+		if (!s.data) continue
+
 		let prods = s.data.getProductsWithoutPriceData()
 		// Filter out any that don't have product IDs.
 		// We could look them up by name, but with all the product data caching we do, we shouldn't need to.
@@ -379,7 +386,7 @@ async function searchTcgplayer(searches, qry, dataHandlerCallback) {
 	}
 	
 	// Now we have all the products we need to grab data for, hit the API for that data.
-	await getProductPriceData(products)
+	await getProductPriceData(productsWithoutPriceData)
 
 	// Done here.
 	dataHandlerCallback(searches)

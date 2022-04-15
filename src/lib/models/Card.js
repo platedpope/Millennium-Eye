@@ -6,9 +6,15 @@ const deasync = require('deasync')
 const { MessageEmbed } = require('discord.js')
 
 const { EmbedIcons, EmbedColors, BanlistStatus, LocaleEmojis, YGORG_CARD_LINK, YUGIPEDIA_WIKI } = require('./Defines')
-const { searchPropertyToLocaleIndex } = require('handlers/YGOrgDBHandler')
 const { logError, breakUpDiscordMessage } = require('lib/utils/logging')
 const { TCGPlayerProduct } = require('./TCGPlayer')
+
+/**
+ * @typedef {Object} FAQEntry
+ * @property {Number} effectNumber
+ * @property {String} effectType
+ * @property {String} entryData
+ */
 
 class Card {
 	/**
@@ -43,7 +49,10 @@ class Card {
 		 * @type {Array<TCGPlayerProduct>}
 		 */
 		this.products = []				// The TCGPlayer product data associated with this card, which contain price info.
-		this.faqData = new Map()		// Any FAQ data for this card. Each key is a locale, with value being the FAQ data for that locale.
+		/**
+		 * @type {Map<String,Array<FAQEntry>>}
+		 */
+		this.faqData = new Map()		// Any FAQ data for this card. Each key is a locale, with value the array of entries in that language.
 
 		// Data unique to Rush Duel cards.
 		// NOTE: These are not filled out or used yet. I can't be bothered.
@@ -107,6 +116,9 @@ class Card {
 		finalEmbed.setAuthor(cardName, colorIcon[1], titleUrl)
 		finalEmbed.setColor(colorIcon[0])
 		const imageAttach = this.setEmbedImage(finalEmbed)
+
+		// In here to avoid a circular dependency. Not pretty, but oh well.
+		const { searchPropertyToLocaleIndex } = require('handlers/YGOrgDBHandler')
 
 		// Generate stat description.
 		// Level/Rank

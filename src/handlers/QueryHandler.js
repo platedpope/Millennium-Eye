@@ -32,6 +32,12 @@ const processSteps = [
 		'ignoreSearchTypes': ['p', 'q']
 	},
 	{
+		'searchFunction': searchTcgplayer,
+		'dataHandler': cacheTcgplayerPriceData,
+		'useForOfficial': true,
+		'ignoreSearchTypes': ['q']
+	},
+	{
 		'searchFunction': searchYgorgDb,
 		'dataHandler': convertYgorgDataToSearchData,
 		'useForOfficial': false,
@@ -41,12 +47,6 @@ const processSteps = [
 		'searchFunction': searchYugipedia,
 		'dataHandler': convertYugipediaDataToSearchData,
 		'useForOfficial': false,
-		'ignoreSearchTypes': ['q']
-	},
-	{
-		'searchFunction': searchTcgplayer,
-		'dataHandler': cacheTcgplayerPriceData,
-		'useForOfficial': true,
 		'ignoreSearchTypes': ['q']
 	}
 ]

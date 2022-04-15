@@ -227,24 +227,16 @@ function searchTcgplayerData(searches) {
 		}
 		else if (searchData instanceof Card) {
 			// If we have a Card, then we need to try and fill out its products.
-			// Use either its DB ID (if we have it) or its English name as the search.
-			if (searchData.dbId) { 
-				var searchTerm = searchData.dbId
-				var where = 'WHERE dbId = ?'
-			}
-			else {
-				searchTerm = searchData.name.get('en')
-				where = 'WHERE fullname = ?'
-			}
-			
-			const productQry = botDb.prepare(`SELECT * FROM tcgplayerProducts ${where}`)
+			const productQry = botDb.prepare(`SELECT * FROM tcgplayerProducts WHERE dbId = ? OR fullName = ?`)
 			const priceQry = botDb.prepare('SELECT * FROM tcgplayerProductPrices WHERE tcgplayerProductId = ?')
-			const productRows = productQry.all(searchTerm)
+			const productRows = productQry.all(searchData.dbId, searchData.name.get('en'))
 			for (const r of productRows) {
 				const tcgProduct = new TCGPlayerProduct()
 				tcgProduct.productId = r.tcgplayerProductId
 				tcgProduct.fullName = r.fullName
-				// Don't fill out the set, we don't need it.
+				tcgProduct.set = new TCGPlayerSet()
+				tcgProduct.set.setId = r.setIds
+				// Don't fill out the rest of the set, we don't need it.
 				tcgProduct.rarity = r.rarity
 				tcgProduct.priceCode = r.printCode
 				tcgProduct.cacheTime = new Date(r.cachedTimestamp)
@@ -447,6 +439,10 @@ function addTcgplayerDataToDb(tcgData) {
 		INSERT OR REPLACE INTO tcgplayerProducts(tcgplayerProductId, dbId, fullName, setId, printCode, rarity, cachedTimestamp)
 		VALUES(?, ?, ?, ?, ?, ?, ?)
 	`)
+	const insertProductPriceData = botDb.prepare(`
+		INSERT OR REPLACE INTO tcgplayerProductPrices(tcgplayerProductId, type, lowPrice, midPrice, highPrice, marketPrice, cachedTimestamp)
+		VALUES(?, ?, ?, ?, ?, ?, ?)
+	`)
 	const insertSetData = botDb.prepare(`
 		INSERT OR REPLACE INTO tcgplayerSets(tcgplayerSetId, setCode, setFullName, cachedTimestamp)
 		VALUES(?, ?, ?, ?)
@@ -456,18 +452,20 @@ function addTcgplayerDataToDb(tcgData) {
 		for (const s of data) {
 			if (s instanceof TCGPlayerSet) {
 				// Only insert set data here. That's all we have enough to do.
-				insertSetData.run(s.setId, s.setCode, s.fullName, s.cacheTime.toString())
+				insertSetData.run(s.setId, s.setCode, s.fullName, s.cacheTime.toISOString())
 			}
 			else if (s instanceof TCGPlayerProduct) {
 				// Insert product data here. Technically we have its set's data too, but in this context populating it is redundant.
-				insertProductData.run(s.productId, null, s.fullName, s.set.setId, s.printCode, s.rarity, s.cacheTime.toString())
+				insertProductData.run(s.productId, null, s.fullName, s.set.setId, s.printCode, s.rarity, s.cacheTime.toISOString())
 			}
 			else if (s instanceof Search) {
 				const searchData = s.data
 				for (const p of searchData.products) {
-					insertProductData.run(
-						p.productId, s.dbId, s.name.get('en'), pSet.setId, p.printCode, p.rarity,
-						p.lowPrice, p.midPrice, p.highPrice, p.marketPrice)
+					logError(p, 'Product data:')
+					// insertProductData.run(p.productId, s.dbId, searchData.name.get('en'), p.set.setId, p.printCode, p.rarity, p.cacheTime.toISOString())
+					p.priceData.forEach((pData, type) => {
+						insertProductPriceData.run(p.productId, type, pData.lowPrice, pData.midPrice, pData.highPrice, pData.marketPrice, pData.cacheTime.toISOString())
+					})
 				}
 			}
 		}
