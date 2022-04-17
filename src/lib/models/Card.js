@@ -340,10 +340,11 @@ class Card {
 	/**
 	 * Generates an embed containing all of the price data of products associated with this card.
 	 * @param {String} locale The locale to reference for the price data. 
-	 * @param {Boolean} official Whether to only include official Konami information. 
+	 * @param {Boolean} official Whether to only include official Konami information.
+	 * @param filters Any data filters (rarity, name, price, etc.) to be applied to the data.
 	 * @returns The generated MessageEmbed. No images are included for price embeds.
 	 */
-	generatePriceEmbed(locale, official) {
+	generatePriceEmbed(locale, official, filters) {
 		const embedData = {}
 
 		// We shouldn't be here with no price data, but do a final sanity check to make sure we leave if so.
@@ -352,25 +353,33 @@ class Card {
 		
 		const finalEmbed = new MessageEmbed()
 
-		// Still display the typical "author line" (name, property, link, etc.)
-		const cardName = this.name.get(locale)
-		const colorIcon = this.getEmbedColorAndIcon()
-		const titleUrl = this.getEmbedTitleLink(locale, official)
-		finalEmbed.setAuthor(cardName, colorIcon[1], titleUrl)
-		finalEmbed.setColor(colorIcon[0])
-		finalEmbed.setFooter('This bot uses TCGPlayer price data, but is not endorsed or certified by TCGPlayer.', TCPLAYER_LOGO)
-		finalEmbed.setTitle('View on TCGPlayer')
-		finalEmbed.setURL(`${TCGPLAYER_PRODUCT_SEARCH}${encodeURI(this.name.get('en'))}`)
+		// Default display 3 of each rarity. If we're filtering on rarity, increase that to 15.
+		const maxRarityLimit = filters && 'rarity' in filters ? 15 : 3
+		// Default ascending (cheapest first). If we're given a sort, use that.
+		const sort = filters && 'sort' in filters ? filters.sort : 'asc'
+		if (sort === 'asc')
+			var sortFunction = (l, r) => l.marketPrice - r.marketPrice
+		else 
+			sortFunction = (l, r) => r.marketPrice - l.marketPrice
 
 		// Gather the prices to put in the table.
 		let pricesToDisplay = []
 		for (const p of this.products) {
-			const productDisplayData = p.getPriceDataForDisplay()
+			// Apply any filters so we know which products we don't care about.
+			if (filters && Object.keys(filters).length) {
+				if ('rarity' in filters)
+					if (!p.rarity.match(new RegExp(filters.rarity))) continue
+			}
+
+			const productDisplayData = p.getPriceDataForDisplay(filters)
 			if (productDisplayData.length)
 				pricesToDisplay.push(...productDisplayData)
 		}
-		// Order from cheapest to most expensive.
-		pricesToDisplay = pricesToDisplay.sort((p1, p2) => p1.marketPrice - p2.marketPrice)
+		// Didn't find any prices to display.
+		if (!pricesToDisplay.length) return embedData
+
+		// Sort according to whatever we were given.
+		pricesToDisplay = pricesToDisplay.sort((p1, p2) => sortFunction(p1, p2))
 
 		const priceTable = new Table()
 		priceTable.setHeading('Print', 'Rarity', 'Low-Market')
@@ -381,7 +390,7 @@ class Card {
 				seenRarities[price.rarity] = 0
 			seenRarities[price.rarity]++
 			// Only display a maximum of 3 prints per rarity.
-			if (seenRarities[price.rarity] > 3)
+			if (seenRarities[price.rarity] > maxRarityLimit)
 				continue
 			
 			// Distinguish 1st Ed prints in the table.
@@ -389,21 +398,32 @@ class Card {
 			priceTable.addRow(price.identifier, typeRarity, `$${price.lowPrice}-${price.marketPrice}`)
 		}
 		
-		let extraInfo = '\nShowing maximum 3 cheapest prints per rarity. This ignores 1st Edition prices unless they are 25%+ more expensive than the Unlimited print.'
+		let extraInfo = `\nShowing maximum ${maxRarityLimit} ${sort === 'asc' ? 'least expensive' : 'most expensive'} prints per rarity. This ignores 1st Edition prices unless they are 25%+ more expensive than the Unlimited print.`
 		// Count our omissions.
 		const omissions = []
 		for (const r in seenRarities) {
 			const numRarity = seenRarities[r]
-			if (numRarity > 3)
-				omissions.push(`${numRarity - 3} ${r}`)
+			if (numRarity > maxRarityLimit)
+				omissions.push(`${numRarity - maxRarityLimit} ${r}`)
 		}
 		if (omissions.length)
 			extraInfo += `\n**Omitted:** ${omissions.join(', ')} print(s)`
 		
+		// Set up the embed now that we have all our info.
+		// Still display the typical "author line" (name, property, link, etc.)
+		const cardName = this.name.get(locale)
+		const colorIcon = this.getEmbedColorAndIcon()
+		const titleUrl = this.getEmbedTitleLink(locale, official)
+		finalEmbed.setAuthor(cardName, colorIcon[1], titleUrl)
+		finalEmbed.setColor(colorIcon[0])
+		finalEmbed.setFooter('This bot uses TCGPlayer price data, but is not endorsed or certified by TCGPlayer.', TCPLAYER_LOGO)
+		finalEmbed.setTitle('View on TCGPlayer')
+		finalEmbed.setURL(`${TCGPLAYER_PRODUCT_SEARCH}${encodeURI(this.name.get('en'))}`)
 		finalEmbed.setDescription(extraInfo)
 		// Break things up if necessary.
 		const fields = breakUpDiscordMessage(priceTable.toString(), 1018)
-		for (let i = 0; i < fields.length; i++) {
+		// Only display 2 fields maximum so this embed doesn't get waaaaaay too big.
+		for (let i = 0; i < Math.min(fields.length, 2); i++) {
 			finalEmbed.addField(
 				i === 0 ? `__Price Data__` : '__cont.__',
 				`\`\`\`\n${fields[i]}\`\`\``, false

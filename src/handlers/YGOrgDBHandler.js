@@ -144,7 +144,7 @@ async function searchYgorgDb(searches, qry, dataHandlerCallback) {
 		if (isQaSearch) {
 			const dbRows = ygorgDb.prepare('SELECT * FROM qaData WHERE qaId = ?').all(currSearch.term)
 			if (dbRows.length) {
-				currSearch.data = dbRows
+				currSearch.rawData = dbRows
 				qaSearches.db.push(currSearch)
 			}
 			else

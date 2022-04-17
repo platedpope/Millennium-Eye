@@ -14,7 +14,7 @@ function setupQueryRegex(openSymbol, closeSymbol) {
 	}
 
 	return new RegExp(
-		'(' + regexQueryTypes + ')?' +                                  // match query type if present, e.g. the 'r' in r[card name]
+		'((' + regexQueryTypes + ')*)' +                                  // match query type if present, e.g. the 'r' in r[card name]
 		'(?<!^' + open + ')' +                                          // ignore cases with multiple of the open symbol in a row, e.g. [[card name]]
 		open + '(' + angleIgnore + '[^' + close + ']+?)' + close +      // match what's in between the open/close symbols, e.g. the 'card name' in [card name]
 		'(?!' + close + ')' +                                           // ignore cases with multiple of the close symbol in a row

@@ -1,9 +1,10 @@
+const { MessageActionRow, MessageSelectMenu } = require('discord.js')
+
 const Command = require('lib/models/Command')
 const { CommandTypes } = require('lib/models/Defines')
 const Query = require('lib/models/Query')
 const Search = require('lib/models/Search')
 const { sendReply, processQuery } = require('handlers/QueryHandler')
-const { MessageActionRow, MessageSelectMenu } = require('discord.js')
 
 /**
  * Helper function to generate the select menu for which art to display.
@@ -67,9 +68,8 @@ module.exports = new Command({
 		await processQuery(qry)
 
 		const report = Query.generateSearchResolutionReport(qry.searches)
-
-		// Couldn't resolve this, bail.
 		if (report) {
+			// Couldn't resolve this, bail.
 			await sendReply(bot, interaction, report, null, {})
 			return
 		}
@@ -114,7 +114,7 @@ module.exports = new Command({
 			})
 		}
 		else {
-			interaction.reply(msgOptions)
+			await interaction.reply(msgOptions)
 		}
 	}
 })

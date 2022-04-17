@@ -100,8 +100,8 @@ function breakUpDiscordMessage(str, maxLength = 1990, delimiter = '\n') {
 		let idx = str.lastIndexOf(delimiter, maxLength)
 		if (idx === -1) {
 			// holy crap this is long, just abandon ship
-			msgs.push(`${str.substring(0, maxLength - 40)}\n... (truncated)`)
-			return
+			msgs.push(`${str.substring(0, maxLength - 40)}... (truncated)`)
+			return msgs
 		}
 		msgs.push(`${str.substring(0, idx)}`)
 		str = str.substring(idx+1)

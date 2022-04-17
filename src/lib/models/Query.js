@@ -5,7 +5,7 @@ const Card = require('./Card')
 const Ruling = require('./Ruling')
 const { MillenniumEyeBot } = require('./MillenniumEyeBot')
 const { KONAMI_DB_CARD_REGEX, KONAMI_DB_QA_REGEX, YGORG_DB_CARD_REGEX, YGORG_DB_QA_REGEX, IGNORE_LINKS_REGEX, Locales } = require('./Defines')
-const { logError } = require('lib/utils/logging')
+const { logError, logger } = require('lib/utils/logging')
 
 /**
  * Container class that tracks the results of an entire query (which can contain multiple searches).
@@ -48,8 +48,9 @@ class Query {
 			 * @type {Array<Search>}
 			 */
 			this.searches = []
-			for (const s of this.rawSearchData)
+			for (const s of this.rawSearchData) {
 				this.addSearch(s[0], s[1], s[2])
+			}
 		}
 	}
 
@@ -80,21 +81,26 @@ class Query {
 			for (const locale in guildQueries) {
 				const matches = [...msgContent.matchAll(guildQueries[locale])]
 				for (const m of matches) {
-					let sContent = m[2]
+					let sContent = m[3]
 					// If the search content has a link in it, ignore it to avoid really dumb behavior.
 					if (IGNORE_LINKS_REGEX.test(sContent)) continue
-					let sType = m[1] ?? (this.rulings ? 'r' : 'i')
-					// Try converting the search to an integer to see if it's a card or ruling ID.
-					let intSContent = parseInt(sContent, 10)
-					if (!isNaN(intSContent)) {
-						// Special case: there is a card named "7"...
-						if (sType !== 'q' && sContent !== '7') {
-							sContent = intSContent
-						}
-					}
-					let sLocale = m[3] ?? locale
 
-					searchData.push([sContent, sType, sLocale])
+					let sType = m[1] ?? (this.rulings ? 'r' : 'i')
+					let sLocale = m[4] ?? locale
+					// Multiple types can be contained in the first match. Iterate through all that we have.
+					for (let i = 0; i < sType.length; i++) {
+						const currType = sType.charAt(i)
+						// Try converting the search to an integer to see if it's a card or ruling ID.
+						let intSContent = parseInt(sContent, 10)
+						if (!isNaN(intSContent)) {
+							// Special case: there is a card named "7"...
+							if (currType !== 'q' && sContent !== '7') {
+								sContent = intSContent
+							}
+						}
+
+						searchData.push([sContent, currType, sLocale])
+					}
 				}
 			}
 		}

@@ -40,15 +40,18 @@ class TCGPlayerProduct {
 
 	/**
 	 * Gathers the relevant price data to be displayed.
+	 * @param {Object} options Options relevant to what data to display.
 	 * @returns {Array<Object>} An array of price data relevant for display.
 	 */
-	getPriceDataForDisplay(useName) {
+	getPriceDataForDisplay(options) {
 		const displayPriceData = []
 
-		// If this has no rarity or print code, it's not a card. Probably a booster or tin.
+		// If this has no rarity or print code, it's not a card. Probably a booster or tin, skip.
 		if (!this.rarity || !this.printCode)
 			return displayPriceData
 
+		const useName = options && options.useName 
+		
 		if (this.priceData.size) {
 			// Trim the "Rare" from the rarity, it's redundant for display purposes.
 			let trimmedRarity = this.rarity !== 'Rare' ? this.rarity.replace(/\s*Rare$/, '') : this.rarity
@@ -128,10 +131,11 @@ class TCGPlayerSet {
 	/**
 	 * Generates an embed containing all of the price data of products associated with this set.
 	 * @param {String} locale The locale to reference for the price data. 
-	 * @param {Boolean} official Whether to only include official Konami information. 
+	 * @param {Boolean} official Whether to only include official Konami information.
+	 * @param filters Any data filters (rarity, name, price, etc.) to be applied to the data.
 	 * @returns The generated MessageEmbed.
 	 */
-	generatePriceEmbed(locale, official) {
+	generatePriceEmbed(locale, official, filters) {
 		const embedData = {}
 		
 		// We shouldn't be here with no product data, but do a final sanity check to make sure we leave if so.
@@ -140,23 +144,34 @@ class TCGPlayerSet {
 		
 		const finalEmbed = new MessageEmbed()
 
-		const embedName = this.fullName + ` (${this.setCode})`
-		finalEmbed.setAuthor(embedName)
-		finalEmbed.setFooter('This bot uses TCGPlayer price data, but is not endorsed or certified by TCGPlayer.', TCPLAYER_LOGO)
-		finalEmbed.setTitle('View on TCGPlayer')
-		const tcgplayerUrlName = this.fullName.replace(/\s/g, '-').toLowerCase()
-		finalEmbed.setURL(`${TCGPLAYER_SET_SEARCH}${tcgplayerUrlName}?setName=${tcgplayerUrlName}`)
+		// Default descending (most expensive first). If we're given a sort, use that.
+		const sort = filters && 'sort' in filters ? filters.sort : 'desc'
+		if (sort === 'asc')
+			var sortFunction = (l, r) => l.marketPrice - r.marketPrice
+		else 
+			sortFunction = (l, r) => r.marketPrice - l.marketPrice
 
 		// Gather the prices to put in the table.
 		let pricesToDisplay = []
 		for (const p of this.products) {
+			// Apply any filters so we know which products we don't care about.
+			if (filters && Object.keys(filters).length) {
+				if ('rarity' in filters) 
+					if (!p.rarity || !p.rarity.match(new RegExp(filters.rarity))) continue
+			}
 
-			const productDisplayData = p.getPriceDataForDisplay(true)
+			let priceDataOptions = { useName: true }
+			if (filters)
+				priceDataOptions = { ...priceDataOptions, ...filters }
+			const productDisplayData = p.getPriceDataForDisplay(priceDataOptions)
 			if (productDisplayData.length)
 				pricesToDisplay.push(...productDisplayData)
 		}
-		// Order from most to least expensive.
-		pricesToDisplay = pricesToDisplay.sort((p1, p2) => p2.marketPrice - p1.marketPrice)
+		// Didn't find any prices to display.
+		if (!pricesToDisplay.length) return embedData
+
+		// Sort according to whatever we were given.
+		pricesToDisplay = pricesToDisplay.sort((p1, p2) => sortFunction(p1, p2))
 
 		const priceTable = new Table()
 		priceTable.setHeading('Name', 'Rarity', 'Low-Market')
@@ -186,7 +201,7 @@ class TCGPlayerSet {
 				omittedPrints[price.rarity]++
 			}
 		}
-		let extraInfo = '\nPrices ordered from most to least expensive. This ignores 1st Edition prices unless they are 25%+ more expensive than the Unlimited print.'
+		let extraInfo = `\nDisplaying ${sort === 'desc' ? 'most expensive' : 'least expensive'} prices first. This ignores 1st Edition prices unless they are 25%+ more expensive than the Unlimited print.`
 		// Count our omissions.
 		const omissions = []
 		for (const rarity in omittedPrints) 
@@ -194,6 +209,14 @@ class TCGPlayerSet {
 		if (omissions.length)
 			extraInfo += `\n**Omitted:** ${omissions.join(', ')} print(s)`
 
+		// Set up the embed now that we have all our info.
+		// Still display the typical "author line" (name, property, link, etc.)
+		const embedName = this.fullName + ` (${this.setCode})`
+		finalEmbed.setAuthor(embedName)
+		finalEmbed.setFooter('This bot uses TCGPlayer price data, but is not endorsed or certified by TCGPlayer.', TCPLAYER_LOGO)
+		finalEmbed.setTitle('View on TCGPlayer')
+		const tcgplayerUrlName = this.fullName.replace(/\s/g, '-').toLowerCase()
+		finalEmbed.setURL(`${TCGPLAYER_SET_SEARCH}${tcgplayerUrlName}?setName=${tcgplayerUrlName}`)
 		finalEmbed.setDescription(extraInfo)
 		finalEmbed.addField('__Price Data__', '```\n' + priceTable.toString() + '```', false)
 
