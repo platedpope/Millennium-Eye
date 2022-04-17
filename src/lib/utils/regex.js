@@ -18,7 +18,7 @@ function setupQueryRegex(openSymbol, closeSymbol) {
 		'(?<!^' + open + ')' +                                          // ignore cases with multiple of the open symbol in a row, e.g. [[card name]]
 		open + '(' + angleIgnore + '[^' + close + ']+?)' + close +      // match what's in between the open/close symbols, e.g. the 'card name' in [card name]
 		'(?!' + close + ')' +                                           // ignore cases with multiple of the close symbol in a row
-		'(' + regexLocales + ')?'                                     // match locale if present, e.g. the 'fr' in [card name]fr
+		'(' + regexLocales + ')?'                                     	// match locale if present, e.g. the 'fr' in [card name]fr
 		, 'g')															// global flag to ensure we match all possible
 }
 

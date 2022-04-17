@@ -1,5 +1,6 @@
 const Card = require('./Card')
 const Ruling = require('./Ruling')
+const { TCGPlayerSet } = require('./TCGPlayer')
 
 /**
  * Container class for a single search. It tracks any original terms used to map to its data,
@@ -24,14 +25,14 @@ const Ruling = require('./Ruling')
 		// as the databases/APIs find a better search term.
 		this.term = content
 		/** 
-		 * @type {Map<String,Set} Each locale-type pair associated with this search.
+		 * @type {Map<String,Set<String>>} Each locale-type pair associated with this search.
 		 */
 		this.localeToTypesMap = new Map()
 		if (type !== undefined && locale !== undefined)
 			this.addTypeToLocale(type, locale)
 
 		/**
-		 * @type {Card | Ruling} This starts out unset but will be set to something when data is found.
+		 * @type {Card | Ruling | TCGPlayerSet} This starts out unset but will be set to something when data is found.
 		 */
 		this.data = undefined
 
@@ -102,7 +103,7 @@ const Ruling = require('./Ruling')
 					return false
 			// If this has '$'-type search, it needs corresponding price data.
 			if (types.has('$'))
-				if (this.data.products.length === this.data.getProductsWithoutPriceData().length)
+				if (!this.data.hasResolvedPriceData())
 					return false
 			// If this has 'f'-type search, it needs FAQ data for this locale.
 			if (types.has('f'))
@@ -126,13 +127,12 @@ const Ruling = require('./Ruling')
 	 * @returns {Map} The map of locales -> types that did not have resolved data.
 	 */
 	getUnresolvedData() {
-		const unresolvedLocaleTypes = new Map()
-
 		// If this has no data, all of its locales -> types are unresolved.
 		if (this.data === undefined) {
-			this.localeToTypesMap.forEach((types, locale) => unresolvedLocaleTypes.set(locale, types))
-			return unresolvedLocaleTypes
+			return this.localeToTypesMap
 		}
+
+		const unresolvedLocaleTypes = new Map()
 
 		this.localeToTypesMap.forEach((types, locale) => {
 			// Broad case: if this is a Card and we don't have name or effect text in this locale,
@@ -158,7 +158,7 @@ const Ruling = require('./Ruling')
 				}
 				// Any '$' or '€'-type search should have corresponding price data.
 				else if (t === '$') {
-					if (this.data.products.length === this.data.getProductsWithoutPriceData().length)
+					if (!this.data.hasResolvedPriceData())
 						unresolvedType = true
 				}
 				// Any 'f'-type search should have FAQ data in this locale.

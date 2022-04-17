@@ -32,8 +32,7 @@ let ygoCategoryId = undefined
  * Some API requests to TCGPlayer are paged, meaning the total number of results they could return
  * is greater than the number of results a single API response can give.
  * This function exists to handle requests that could potentially result in paged data
- * by repeatedly sending requests at increasing offsets until all necessary data is gathered
- * (or until we reach a request hard cap, whichever happens first).
+ * by repeatedly sending requests at increasing offsets until all necessary data is gathered.
  * @param {Object} apiRequestOptions The axios request options to use for the query.
  * @param {Number} limitPerPage The maximum number of results per response. Defaults to 100, which is the TCGPlayer maximum.
  * @returns {Promise<Array>} All gathered responses.
@@ -54,6 +53,21 @@ async function handlePagedRequest(apiRequestOptions, limitPerPage = 100) {
 		results.push(...respData.results)
 		offset += respData.results.length
 	}
+	const handleError = err => {
+		if (err.response) {
+			const errData = err.response.data
+			// Suppress "no products found" errors. Sometimes there just aren't any, not an error.
+			const noProductsFoundError = errData.errors && errData.errors.length && errData.errors[0] === 'No products were found.'
+			if (!noProductsFoundError)
+				logError(errData, 'Received failed paged result:', apiRequestOptions)
+		}
+		else if (err.request) {
+			logError(err.message, 'Request for paged result failed:', apiRequestOptions)
+		}
+		else {
+			logError(err.message, 'Paged API encountered undefined error:', apiRequestOptions)
+		}
+	}
 
 	// Need to send the first request so we know what the total we have to deal with is.
 	try {
@@ -61,11 +75,7 @@ async function handlePagedRequest(apiRequestOptions, limitPerPage = 100) {
 		handleResponse(response.data)
 	}
 	catch (err) {
-		const errData = err.response.data
-		// Suppress "no products found" errors. Sometimes there just aren't any, not an error.
-		const noProductsFoundError = errData.errors && errData.errors.length && errData.errors[0] === 'No products were found.'
-		if (!noProductsFoundError)
-			logError(errData, 'Received failed paged result:', apiRequestOptions)
+		handleError(err)
 	}
 
 	// While we've gathered less data than is available in total, keep requesting.
@@ -80,11 +90,7 @@ async function handlePagedRequest(apiRequestOptions, limitPerPage = 100) {
 			handleResponse(response.data)
 		}
 		catch(err) {
-			const errData = err.response.data
-			// Suppress "no products found" errors. Sometimes there just aren't any, not an error.
-			const noProductsFoundError = errData.errors && errData.errors.length && errData.errors[0] === 'No products were found.'
-			if (!noProductsFoundError)
-				logError(errData, 'Received failed paged result:', apiRequestOptions)
+			handleError(err)
 		}
 	}
 	
@@ -128,7 +134,7 @@ async function cacheBearerToken() {
 			handleResponse(response.data)
 		}
 		catch(err) {
-			const errObj = err.response ? err.response.data : err
+			const errObj = err.response ? err.response.data : err.message
 			logError(errObj, 'Failed to get bearer token for TCGPlayer API.')
 		}
 	
@@ -171,7 +177,7 @@ async function cacheYgoCategory() {
 			handleResponse(response.data)
 		}
 		catch(err) {
-			const errObj = err.response ? err.response.data : err
+			const errObj = err.response ? err.response.data : err.message
 			logError(errObj, 'Failed to cache TCGPlayer category ID for Yu-Gi-Oh.')
 		}
 	
@@ -254,7 +260,7 @@ async function cacheSetProductData(dataHandlerCallback) {
 	
 				if (prodToModify) {
 					prodToModify.productId = p.productId
-					prodToModify.fullName = p.name
+					prodToModify.fullName = p.name.split('(')[0].trim()		// Ignore anything parenthetical, TCGPlayer likes adding things to the name.
 					prodToModify.set = cachedProductData.sets[p.groupId]
 					prodToModify.cacheTime = modDate
 					// Rarity and print code are in the extended fields.
@@ -341,7 +347,7 @@ async function getProductPriceData(products) {
 
 	const handlePriceResponse = respData => {
 		for (const r of respData.results) {
-			// Skip the reuslts that have null price data due the type of print being non-existent (e.g., no 1st Edition prints).
+			// Skip the results that have null price data due the type of print being non-existent (e.g., no 1st Edition prints).
 			if (!r.lowPrice || !r.midPrice || !r.highPrice || !r.marketPrice) continue
 
 			const prodId = r.productId
@@ -363,30 +369,94 @@ async function getProductPriceData(products) {
 		handlePriceResponse(resp.data)
 	}
 	catch(err) {
-		logError(err.response, 'TCGPlayer price API query failed.', products)
+		const errObj = err.response ? err.response.data : err.message
+		logError(errObj, 'TCGPlayer price API query failed.', products)
+	}
+}
+
+/**
+ * Resolves price data for the given TCGPlayerProducts.
+ * @param {Array<TCGPlayerSet>} sets
+ */
+ async function getSetPriceData(sets) {
+	// Make a map out of the products in these sets for easy future lookups.
+	const prodMap = {}
+	for (const s of sets)
+		for (const p of s.products)
+			prodMap[p.productId] = p
+
+	const handlePriceResponse = respData => {
+		for (const r of respData.results) {
+			// Skip the results that have null price data due the type of print being non-existent (e.g., no 1st Edition prints).
+			if (!r.lowPrice || !r.midPrice || !r.highPrice || !r.marketPrice) continue
+
+			const prodId = r.productId
+			const origProduct = prodMap[prodId]
+			origProduct.priceData.set(r.subTypeName, {
+				lowPrice: r.lowPrice,
+				midPrice: r.midPrice,
+				highPrice: r.highPrice,
+				marketPrice: r.marketPrice,
+				cacheTime: new Date()
+			})
+		}
+	}
+
+	let apiRequests = []
+	for (const s of sets) {
+		const resp = apiCall.get(`${TCGPLAYER_API_VERSION}/pricing/group/${s.setId}`, {
+			headers: requestHeaders
+		})
+		apiRequests.push(resp)
+	}
+
+	apiRequests = await Promise.allSettled(apiRequests)
+	for (let i = 0; i < apiRequests.length; i++) {
+		const resp = apiRequests[i]
+		// These promises return in the same order we sent the requests in.
+		// Map this response to its corresponding set that way.
+		const origSet = sets[i]
+
+		if (resp.status === 'rejected') {
+			logError(resp.reason.message, `TCGPlayer set price API query for set ${origSet} failed.`)
+			continue
+		}
+
+		if (resp.value.data) 
+			handlePriceResponse(resp.value.data)
 	}
 }
 
 async function searchTcgplayer(searches, qry, dataHandlerCallback) {
 	// The searches that made it this far don't have price data.
-	// Get the products within them that it so we can use them.
+	// For cards, get the products within them that it so we can use them.
 	const productsWithoutPriceData = []
+	// For sets, just hit the group price data endpoint.
+	const setsWithoutPriceData = []
+
 	for (const s of searches) {
 		// Not a TCGPlayer search, don't care about it.
 		if (!s.hasType('$')) continue
 		// Don't know what this is, nothing to search for.
 		if (!s.data) continue
 
-		let prods = s.data.getProductsWithoutPriceData()
-		// Filter out any that don't have product IDs.
-		// We could look them up by name, but with all the product data caching we do, we shouldn't need to.
-		prods = prods.filter(p => p.productId)
-
-		productsWithoutPriceData.push(...prods)
+		if (s.data instanceof TCGPlayerSet)
+			setsWithoutPriceData.push(s.data)
+		else {
+			let prods = s.data.getProductsWithoutPriceData()
+			// Filter out any that don't have product IDs.
+			// We could look them up by name, but with all the product data caching we do, we shouldn't need to.
+			prods = prods.filter(p => p.productId)
+	
+			productsWithoutPriceData.push(...prods)
+		}
 	}
 	
 	// Now we have all the products we need to grab data for, hit the API for that data.
-	await getProductPriceData(productsWithoutPriceData)
+	if (productsWithoutPriceData.length)
+		await getProductPriceData(productsWithoutPriceData)
+	if (setsWithoutPriceData.length)
+		await getSetPriceData(setsWithoutPriceData)
 
 	// Done here.
 	dataHandlerCallback(searches)

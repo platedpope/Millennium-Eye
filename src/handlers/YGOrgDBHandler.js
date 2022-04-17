@@ -56,58 +56,55 @@ async function processManifest(newRevision) {
 	await axios.get(`${YGORG_MANIFEST}/${cachedRevision}`, {
 		'timeout': API_TIMEOUT * 1000
 	}).then(r => {
-		if (r.status === 200) {
-			logger.info(`Processing new manifest revision ${newRevision}...`)
-			const changes = r.data.data 
+		logger.info(`Processing new manifest revision ${newRevision}...`)
+		const changes = r.data.data 
 
-			if (changes) {
-				// Card data updates: no way to tell what exactly has changed,
-				// so just invalidate any data stored in the bot or YGOrg databases.
-				// (Don't invalidate anything from the Konami database.)
-				if ('card' in changes) {
-					const evictIds = Object.keys(changes.card)
-					// Delete any FAQ data from YGOrg DB.
-					const delFaq = ygorgDb.prepare('DELETE FROM faqData WHERE cardId = ?')
-					const delMany = ygorgDb.transaction(ids => {
-						for (const id of ids) delFaq.run(id)
-					})
-					delMany(evictIds)
-					// Delete any bot-specific data.
-					evictFromBotCache(evictIds)
+		if (changes) {
+			// Card data updates: no way to tell what exactly has changed,
+			// so just invalidate any data stored in the bot or YGOrg databases.
+			// (Don't invalidate anything from the Konami database.)
+			if ('card' in changes) {
+				const evictIds = Object.keys(changes.card)
+				// Delete any FAQ data from YGOrg DB.
+				const delFaq = ygorgDb.prepare('DELETE FROM faqData WHERE cardId = ?')
+				const delMany = ygorgDb.transaction(ids => {
+					for (const id of ids) delFaq.run(id)
+				})
+				delMany(evictIds)
+				// Delete any bot-specific data.
+				evictFromBotCache(evictIds)
 
-					logger.info(`Evicted all FAQ and cached bot data associated with database IDs: ${evictIds.join(', ')}`)
-				}
-				// Invalidate cached QA data.
-				if ('qa' in changes) {
-					const evictQas = Object.keys(changes.qa)
+				logger.info(`Evicted all FAQ and cached bot data associated with database IDs: ${evictIds.join(', ')}`)
+			}
+			// Invalidate cached QA data.
+			if ('qa' in changes) {
+				const evictQas = Object.keys(changes.qa)
 
-					const delQa = ygorgDb.prepare('DELETE FROM qaData WHERE qaId = ?')
-					const delCards = ygorgDb.prepare('DELETE FROM qaCards WHERE qaId = ?')
-					const delMany = ygorgDb.transaction(ids => {
-						for (const id of ids) {
-							delQa.run(id)
-							delCards.run(id)
-						}
-					})
-					delMany(evictQas)
-
-					logger.info(`Evicted all QA data for QA IDs: ${evictQas.join(', ')}`)
-				}
-				// Invalidate any cached indices we care about.
-				if ('idx' in changes) {
-					const idxChanges = changes.idx
-					if ('name' in idxChanges) {
-						logger.info(`Evicted locales ${Object.keys(idxChanges).join(', ')} from name index.`)
-						for (l in idxChanges.name) delete nameToIdIndex[l]
+				const delQa = ygorgDb.prepare('DELETE FROM qaData WHERE qaId = ?')
+				const delCards = ygorgDb.prepare('DELETE FROM qaCards WHERE qaId = ?')
+				const delMany = ygorgDb.transaction(ids => {
+					for (const id of ids) {
+						delQa.run(id)
+						delCards.run(id)
 					}
+				})
+				delMany(evictQas)
+
+				logger.info(`Evicted all QA data for QA IDs: ${evictQas.join(', ')}`)
+			}
+			// Invalidate any cached indices we care about.
+			if ('idx' in changes) {
+				const idxChanges = changes.idx
+				if ('name' in idxChanges) {
+					logger.info(`Evicted locales ${Object.keys(idxChanges).join(', ')} from name index.`)
+					for (l in idxChanges.name) delete nameToIdIndex[l]
 				}
 			}
-
-			cacheManifestRevision(newRevision)
 		}
-		else throw new Error(`YGOrg DB returned bad status (${r.status}) when trying to update manifest.`)
+
+		cacheManifestRevision(newRevision)
 	}).catch(err => {
-		logError(err, 'Failed processing YGOrg DB manifest.')
+		logError(err.message, 'Failed processing YGOrg DB manifest.')
 	})
 }
 
@@ -230,7 +227,7 @@ async function searchYgorgDb(searches, qry, dataHandlerCallback) {
 			const qaSearch = qaApiSearches[i]
 
 			if (qaResponse.status === 'rejected') {
-				logError(qaResponse.reason, `YGOrg API query for QA ID ${qaSearch.term} failed.`)
+				logError(qaResponse.reason.message, `YGOrg API query for QA ID ${qaSearch.term} failed.`)
 				continue
 			}
 
@@ -248,7 +245,7 @@ async function searchYgorgDb(searches, qry, dataHandlerCallback) {
 			const cardSearch = cardApiSearches[i]
 
 			if (cardResponse.status === 'rejected') {
-				logError(cardResponse.reason, `YGOrg API query for card ID ${cardSearch.term} failed.`)
+				logError(cardResponse.reason.message, `YGOrg API query for card ID ${cardSearch.term} failed.`)
 				continue
 			}
 
@@ -329,7 +326,7 @@ async function searchArtworkRepo(artSearches) {
 				const resp = repoResponses[idx][i]
 
 				if (resp.status === 'rejected') {
-					logError(resp.reason, `YGOrg artwork repo query for ID ${origSearch.term} failed.`)
+					logError(resp.reason.message, `YGOrg artwork repo query for ID ${origSearch.term} failed.`)
 					continue
 				}
 	
@@ -577,7 +574,7 @@ async function cacheNameToIdIndex(locales = Object.keys(Locales)) {
 		const indexLocale = localesNotCached[i]
 
 		if (index.status === 'rejected') {
-			logError(index.reason, `Failed to refresh cached YGORG name->ID index for locale ${indexLocale}.`)
+			logError(index.reason.message, `Failed to refresh cached YGORG name->ID index for locale ${indexLocale}.`)
 			continue
 		}
 
@@ -647,70 +644,67 @@ async function cachePropertyMetadata() {
 	await axios.get(YGORG_PROPERTY_METADATA, {
 		'timeout': API_TIMEOUT * 1000
 	}).then(r => {
-		if (r.status === 200) {
-			// Cache the raw array that is returned by this.
-			propertyArray = r.data
-			// Also rejig this by pulling out the EN values to make them keys in a map for easy future lookups.
-			for (const prop of r.data) {
-				if (!prop) continue
-				else if (!('en' in prop)) continue
+		// Cache the raw array that is returned by this.
+		propertyArray = r.data
+		// Also rejig this by pulling out the EN values to make them keys in a map for easy future lookups.
+		for (const prop of r.data) {
+			if (!prop) continue
+			else if (!('en' in prop)) continue
 
-				// Pull out the EN property name and make it a key.
-				const enProp = prop['en']
-				propertyToLocaleIndex[enProp] = {}
-				for (const locale in prop) {
-					// Make each locale a key under EN that maps to the translation of that property.
-					propertyToLocaleIndex[enProp][locale] = prop[locale]
-				}
+			// Pull out the EN property name and make it a key.
+			const enProp = prop['en']
+			propertyToLocaleIndex[enProp] = {}
+			for (const locale in prop) {
+				// Make each locale a key under EN that maps to the translation of that property.
+				propertyToLocaleIndex[enProp][locale] = prop[locale]
 			}
-
-			// Also load some hardcoded ones the bot tracks for itself (not given by YGOrg DB since it doesn't have any use for them).
-			propertyToLocaleIndex['Level'] = {
-				'de': 'Stufe',
-				'en': 'Level',
-				'es': 'Nivel',
-				'fr': 'Niveau',
-				'it': 'Livello',
-				'ja': 'レベル',
-				'ko': '레벨',
-				'pt': 'Nível'
-			}
-			propertyToLocaleIndex['Rank'] = {
-				'de': 'Rang',
-				'en': 'Rank',
-				'es': 'Rango',
-				'fr': 'Rang',
-				'it': 'Rango',
-				'ja': 'ランク',
-				'ko': '랭크',
-				'pt': 'Classe'
-			}
-			propertyToLocaleIndex['Pendulum Effect'] = {
-				'de': 'Pendeleffekt',
-				'en': 'Pendulum Effect',
-				'es': 'Efecto de Péndulo',
-				'fr': 'Effet Pendule',
-				'it': 'Effetto Pendulum',
-				'ja': 'ペンデュラム効果',
-				'ko': '펜듈럼 효과',
-				'pt': 'Efeito de Pêndulo'
-			}
-			propertyToLocaleIndex['Pendulum Scale'] = {
-				'de': 'Pendelbereich',
-				'en': 'Pendulum Scale',
-				'es': 'Escala de Péndulo',
-				'fr': 'Échelle Pendule',
-				'it': 'Valore Pendulum',
-				'ja': 'ペンデュラムスケール',
-				'ko': '펜듈럼 스케일',
-				'pt': 'Escala de Pêndulo'
-			}
-
-			logger.info('Successfully cached YGOrg DB locale property metadata.')
 		}
-		else throw new Error(`YGOrg DB returned bad status (${r.status}) when trying to update locale property metadata.`)
+
+		// Also load some hardcoded ones the bot tracks for itself (not given by YGOrg DB since it doesn't have any use for them).
+		propertyToLocaleIndex['Level'] = {
+			'de': 'Stufe',
+			'en': 'Level',
+			'es': 'Nivel',
+			'fr': 'Niveau',
+			'it': 'Livello',
+			'ja': 'レベル',
+			'ko': '레벨',
+			'pt': 'Nível'
+		}
+		propertyToLocaleIndex['Rank'] = {
+			'de': 'Rang',
+			'en': 'Rank',
+			'es': 'Rango',
+			'fr': 'Rang',
+			'it': 'Rango',
+			'ja': 'ランク',
+			'ko': '랭크',
+			'pt': 'Classe'
+		}
+		propertyToLocaleIndex['Pendulum Effect'] = {
+			'de': 'Pendeleffekt',
+			'en': 'Pendulum Effect',
+			'es': 'Efecto de Péndulo',
+			'fr': 'Effet Pendule',
+			'it': 'Effetto Pendulum',
+			'ja': 'ペンデュラム効果',
+			'ko': '펜듈럼 효과',
+			'pt': 'Efeito de Pêndulo'
+		}
+		propertyToLocaleIndex['Pendulum Scale'] = {
+			'de': 'Pendelbereich',
+			'en': 'Pendulum Scale',
+			'es': 'Escala de Péndulo',
+			'fr': 'Échelle Pendule',
+			'it': 'Valore Pendulum',
+			'ja': 'ペンデュラムスケール',
+			'ko': '펜듈럼 스케일',
+			'pt': 'Escala de Pêndulo'
+		}
+
+		logger.info('Successfully cached YGOrg DB locale property metadata.')
 	}).catch(e => {
-		logError(e, 'Failed getting locale metadata.')
+		logError(e.message, 'Failed getting locale metadata.')
 	})
 }
 

@@ -12,42 +12,56 @@ const { searchYgorgDb } = require('./YGOrgDBHandler')
 const { searchYugipedia } = require('./YugipediaHandler')
 const { convertBotDataToSearchData, convertKonamiDataToSearchData, convertYgorgDataToSearchData, convertYugipediaDataToSearchData, cacheTcgplayerPriceData } = require('./DataHandler')
 const { searchTcgplayer } = require('./TCGPlayerHandler')
+const Card = require('lib/models/Card')
+const { TCGPlayerSet } = require('lib/models/TCGPlayer')
+const Ruling = require('lib/models/Ruling')
+
+/**
+ * @typedef {Object} searchStep
+ * @property {Function} searchFunction
+ * @property {Function} dataHandler
+ * @property {Boolean} useForOfficial
+ * @property {Set<String>} evaluatesTypes
+ */
 
 // Used to monitor how many searches a user has queried the bot over a period of time (default 1 min).
 // If a user passes the acceptable number over the course of that minute, no future searches within that minute are allowed.
 const userSearchCounter = new Cache({ defaultTtl: 60 * 1000 })
 
 // This defines the default path searches take through the multiple databases and APIs available to the bot.
+/**
+ * @type {Array<searchStep>}
+ */
 const processSteps = [
 	{ 
 		'searchFunction': searchTermCache,
 		'dataHandler': convertBotDataToSearchData,
 		'useForOfficial': false,
-		'ignoreSearchTypes': ['q']
+		'evaluatesTypes': new Set(['i', 'r', 'a', 'd', '$', 'f'])
 	},
 	{
 		'searchFunction': searchKonamiDb,
 		'dataHandler': convertKonamiDataToSearchData,
 		'useForOfficial': true,
-		'ignoreSearchTypes': ['p', 'q']
+		'evaluatesTypes': new Set(['i', 'r', 'a', 'd', '$', 'f']),
 	},
 	{
 		'searchFunction': searchTcgplayer,
 		'dataHandler': cacheTcgplayerPriceData,
 		'useForOfficial': true,
-		'ignoreSearchTypes': ['q']
+		'evaluatesTypes': new Set(['$'])
 	},
 	{
 		'searchFunction': searchYgorgDb,
 		'dataHandler': convertYgorgDataToSearchData,
 		'useForOfficial': false,
-		'ignoreSearchTypes': ['p']
+		'evaluatesTypes': new Set(['i', 'r', 'a', 'd', 'f', 'q'])
 	},
 	{
 		'searchFunction': searchYugipedia,
 		'dataHandler': convertYugipediaDataToSearchData,
 		'useForOfficial': false,
-		'ignoreSearchTypes': ['q']
+		'evaluatesTypes': new Set(['i', 'r', 'a', 'd', 'p'])
 	}
 ]
 
@@ -68,11 +82,12 @@ async function processQuery(qry) {
 		if (!searchesToEval.length)
 			// Everything is resolved.
 			break
-		// Filter out ignored search types.
+		// Filter to find only searches this step will evaluate.
 		searchesToEval = searchesToEval.filter(s => {
-			for (const type of step.ignoreSearchTypes)
-				if (s.hasType(type)) return false
-			return true
+			const unresolvedTypes = new Set(...s.getUnresolvedData().values())
+			for (const ut of unresolvedTypes)
+				if (step.evaluatesTypes.has(ut)) return true
+			return false
 		})
 		if (!searchesToEval.length)
 			// If this filtered out everything, nothing to do on this step.

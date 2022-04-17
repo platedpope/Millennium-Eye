@@ -4,6 +4,7 @@ const PythonShell = require('python-shell').PythonShell
 const { searchNameToIdIndex } = require('./YGOrgDBHandler')
 const { KONAMI_DB_PATH, NEURON_DB_PATH } = require('lib/models/Defines')
 const { logger, logError } = require('lib/utils/logging')
+const { TCGPlayerSet } = require('lib/models/TCGPlayer')
 
 const konamiDb = new Database(KONAMI_DB_PATH)
 
@@ -22,6 +23,8 @@ function searchKonamiDb(searches, qry, dataHandlerCallback) {
 	// Iterate through the array backwards because we might modify it as we go.
 	for (let i = searches.length - 1; i >= 0; i--) {
 		const currSearch = searches[i]
+		// Skip TCGPlayer sets we found in the bot cache.
+		if (currSearch.data && currSearch.data instanceof TCGPlayerSet) continue
 		
 		// If the search term is a number, then it's a database ID.
 		if (Number.isInteger(currSearch.term)) {

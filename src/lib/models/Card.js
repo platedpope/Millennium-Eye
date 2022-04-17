@@ -4,8 +4,9 @@ const sharp = require('sharp')
 const sanitize = require('sanitize-filename') 
 const deasync = require('deasync')
 const { MessageEmbed } = require('discord.js')
+const Table = require('ascii-table')
 
-const { EmbedIcons, EmbedColors, BanlistStatus, LocaleEmojis, YGORG_CARD_LINK, YUGIPEDIA_WIKI } = require('./Defines')
+const { EmbedIcons, EmbedColors, BanlistStatus, LocaleEmojis, YGORG_CARD_LINK, YUGIPEDIA_WIKI, KONAMI_CARD_LINK, KONAMI_REQUEST_LOCALE, TCPLAYER_LOGO, TCGPLAYER_SEARCH, TCGPLAYER_PRODUCT_SEARCH } = require('./Defines')
 const { logError, breakUpDiscordMessage } = require('lib/utils/logging')
 const { TCGPlayerProduct } = require('./TCGPlayer')
 
@@ -66,6 +67,7 @@ class Card {
 	/**
 	 * Generic wrapper for generating any type of embed.
 	 * @param {Object} options Relevant options (type, locale, etc.) that are passed on to more specific embed functions.
+	 * @returns {Object} An object containing the generated embed and data relevant to it (e.g., attachments).
 	 */
 	generateEmbed(options) {
 		let embedData = {}
@@ -90,6 +92,9 @@ class Card {
 		else if (type === 'd') {
 			embedData = this.generateDateEmbed(locale, official)
 		}
+		else if (type === '$') {
+			embedData = this.generatePriceEmbed(locale, official)
+		}
 
 		return embedData
 	}
@@ -99,6 +104,7 @@ class Card {
 	 * @param {String} locale Which locale to use when generating the embed.
 	 * @param {Boolean} rulings Whether to include additional information relevant to rulings for the card.
 	 * @param {Boolean} official Whether to only include official Konami information. This overrides any inclusion from rulings mode being true.
+	 * @returns The generated MessageEmbed and its image attachment (if any).
 	 */
 	generateInfoEmbed(locale, rulings, official) {
 		const embedData = {}
@@ -216,7 +222,8 @@ class Card {
 	 * Generates an embed containing an upsized card art (of the given ID).
 	 * @param {String} locale The locale to use for the card name.
 	 * @param {Boolean} official Whether to only include official Konami information. 
-	 * @param {Number} artId The ID of the art to display. 
+	 * @param {Number} artId The ID of the art to display.
+	 * @returns The generated MessageEmbed and its image attachment (if any).
 	 */
 	generateArtEmbed(locale, official, artId = 1) {
 		const embedData = {}
@@ -245,6 +252,12 @@ class Card {
 		return embedData
 	}
 
+	/**
+	 * Generates an embed containing all of the print data associated with this card.
+	 * @param {String} locale The locale to reference for the print data. 
+	 * @param {Boolean} official Whether to only include official Konami information. 
+	 * @returns The generated MessageEmbed and its image attachment (if any).
+	 */
 	generateDateEmbed(locale, official) {
 		const embedData = {}
 
@@ -258,10 +271,8 @@ class Card {
 		const cardName = this.name.get(locale)
 		const colorIcon = this.getEmbedColorAndIcon()
 		const titleUrl = this.getEmbedTitleLink(locale, official)
-
 		finalEmbed.setAuthor(cardName, colorIcon[1], titleUrl)
 		finalEmbed.setColor(colorIcon[0])
-		const imageAttach = this.setEmbedImage(finalEmbed, 1)
 
 		// Set the description field to be the first and last print dates in this locale.
 		let introText = `${LocaleEmojis[locale]} ${locale.toUpperCase()} print data for this card:`
@@ -283,36 +294,123 @@ class Card {
 
 		finalEmbed.setDescription(`${introText}\n● ${firstText}\n● ${lastText}`)
 
+		// Now add a field(s) for more detailed print data. Print dates *should* already be in order in the map.
 		let totalPrints = this.printData.get(locale).size
-		if (totalPrints > 0) {
-			// Now add a field(s) for more detailed print data. Print dates *should* already be in order in the map.
-			// Add "lines" to our final product per print date, and then join them into a single string for making fields at the end.
-			const printLines = []
-			let currPrint = 1
-			this.printData.get(locale).forEach((date, code) => {
-				printLines.push(`**${currPrint}.** ${code} -> ${date}`)
-				currPrint++
-			})
-			// If we have more than 5 prints, split based on commas rather than newlines so this embed isn't 5 million lines long.
-			const breakupDelimiter = totalPrints <= 5 ? '\n' : '|'
-			if (printLines.length > 5) 
-				var fullPrintData = printLines.join(' | ')
-			else fullPrintData = printLines.join('\n')
-
-			// Break things up if necessary, then add all the fields.
-			const fields = breakUpDiscordMessage(fullPrintData, 1024, breakupDelimiter)
-			for (let i = 0; i < fields.length; i++) {
-				finalEmbed.addField(
-					i === 0 ? `__Full Print Data (${totalPrints} ${totalPrints > 1 ? 'prints' : 'print'})__` : '__cont.__',
-					fields[i], false
-				)
+		const printTable = new Table()
+		// If <=6 total prints, just make a table with one print per line.
+		// If >6 total prints, start putting 2 prints per line so this embed isn't 5 million lines long.
+		totalPrints > 6 ? printTable.setHeading('#', 'Code', 'Date', 'Code', 'Date') : printTable.setHeading('#', 'Code', 'Date')
+		const printLines = []
+		let currPrint = 1
+		this.printData.get(locale).forEach((date, code) => {
+			if (totalPrints > 6) {
+				// Expecting 2 prints per table row.
+				// Because we start at print 1, odd-numbered prints indicate the start of a new table row.
+				if (currPrint % 2) {
+					// Odd-numbered print. Add a new row.
+					printLines.push([`${currPrint}-${currPrint+1}`, code, date])
+				}
+				else {
+					// Even-numbered print. Append to the latest row.
+					const row = Math.ceil(currPrint / 2) - 1	// Zero-indexed.
+					printLines[row].push(code, date)
+				}
 			}
+			else {
+				// 1 print per table row.
+				printLines.push([currPrint, code, date])
+			}
+			currPrint++
+		})
+		for (const l of printLines) printTable.addRow(...l)
+
+		// Break things up if necessary.
+		const fields = breakUpDiscordMessage(printTable.toString(), 1018)
+		for (let i = 0; i < fields.length; i++) {
+			finalEmbed.addField(
+				i === 0 ? `__Full Print Data (${totalPrints} ${totalPrints > 1 ? 'prints' : 'print'})__` : '__cont.__',
+				`\`\`\`\n${fields[i]}\`\`\``, false
+			)
 		}
 
 		embedData.embed = finalEmbed
-		if (imageAttach)	
-			embedData.attachment = imageAttach
+		return embedData
+	}
+
+	/**
+	 * Generates an embed containing all of the price data of products associated with this card.
+	 * @param {String} locale The locale to reference for the price data. 
+	 * @param {Boolean} official Whether to only include official Konami information. 
+	 * @returns The generated MessageEmbed. No images are included for price embeds.
+	 */
+	generatePriceEmbed(locale, official) {
+		const embedData = {}
+
+		// We shouldn't be here with no price data, but do a final sanity check to make sure we leave if so.
+		if (!this.products.length)
+			return embedData
 		
+		const finalEmbed = new MessageEmbed()
+
+		// Still display the typical "author line" (name, property, link, etc.)
+		const cardName = this.name.get(locale)
+		const colorIcon = this.getEmbedColorAndIcon()
+		const titleUrl = this.getEmbedTitleLink(locale, official)
+		finalEmbed.setAuthor(cardName, colorIcon[1], titleUrl)
+		finalEmbed.setColor(colorIcon[0])
+		finalEmbed.setFooter('This bot uses TCGPlayer price data, but is not endorsed or certified by TCGPlayer.', TCPLAYER_LOGO)
+		finalEmbed.setTitle('View on TCGPlayer')
+		finalEmbed.setURL(`${TCGPLAYER_PRODUCT_SEARCH}${encodeURI(this.name.get('en'))}`)
+
+		// Gather the prices to put in the table.
+		let pricesToDisplay = []
+		for (const p of this.products) {
+			const productDisplayData = p.getPriceDataForDisplay()
+			if (productDisplayData.length)
+				pricesToDisplay.push(...productDisplayData)
+		}
+		// Order from cheapest to most expensive.
+		pricesToDisplay = pricesToDisplay.sort((p1, p2) => p1.marketPrice - p2.marketPrice)
+
+		const priceTable = new Table()
+		priceTable.setHeading('Print', 'Rarity', 'Low-Market')
+		// We're not going to display every price for cards with lots of prints, keep track of our omissions.
+		const seenRarities = {}
+		for (const price of pricesToDisplay) {
+			if (!(price.rarity in seenRarities))
+				seenRarities[price.rarity] = 0
+			seenRarities[price.rarity]++
+			// Only display a maximum of 3 prints per rarity.
+			if (seenRarities[price.rarity] > 3)
+				continue
+			
+			// Distinguish 1st Ed prints in the table.
+			const typeRarity = price.type === '1st Edition' ? `${price.rarity} (1st)` : price.rarity
+			priceTable.addRow(price.identifier, typeRarity, `$${price.lowPrice}-${price.marketPrice}`)
+		}
+		
+		let extraInfo = '\nShowing maximum 3 cheapest prints per rarity. This ignores 1st Edition prices unless they are 25%+ more expensive than the Unlimited print.'
+		// Count our omissions.
+		const omissions = []
+		for (const r in seenRarities) {
+			const numRarity = seenRarities[r]
+			if (numRarity > 3)
+				omissions.push(`${numRarity - 3} ${r}`)
+		}
+		if (omissions.length)
+			extraInfo += `\n**Omitted:** ${omissions.join(', ')} print(s)`
+		
+		finalEmbed.setDescription(extraInfo)
+		// Break things up if necessary.
+		const fields = breakUpDiscordMessage(priceTable.toString(), 1018)
+		for (let i = 0; i < fields.length; i++) {
+			finalEmbed.addField(
+				i === 0 ? `__Price Data__` : '__cont.__',
+				`\`\`\`\n${fields[i]}\`\`\``, false
+			)
+		}
+
+		embedData.embed = finalEmbed
 		return embedData
 	}
 
@@ -383,6 +481,7 @@ class Card {
 					locale = 'ja'
 				}
 			}
+			link = `${KONAMI_CARD_LINK}${this.dbId}${KONAMI_REQUEST_LOCALE}${locale}`
 		}
 
 		return link
@@ -397,6 +496,7 @@ class Card {
 	 * @returns The URL for the attachment, if any (null if no attachment).
 	 */
 	setEmbedImage(embed, id, thumbnail = true) {
+		// If we weren't given an explicit ID, just use the first one that's free.
 		if (!id && this.imageData.size) 
 			id = this.imageData.keys().next().value
 		
@@ -635,7 +735,7 @@ class Card {
 	 * @returns {String} The name in the given locale converted to a URL-friendly format. 
 	 */
 	getNameYugipediaUrl(locale = 'en') {
-		return this.name.get(locale).replace(/\s/g, '_').replace(/\?/g, '%3F')
+		return encodeURI(this.name.get(locale))
 	}
 
 	/**
@@ -644,6 +744,28 @@ class Card {
 	 */
 	getProductsWithoutPriceData() {
 		return this.products.filter(p => !p.priceData.size)
+	}
+
+	/**
+	 * Determines whether the price data for this Card is considered resolved.
+	 * Sometimes we can't get prices for every product but still want to report what we do have,
+	 * so this also considers prices to be "resolved" if enough of our products have price data.
+	 * @returns {Boolean} Whether the price data is to be considered resolved.
+	 */
+	 hasResolvedPriceData() {
+		const numProductsWithoutPriceData = this.getProductsWithoutPriceData().length
+		// If all of our products have price data, we're definitely resolved.
+		let fullyResolved = numProductsWithoutPriceData === 0
+
+		// If not, call a threshold for declaring whether things are "good enough".
+		// Currently, if >90% of our products have price data, we call it resolved.
+		// (Or in this case, we're testing for whether <10% of the products DON'T have price data.)
+		if (!fullyResolved) {
+			if (numProductsWithoutPriceData / this.products.length < 0.10)
+				fullyResolved = true
+		}
+
+		return fullyResolved
 	}
 
 	/**

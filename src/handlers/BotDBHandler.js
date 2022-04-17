@@ -2,7 +2,7 @@ const Database = require('better-sqlite3')
 const fs = require('fs')
 
 const Search = require('lib/models/Search')
-const { BOT_DB_PATH } = require('lib/models/Defines')
+const { BOT_DB_PATH, TCGPLAYER_PRICE_TIMEOUT } = require('lib/models/Defines')
 const { logger, logError } = require('lib/utils/logging')
 const { TCGPlayerSet, TCGPlayerProduct } = require('lib/models/TCGPlayer')
 const Card = require('lib/models/Card')
@@ -181,7 +181,7 @@ function searchTcgplayerData(searches) {
 		const searchData = currSearch.data
 		// We don't know what this is yet. The only thing we might be able to find at this point is a set, so look for that.
 		if (!searchData) {
-			let setQry = botDb.prepare(`SELECT * FROM tcgplayerSets WHERE setCode = ?`)
+			let setQry = botDb.prepare(`SELECT * FROM tcgplayerSets WHERE setCode = ? COLLATE NOCASE`)
 			let setRow = setQry.get(currSearch.term)
 			if (!setRow) {
 				// Try set name next.
@@ -196,10 +196,23 @@ function searchTcgplayerData(searches) {
 
 				const tcgSet = new TCGPlayerSet()
 				currSearch.data = tcgSet
+				// Remove any other search type associated with this, they don't work with sets.
+				const removeLocales = []
+				for (const locale of currSearch.localeToTypesMap.keys()) {
+					const trimmedTypes = [...currSearch.localeToTypesMap.get(locale)].filter(t => t === '$')
+					if (trimmedTypes.length)
+						currSearch.localeToTypesMap.set(locale, new Set(...trimmedTypes))
+					else
+						removeLocales.push(locale)
+				}
+				// Prune any locales that lost all their types from this.
+				for (const loc of removeLocales)
+					currSearch.localeToTypesMap.delete(loc)
+				
 				tcgSet.setId = setRow.tcgplayerSetId
 				tcgSet.setCode = setRow.setCode
 				tcgSet.fullName = setRow.setFullName
-				tcgSet.cacheTime = new Date(row.cachedTimestamp)
+				tcgSet.cacheTime = new Date(setRow.cachedTimestamp)
 				// Get its products.
 				const productRows = productQry.all(tcgSet.setId)
 				for (const r of productRows) {
@@ -208,7 +221,7 @@ function searchTcgplayerData(searches) {
 					tcgProduct.fullName = r.fullName
 					tcgProduct.set = tcgSet
 					tcgProduct.rarity = r.rarity
-					tcgProduct.priceCode = r.printCode
+					tcgProduct.printCode = r.printCode
 					tcgProduct.cacheTime = new Date(r.cachedTimestamp)
 					// Get the product's price data if we have it.
 					const priceRows = priceQry.all(tcgProduct.productId)
@@ -218,7 +231,7 @@ function searchTcgplayerData(searches) {
 							midPrice: p.midPrice,
 							highPrice: p.highPrice,
 							marketPrice: p.marketPrice,
-							cacheTime: p.cachedTimestamp
+							cacheTime: new Date(p.cachedTimestamp)
 						})
 					}
 					tcgSet.products.push(tcgProduct)
@@ -235,10 +248,10 @@ function searchTcgplayerData(searches) {
 				tcgProduct.productId = r.tcgplayerProductId
 				tcgProduct.fullName = r.fullName
 				tcgProduct.set = new TCGPlayerSet()
-				tcgProduct.set.setId = r.setIds
+				tcgProduct.set.setId = r.setId
 				// Don't fill out the rest of the set, we don't need it.
 				tcgProduct.rarity = r.rarity
-				tcgProduct.priceCode = r.printCode
+				tcgProduct.printCode = r.printCode
 				tcgProduct.cacheTime = new Date(r.cachedTimestamp)
 				// Get the product's price data if we have it.
 				const priceRows = priceQry.all(tcgProduct.productId)
@@ -248,7 +261,7 @@ function searchTcgplayerData(searches) {
 						midPrice: p.midPrice,
 						highPrice: p.highPrice,
 						marketPrice: p.marketPrice,
-						cacheTime: p.cachedTimestamp
+						cacheTime: new Date(p.cachedTimestamp)
 					})
 				}
 				searchData.products.push(tcgProduct)
@@ -461,11 +474,12 @@ function addTcgplayerDataToDb(tcgData) {
 			else if (s instanceof Search) {
 				const searchData = s.data
 				for (const p of searchData.products) {
-					logError(p, 'Product data:')
-					// insertProductData.run(p.productId, s.dbId, searchData.name.get('en'), p.set.setId, p.printCode, p.rarity, p.cacheTime.toISOString())
 					p.priceData.forEach((pData, type) => {
 						insertProductPriceData.run(p.productId, type, pData.lowPrice, pData.midPrice, pData.highPrice, pData.marketPrice, pData.cacheTime.toISOString())
 					})
+					// Update card database ID too.
+					if (searchData instanceof Card)
+						botDb.prepare('UPDATE tcgplayerProducts SET dbId = ? WHERE fullName = ?').run(searchData.dbId, searchData.name.get('en'))
 				}
 			}
 		}
@@ -525,6 +539,10 @@ function getCachedProductData() {
 	// but may as well check.
 	dbRows = getProductPrices.all()
 	for (const r of dbRows) {
+		// Ignore this if the cache time is too old.
+		const cacheTime = new Date(r.cachedTimestamp)
+		if ((new Date() + TCGPLAYER_PRICE_TIMEOUT) > cacheTime) continue
+
 		const forProduct = cachedData.products[r.tcgplayerProductId]
 		if (forProduct) {
 			forProduct.priceData.set(r.type, {
@@ -532,7 +550,7 @@ function getCachedProductData() {
 				midPrice: r.midPrice,
 				highPrice: r.highPrice,
 				marketPrice: r.marketPrice,
-				cacheTime: new Date(r.cachedTimestamp)
+				cacheTime: cacheTime
 			})
 		}
 	}

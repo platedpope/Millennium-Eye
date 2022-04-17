@@ -7,10 +7,13 @@ module.exports = {
 	YGORG_DB_CARD_REGEX: /https?:\/\/db\.ygorganization\.com\/card#(\d+)/g,
 	IGNORE_LINKS_REGEX: /(?:https?|www\.)/g,
 	// Constant values.
-	API_TIMEOUT: 3,
-	MESSAGE_TIMEOUT: 15,
-	USER_TIMEOUT: 60,
+	API_TIMEOUT: 3,									// 3 seconds.
+	MESSAGE_TIMEOUT: 15,							// 15 seconds.
+	USER_TIMEOUT: 60,								// 1 minute.
+	TCGPLAYER_PRICE_TIMEOUT: 1000 * 60 * 60 * 8,	// 8 hours.
 	SEARCH_TIMEOUT_TRIGGER: 15,
+	TCGPLAYER_API_VERSION: 'v1.39.0',
+	TCPLAYER_LOGO: 'https://cdn.discordapp.com/attachments/558000214087172101/964575710566051860/unknown.png',
 	BOT_DB_PATH: `${process.cwd()}/data/bot.db`,
 	KONAMI_DB_PATH: `${process.cwd()}/data/carddata.db`,
 	NEURON_DB_PATH: `${process.cwd()}/data/neuron_name_rainbow`,
@@ -45,7 +48,8 @@ module.exports = {
 	YUGIPEDIA_WIKI: `https://yugipedia.com/wiki`,
 	YUGIPEDIA_API: 'https://yugipedia.com/api.php',
 	TCGPLAYER_API: 'https://api.tcgplayer.com',
-	TCGPLAYER_API_VERSION: 'v1.39.0',
+	TCGPLAYER_PRODUCT_SEARCH: 'https://www.tcgplayer.com/search/yugioh/product?Language=English&q=',
+	TCGPLAYER_SET_SEARCH: 'https://tcgplayer.com/search/yugioh/',
 	// Bot data type definitions for easy reference.
 	QueryTypes: {
 		'i': 'info',
@@ -54,7 +58,6 @@ module.exports = {
 		'd': 'date',
 		'p': 'Yugipedia',
 		'$': 'US price',
-		'€': 'EU price',
 		'f': 'FAQ',
 		'q': 'QA'
 	},

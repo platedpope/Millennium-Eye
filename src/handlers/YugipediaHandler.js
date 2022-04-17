@@ -43,7 +43,7 @@ async function searchYugipedia(searches, qry, dataHandlerCallback) {
 		const apiSearch = searches[i]
 
 		if (apiResponse.status === 'rejected') {
-			logError(apiResponse.reason, `Yugipedia API query for term ${apiSearch.term} failed.`)
+			logError(apiResponse.reason.message, `Yugipedia API query for term ${apiSearch.term} failed.`)
 			continue
 		}
 
