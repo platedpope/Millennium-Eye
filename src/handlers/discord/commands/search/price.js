@@ -2,7 +2,8 @@ const Command = require('lib/models/Command')
 const { CommandTypes } = require('lib/models/Defines')
 const Query = require('lib/models/Query')
 const Search = require('lib/models/Search')
-const { sendReply, processQuery } = require('handlers/QueryHandler')
+const { processQuery, queryRespond } = require('handlers/QueryHandler')
+const { generateError } = require('lib/utils/logging')
 
 module.exports = new Command({
 	name: 'price',
@@ -56,22 +57,22 @@ module.exports = new Command({
 		const cid = parseInt(search, 10)
 		if (!isNaN(cid))
 			search = cid
-		
 		const locale = bot.getCurrentChannelSetting(interaction.channel, 'locale')
 		// Bootstrap a query from this information.
 		const qry = new Query([new Search(search, '$', locale)])
 		qry.official = bot.getCurrentChannelSetting(interaction.channel, 'official')
 		qry.locale = locale
 
-		await interaction.channel.sendTyping()
-
+		// Defer reply in case this query takes a bit.
+		await interaction.deferReply()
 		await processQuery(qry)
 
 		const report = Query.generateSearchResolutionReport(qry.searches)
 		if (report) {
-			// Couldn't resolve this, bail.
-			await sendReply(bot, interaction, report, null, {})
-			return
+			throw generateError(
+				`Price command could not find any data for search ${search}. This probably isn't an actual error.`,
+				'That search didn\'t find any card to display the price for.'
+			)
 		}
 
 		const priceSearch = qry.searches[0]
@@ -91,6 +92,6 @@ module.exports = new Command({
 			return
 		}
 		
-		await interaction.reply(msgOptions)
+		await queryRespond(bot, interaction, '', qry, msgOptions)
 	}
 })

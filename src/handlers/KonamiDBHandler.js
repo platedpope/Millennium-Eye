@@ -42,8 +42,8 @@ function searchKonamiDb(searches, qry, dataHandlerCallback) {
 				if (!localesToSearch.includes(locale)) localesToSearch.push(locale)
 
 			const bestMatch = searchNameToIdIndex(currSearch.term, localesToSearch)
-			for (const id in bestMatch) {
-				const score = bestMatch[id]
+			for (const id of bestMatch.keys()) {
+				const score = bestMatch.get(id)
 				if (score < 0.5) break	// Ignore scores this low, they mean we weren't really sure, this was just the least bad.
 
 				const dataRows = getDbId.all(id)

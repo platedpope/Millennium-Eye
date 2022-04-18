@@ -1,4 +1,4 @@
-const { Message } = require('discord.js')
+const { Message, CommandInteraction } = require('discord.js')
 const Cache = require('timed-cache')
 
 const Query = require('lib/models/Query')
@@ -163,12 +163,12 @@ function updateUserTimeout(userId, numSearches) {
 /**
  * Helper function that wraps replying to a message with caching it for any future reference.
  * @param {MillenniumEyeBot} bot The bot.
- * @param {Message} origMessage The message that prompted this reply.
+ * @param {Message | CommandInteraction} origMessage The message that prompted this reply.
  * @param {String} replyContent Any raw message content to use in the reply.
  * @param {Query} qry Any query associated with the reply, for caching purposes.
  * @param replyOptions Any options to use when sending the message (e.g., embeds).
  */
-async function sendReply(bot, origMessage, replyContent, qry, replyOptions) {
+async function queryRespond(bot, origMessage, replyContent, qry, replyOptions) {
 	// Build the message and its options.
 	const fullReply = {}
 	if (replyContent)
@@ -179,23 +179,41 @@ async function sendReply(bot, origMessage, replyContent, qry, replyOptions) {
 
 	// Empty reply, why are we here?
 	if ( (!('content' in fullReply) || !fullReply.content) && 
-		 (!('embeds' in fullReply) || !fullReply.embeds.length) )
+		 (!('embeds' in fullReply) || !fullReply.embeds.length) &&
+		 (!('components' in fullReply || !fullReply.components.length) ))
 		return
+	
+	let reply = undefined
+	let edited = false
+	// Interactions might be deferred, in which case we need to edit rather than reply.
+	if (origMessage instanceof CommandInteraction && (origMessage.deferred || origMessage.replied)) {
+		reply = await origMessage.editReply(fullReply)
+		edited = true
+	}
+	// If the "original message" was sent by us, then this is actually a reply we should edit.
+	else if (origMessage.author === bot.user) {
+		reply = await origMessage.edit(fullReply)
+		edited = true
+	}
+	// Otherwise just a normal reply.
+	else {
+		reply = await origMessage.reply(fullReply)
+	}
 
-	await origMessage.reply(fullReply)
-		.then(reply => {
-			const cacheData = bot.replyCache.get(origMessage.id)
-			if (cacheData !== undefined) 
-				cacheData.replies.push(reply)
-			else
-				bot.replyCache.put(origMessage.id, {
-					'author': origMessage.author,
-					'replies': [reply],
-					'qry': qry
-				})
-		})
+	// Cache the reply if one was sent.
+	if (reply) {
+		const cacheData = bot.replyCache.get(origMessage.id)
+		if (cacheData !== undefined && !edited) 
+			cacheData.replies.push(reply)
+		else
+			bot.replyCache.put(origMessage.id, {
+				'author': origMessage.author,
+				'replies': [reply],
+				'qry': qry
+			})
+	}
 }
 
 module.exports = {
-	processQuery, processSearches, sendReply, updateUserTimeout
+	processQuery, processSearches, queryRespond, updateUserTimeout
 }

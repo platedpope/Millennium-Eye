@@ -3,7 +3,7 @@ const Discord = require('discord.js')
 const { MillenniumEyeBot } = require('lib/models/MillenniumEyeBot')
 const Event = require('lib/models/Event')
 const Query = require('lib/models/Query')
-const { processQuery, sendReply, updateUserTimeout } = require('handlers/QueryHandler')
+const { processQuery, updateUserTimeout, queryRespond } = require('handlers/QueryHandler')
 
 module.exports = new Event({
 	event: 'messageCreate',
@@ -44,7 +44,7 @@ module.exports = new Event({
 				replyOptions.files = embedData.attachments
 			const report = Query.generateSearchResolutionReport(qry.searches)
 
-			await sendReply(bot, message, report, qry, replyOptions)
+			await queryRespond(bot, message, report, qry, replyOptions)
 		}
 	}
 })

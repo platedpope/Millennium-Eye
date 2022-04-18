@@ -27,9 +27,11 @@ module.exports = new Event({
 					logError(err, err.logMessage, interaction)
 				else logError(err, `Failed to execute command ${command.name}!`, interaction)
 
-				if ('channelResponse' in err && err.channelResponse)
-					interaction.reply(`${err.channelResponse}`)
-				else interaction.reply('The bot encountered an unexpected error when running that command.')
+				const iResponse = 'channelResponse' in err && err.channelResponse ? err.channelResponse : 'The bot encountered an unexpected error when running that command.'
+				if (!interaction.replied && !interaction.deferred)
+					await interaction.reply(iResponse)
+				else
+					await interaction.editReply(iResponse)
 			}
 		}
 	}

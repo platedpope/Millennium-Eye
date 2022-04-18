@@ -165,8 +165,9 @@ class Query {
 					currSearch.localeToTypesMap.delete(sLocale)
 					// If deleting this locale left no locales for this search,
 					// then this search isn't being used anymore. Delete it entirely.
-					if (!currSearch.localeToTypesMap.size) 
-						this.searches.splice(this.searches.indexOf(s => s.originals.has(originalTerm)), 1)
+					if (!currSearch.localeToTypesMap.size) {
+						const removedSearch = this.searches.splice(this.searches.findIndex(s => s.originals.has(sContent)), 1)
+					}
 				} 
 			}
 		}
@@ -257,7 +258,7 @@ class Query {
 						'type': t,
 						'locale': searchLocale,
 						'official': this.official,
-						'rulings': this.rulings,
+						'rulings': t === 'r' ? true : false,
 						'random': false
 					})
 					

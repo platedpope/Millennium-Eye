@@ -596,7 +596,7 @@ async function cacheNameToIdIndex(locales = Object.keys(Locales)) {
  * @param {String} search The value to search for. 
  * @param {Array<String>} locales The array of locales to search for.
  * @param {Number} returnMatches The number of matches to return, sorted in descending order (better matches first).
- * @returns {Object} All relevant matches.
+ * @returns {Map<Number, Number>} Relevant matches mapped to their score.
  */
 function searchNameToIdIndex(search, locales, returnMatches = 1) {
 	// First make sure we've got everything cached.
@@ -604,34 +604,31 @@ function searchNameToIdIndex(search, locales, returnMatches = 1) {
 	// Note: in rare scenarios this can cache something but evict another (if a manifest revision demands it),
 	// leaving us with nothing for a given locale. This will cause this function to find no matches for the given search's locale index,
 	// which is unfortunate, but the logic will fail gracefully and I'm hoping it's rare enough that it won't be a practical issue.
-
-	let matches = {}
+	const matches = new Map()
 
 	for (const l of locales) {
 		if (!(l in nameToIdIndex)) continue
 
 		const searchFilter = new CardDataFilter(nameToIdIndex[l], search, 'CARD_NAME')
 		const localeMatches = searchFilter.filterIndex(returnMatches)
-		for (const id in localeMatches) {
-			const score = localeMatches[id]
-			if (score > 0) 
-				matches[id] = Math.max(score, matches[id] || 0)
-		}
+		localeMatches.forEach((score, id) => {
+			if (score > 0)
+				matches.set(id, Math.max(score, matches.get(id) || 0))
+		})
 	}
 
 	// If we had more than one locale and more than one match, we need to re-sort our matches in case each locale added some.
-	if (locales.length > 1 && Object.keys(matches).length > 1) {
+	if (locales.length > 1 && tempMatches.size > 1) {
 		// If scores are different, descending sort by score (i.e., higher scores first).
 		// If scores are the same, ascending sort by ID (i.e., lower IDs first).
-		const sortedResult = Object.entries(matches).sort(([idA, scoreA], [idB, scoreB]) => {
+		const sortedResult = [...matches.entries()].sort(([idA, scoreA], [idB, scoreB]) => {
 			return (scoreA !== scoreB) ? (scoreB - scoreA) : (idA - idB)
 		})
 		// Splice the array to only include the number of requested matches.
-		sortedResult.splice(returnMatches)
-
-		matches = {}
-		for (const r of sortedResult)
-			matches[r[0]] = r[1]
+		sortedResult.splice(returnMatches).
+		// Reset the map.
+		matches.clear()
+		sortedResult.forEach(r => matches.set(r[0], r[1]))
 	}
 
 	return matches

@@ -4,7 +4,7 @@ const { MillenniumEyeBot } = require('lib/models/MillenniumEyeBot')
 const Event = require('lib/models/Event')
 const Query = require('lib/models/Query')
 const { MESSAGE_TIMEOUT } = require('lib/models/Defines')
-const { processQuery, sendReply, updateUserTimeout } = require('handlers/QueryHandler')
+const { processQuery, updateUserTimeout, queryRespond } = require('handlers/QueryHandler')
 
 module.exports = new Event({
 	event: 'messageUpdate',
@@ -75,23 +75,18 @@ module.exports = new Event({
 					bot.replyCache.remove(oldMessage.id)
 				}
 			}
+
 			else {
 				// If we have a single reply to edit, do that.
 				if (editReply) {
 					const replyToEdit = cachedReply.replies[0]
 					await replyToEdit.removeAttachments()
 
-					if (report) replyOptions.content = report
-					const editedReply = await replyToEdit.edit(replyOptions)
-					bot.replyCache.put(newMessage.id, {
-						'author': newMessage.author,
-						'replies': [editedReply],
-						'qry': newQry
-					})
+					await queryRespond(bot, replyToEdit, report, newQry, replyOptions)
 				}
 				else 
 					// Otherwise, just send new replies.
-					await sendReply(bot, newMessage, report, newQry, replyOptions)
+					await queryRespond(bot, newMessage, report, newQry, replyOptions)
 			}
 		}
 		else

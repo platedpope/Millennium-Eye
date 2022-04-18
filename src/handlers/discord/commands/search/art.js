@@ -4,7 +4,8 @@ const Command = require('lib/models/Command')
 const { CommandTypes } = require('lib/models/Defines')
 const Query = require('lib/models/Query')
 const Search = require('lib/models/Search')
-const { sendReply, processQuery } = require('handlers/QueryHandler')
+const { queryRespond, processQuery } = require('handlers/QueryHandler')
+const { generateError } = require('lib/utils/logging')
 
 /**
  * Helper function to generate the select menu for which art to display.
@@ -63,15 +64,17 @@ module.exports = new Command({
 		qry.official = bot.getCurrentChannelSetting(interaction.channel, 'official')
 		qry.locale = locale
 
-		await interaction.channel.sendTyping()
-
+		// Defer reply in case this query takes a bit.
+		await interaction.deferReply()
 		await processQuery(qry)
 
 		const report = Query.generateSearchResolutionReport(qry.searches)
 		if (report) {
 			// Couldn't resolve this, bail.
-			await sendReply(bot, interaction, report, null, {})
-			return
+			throw generateError(
+				`Art command could not find any data for search ${card}. This probably isn't an actual error.`,
+				'That search didn\'t find any card to display the art for.'
+			)
 		}
 		
 		// Set up all the information beforehand.
@@ -87,10 +90,10 @@ module.exports = new Command({
 		
 		// Only give + handle an art selection menu if we've got more than one to choose from.
 		if (availableArts > 1) {
-			const seed = Math.random() * 1000
+			const seed = Math.floor(Math.random() * 1000)
 			msgOptions.components = generateArtSelect(viewedArt, availableArts, seed)
 
-			await interaction.reply(msgOptions)
+			await queryRespond(bot, interaction, '', qry, msgOptions)
 
 			const filter = i => {
 				return i.isSelectMenu() && 
@@ -109,12 +112,12 @@ module.exports = new Command({
 				msgOptions.components = generateArtSelect(viewedArt, availableArts, seed)
 
 				await i.message.removeAttachments()
-				reply = await i.update(msgOptions)
+				await i.update(msgOptions)
 				collector.resetTimer()
 			})
 		}
 		else {
-			await interaction.reply(msgOptions)
+			await queryRespond(bot, interaction, '', qry, msgOptions)
 		}
 	}
 })

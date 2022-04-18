@@ -1,8 +1,7 @@
-
 const Command = require('lib/models/Command')
 const { CommandTypes } = require('lib/models/Defines')
 const Query = require('lib/models/Query')
-const { processQuery, sendReply, updateUserTimeout } = require('handlers/QueryHandler')
+const { processQuery, updateUserTimeout, queryRespond } = require('handlers/QueryHandler')
 
 module.exports = new Command({
 	name: 'query',
@@ -33,8 +32,8 @@ module.exports = new Command({
 				return
 			}
 
-			await interaction.channel.sendTyping()
-
+			// Defer reply in case this takes a bit.
+			await interaction.deferReply()
 			await processQuery(qry)
 			
 			const embedData = qry.getDataEmbeds()
@@ -47,7 +46,7 @@ module.exports = new Command({
 				replyOptions.files = embedData.attachments
 			const report = Query.generateSearchResolutionReport(qry.searches)
 
-			await sendReply(bot, interaction, report, qry, replyOptions)
+			await queryRespond(bot, interaction, report, qry, replyOptions)
 		}
 	}
 })

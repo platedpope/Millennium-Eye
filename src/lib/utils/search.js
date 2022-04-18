@@ -1,4 +1,5 @@
 const munkres = require('munkres-js')
+const { logError } = require('./logging')
 
 class CardDataFilter {
 	static tokenRegex = /[一-龠]+|[ぁ-ゔ]+|[ァ-ヴー]+|[a-zA-Z0-9]+|[ａ-ｚＡ-Ｚ０-９]+|[々〆〤]|[가-힣]/ug
@@ -24,13 +25,12 @@ class CardDataFilter {
 	/**
 	 * Filter on the index to find best-scoring matches.
 	 * @param {Number} returnMatches The number of best-scoring matches to return.
+	 * @return {Map<Number,Number>} A map of matched IDs to the score of that match. 
 	 */
 	filterIndex(returnMatches = 1) {
-		const requestedMatches = {}
+		const requestedMatches = new Map()
 		if (!this.ref) return requestedMatches
 
-		// Each result will be key 'id' = [score, name].
-		// We track name so we can sort by length on scores that are the same.
 		const filteredResult = {}
 		for (const k in this.idx) {
 			const score = (+this.filter(k)) || 0
@@ -51,8 +51,7 @@ class CardDataFilter {
 			})
 		// Only include the number of requested matches.
 		sortedResult.splice(returnMatches)
-		for (const r of sortedResult)
-			requestedMatches[r[0]] = r[1]
+		sortedResult.forEach(r => requestedMatches.set(r[0], r[1]))
 
 		return requestedMatches
 	}
@@ -60,7 +59,7 @@ class CardDataFilter {
 	/**
 	 * Computes the distance score between this filter's reference string and
 	 * the value passed in to this function.
-	 * THIS LOGIC IS SHAMELESSLY STOLEN FROM THE YGORG DB. THANKS GALLATRON :)
+	 * THIS LOGIC IS SHAMELESSLY STOLEN FROM THE YGORG DB. THANKS GALLANTRON :)
 	 * @param {String} val The value to calculate distance from.
 	 * @returns {Number} The distance score.
 	 */
