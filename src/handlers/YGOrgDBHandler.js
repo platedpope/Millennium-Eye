@@ -173,7 +173,7 @@ async function searchYgorgDb(searches, qry, dataHandlerCallback) {
 
 	// If we don't have anything to do with the API, just bail out early.
 	if (!qaApiSearches.length && !cardApiSearches.length && qaSearches.db.length) {
-		await dataHandlerCallback(qaSearches)
+		await dataHandlerCallback(qry, qaSearches)
 		return
 	}
 
@@ -256,7 +256,7 @@ async function searchYgorgDb(searches, qry, dataHandlerCallback) {
 		}
 	}
 
-	await dataHandlerCallback(qaSearches, cardSearches)
+	await dataHandlerCallback(qry, qaSearches, cardSearches)
 }
 
 /**
@@ -393,10 +393,11 @@ function populatedRulingFromYgorgApi(apiData, ruling) {
  * Populates a Ruling's associated cards (stored as database IDs) with actual Card data.
  * @param {Ruling} ruling The ruling with cards to convert.
  * @param {Array<String>} locales The locales that the ruling was queried in, so we can attempt to match these for the cards as well.
+ * @param {Query} qry The query containing this Ruling.
  */
-async function populateRulingAssociatedCardsData(ruling, locales) {
+async function populateRulingAssociatedCardsData(ruling, locales, qry) {
 	// This is in here to avoid a circular dependency. Not ideal, but easy.
-	const { processSearches } = require('handlers/QueryHandler')
+	const { processQuery } = require('handlers/QueryHandler')
 	
 	const cardSearches = []
 	for (const cid of ruling.cards) {
@@ -406,8 +407,10 @@ async function populateRulingAssociatedCardsData(ruling, locales) {
 			newSearch.addTypeToLocale('i', l)
 		cardSearches.push(newSearch)
 	}
+	// Bootstrap a Query from these searches.
+	const cardQuery = new Query(cardSearches, qry.bot)
 
-	await processSearches(cardSearches)
+	await processQuery(cardQuery)
 
 	const convertedCardData = []
 	for (const s of cardSearches) 

@@ -14,13 +14,14 @@ const { generateError } = require('lib/utils/logging')
  * @param {Number} interactionSeed Seed value for the interaction's custom ID, to deconflict with other interactions.
  * @returns {Array} The array of message rows.
  */
-function generateArtSelect(selectedId, availableArtIds, interactionSeed) {
+function generateArtSelect(selectedId, availableArtIds, interactionSeed, disable = false) {
 	const messageRows = []
 
 	const artRow = new MessageActionRow()
 	const artSelect = new MessageSelectMenu()
 		.setCustomId(`art_id_select_${interactionSeed}`)
 		.setPlaceholder('Select Art ID')
+		.setDisabled(disable)
 	const selectOptions = []
 	for (let i = 1; i <= availableArtIds; i++)
 		selectOptions.push(
@@ -93,7 +94,7 @@ module.exports = new Command({
 			const seed = Math.floor(Math.random() * 1000)
 			msgOptions.components = generateArtSelect(viewedArt, availableArts, seed)
 
-			await queryRespond(bot, interaction, '', qry, msgOptions)
+			const resp = await queryRespond(bot, interaction, '', qry, msgOptions)
 
 			const filter = i => {
 				return i.isSelectMenu() && 
@@ -114,6 +115,11 @@ module.exports = new Command({
 				await i.message.removeAttachments()
 				await i.update(msgOptions)
 				collector.resetTimer()
+			})
+
+			collector.on('end', async () => {
+				msgOptions.components = generateArtSelect(viewedArt, availableArts, seed, true)
+				await resp.edit(msgOptions)
 			})
 		}
 		else {

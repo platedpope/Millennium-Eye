@@ -15,13 +15,14 @@ const { logger, generateError, logError } = require('lib/utils/logging')
  * @param {Number} interactionSeed Seed value for the interaction's custom ID, to deconflict with other interactions.
  * @returns {Array<MessageActionRow>} The array of message rows.
  */
-function generateMatchSelect(selectedMatch, availableMatches, locale, interactionSeed) {
+function generateMatchSelect(selectedMatch, availableMatches, locale, interactionSeed, disable = false) {
 	const messageRows = []
 
 	const matchRow = new MessageActionRow()
 	const matchSelect = new MessageSelectMenu()
 		.setCustomId(`match_id_select_${interactionSeed}`)
 		.setPlaceholder('Select Card Name')
+		.setDisabled(disable)
 	const selectOptions = []
 	for (let i = 0; i < availableMatches.length; i++) {
 		const matchSearch = availableMatches[i]
@@ -121,7 +122,7 @@ module.exports = new Command({
 		
 		let selectedMatch = null
 		msgOptions.components = generateMatchSelect(selectedMatch, resolvedMatchSearches, locale, seed)
-		await queryRespond(bot, interaction, '', qry, msgOptions)
+		const resp = await queryRespond(bot, interaction, '', qry, msgOptions)
 
 		const filter = i => {
 			return i.isSelectMenu() &&
@@ -143,6 +144,17 @@ module.exports = new Command({
 			await i.message.removeAttachments()
 			await i.update(msgOptions)
 			collector.resetTimer()
+		})
+
+		collector.on('end', async () => {
+			// If there are no embeds, then nothing was ever selected. Just delete the reply.
+			if (!('embeds' in msgOptions) || !msgOptions.embeds.length)
+				await resp.delete()
+			else {
+				// Otherwise, just make the select menu unusable to indicate it's timed out.
+				msgOptions.components = generateMatchSelect(selectedMatch, resolvedMatchSearches, locale, seed, true)
+				await resp.edit(msgOptions)
+			}
 		})
 	}
 })

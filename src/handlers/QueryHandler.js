@@ -110,34 +110,6 @@ async function processQuery(qry) {
 }
 
 /**
- * Takes a series of incoming Searches and performs all the necessary processing to evaluate them.
- * This is identical to processQuery, but doesn't use/pass around a Query object. Most often this will be used
- * by offshoot logic that makes temporary Searches to resolve a card, while processQuery is used by the main
- * logic whenever a message is sent.
- * @param {Array<Search>} searches The searches to process. 
- */
-async function processSearches(searches) {
-	for (const step of processSteps) {
-		// Update for any searches that remain.
-		let searchesToEval = searches.filter(s => !s.isDataFullyResolved())
-		if (!searchesToEval.length)
-			// Nothing left to evaluate.
-			break
-		
-		const stepSearch = step.searchFunction
-		const stepHandlerCallback = step.dataHandler
-		try {
-			await stepSearch(searchesToEval, null, stepHandlerCallback)
-		}
-		catch (err) {
-			logError(err, `Process search step ${stepSearch.name} encountered an error.`)
-		}
-
-		// Don't log out successes along the way.
-	}
-}
-
-/**
  * Updates a user's cached timeout value given their number of searches, or indicates
  * whether they have been timed out.
  * @param {Number} userId The ID of the user.
@@ -161,12 +133,14 @@ function updateUserTimeout(userId, numSearches) {
 }
 
 /**
+ * @async
  * Helper function that wraps replying to a message with caching it for any future reference.
  * @param {MillenniumEyeBot} bot The bot.
  * @param {Message | CommandInteraction} origMessage The message that prompted this reply.
  * @param {String} replyContent Any raw message content to use in the reply.
  * @param {Query} qry Any query associated with the reply, for caching purposes.
  * @param replyOptions Any options to use when sending the message (e.g., embeds).
+ * @returns {Promise<Message>} The reply.
  */
 async function queryRespond(bot, origMessage, replyContent, qry, replyOptions) {
 	// Build the message and its options.
@@ -177,13 +151,14 @@ async function queryRespond(bot, origMessage, replyContent, qry, replyOptions) {
 		for (const o in replyOptions)
 			fullReply[o] = replyOptions[o]
 
+	let reply = undefined
+
 	// Empty reply, why are we here?
 	if ( (!('content' in fullReply) || !fullReply.content) && 
 		 (!('embeds' in fullReply) || !fullReply.embeds.length) &&
 		 (!('components' in fullReply || !fullReply.components.length) ))
-		return
+		return reply
 	
-	let reply = undefined
 	let edited = false
 	// Interactions might be deferred, in which case we need to edit rather than reply.
 	if (origMessage instanceof CommandInteraction && (origMessage.deferred || origMessage.replied)) {
@@ -212,8 +187,10 @@ async function queryRespond(bot, origMessage, replyContent, qry, replyOptions) {
 				'qry': qry
 			})
 	}
+
+	return reply
 }
 
 module.exports = {
-	processQuery, processSearches, queryRespond, updateUserTimeout
+	processQuery, queryRespond, updateUserTimeout
 }

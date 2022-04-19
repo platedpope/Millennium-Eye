@@ -52,22 +52,23 @@ function convertKonamiDataToSearchData(resolvedSearches, termUpdates) {
 /**
  * This is the callback data handler for turning data from the YGOrg database
  * into usable Search data (in this case, either a Card object or a Ruling object).
+ * @param {Query} qry The query containing these searches.
  * @param {Object} qaSearches A map containing QA searches that were resolved through either the DB or API.
  * @param {Array<Search>} cardSearches A map containing card searches that were resolved through the API.
  */
-async function convertYgorgDataToSearchData(qaSearches, cardSearches = []) {
+async function convertYgorgDataToSearchData(qry, qaSearches, cardSearches = []) {
 	// Process the QAs.
 	for (const s of qaSearches.db) {
 		s.data = new Ruling()
 		populateRulingFromYgorgDb(s.rawData, s.data)
 		s.rawData = undefined
-		await populateRulingAssociatedCardsData(s.data, [...s.localeToTypesMap.keys()])
+		await populateRulingAssociatedCardsData(s.data, [...s.localeToTypesMap.keys()], qry)
 	}
 	for (const s of qaSearches.api) {
 		s.data = new Ruling()
 		populatedRulingFromYgorgApi(s.rawData, s.data)
 		s.rawData = undefined
-		await populateRulingAssociatedCardsData(s.data, [...s.localeToTypesMap.keys()])
+		await populateRulingAssociatedCardsData(s.data, [...s.localeToTypesMap.keys()], qry)
 	}
 	// Process the cards we got from the API.
 	const cardsWithoutArt = []

@@ -1,4 +1,4 @@
-const { MessageActionRow, MessageButton, MessageSelectMenu, Interaction, TextChannel } = require('discord.js')
+const { MessageActionRow, MessageButton, MessageSelectMenu, CommandInteraction, TextChannel } = require('discord.js')
 
 const config = require('config')
 const { generateError } = require('lib/utils/logging')
@@ -18,12 +18,13 @@ for (const code in Locales) {
 /**
  * Helper function to generate all the message components (buttons/menus) for controlling
  * server-specific configuration in response to the /set server command.
- * @param {Interaction} interaction The interaction associated with the command.
- * @param {MillenniumEyeBot} bot The bot.
+ * @param {CommandInteraction} interaction The interaction associated with the command.
+ * @param {Number} interactionSeed Seed value for the interaction's custom ID, to deconflict with other interactions.
  * @param {Boolean} disable Whether to disable the buttons and menus.
  */
-function generateServerComponents(interaction, bot, disable = false) {
+function generateServerComponents(interaction, interactionSeed, disable = false) {
 	const messageRows = []
+	const bot = interaction.client
 	const guildOfficial = bot.getCurrentGuildSetting(interaction.guild, 'official')
 	const guildRulings = bot.getCurrentGuildSetting(interaction.guild, 'rulings')
 	const guildLocale = bot.getCurrentGuildSetting(interaction.guild, 'locale')
@@ -31,12 +32,12 @@ function generateServerComponents(interaction, bot, disable = false) {
 	const officialRow = new MessageActionRow()
 		.addComponents(
 			new MessageButton()
-				.setCustomId('official_header')
+				.setCustomId(`official_header`)
 				.setLabel('Official Mode')
 				.setStyle('SECONDARY')
 				.setDisabled(true),
 			new MessageButton()
-				.setCustomId('guild_official_mode')
+				.setCustomId(`guild_official_mode_${interactionSeed}`)
 				.setLabel(guildOfficial ? 'Enabled' : 'Disabled')
 				.setStyle(guildOfficial ? 'SUCCESS' : 'DANGER')
 				.setDisabled(disable)
@@ -51,7 +52,7 @@ function generateServerComponents(interaction, bot, disable = false) {
 				.setStyle('SECONDARY')
 				.setDisabled(true),
 			new MessageButton()
-				.setCustomId('guild_rulings_mode')
+				.setCustomId(`guild_rulings_mode_${interactionSeed}`)
 				.setLabel(guildRulings ? 'Enabled' : 'Disabled')
 				.setStyle(guildRulings ? 'SUCCESS' : 'DANGER')
 				.setDisabled(disable)
@@ -60,7 +61,7 @@ function generateServerComponents(interaction, bot, disable = false) {
 
 	const localeRow = new MessageActionRow()
 	const localeSelect = new MessageSelectMenu()
-		.setCustomId('guild_locale_select')
+		.setCustomId(`guild_locale_select_${interactionSeed}`)
 		.setPlaceholder('Select Locale')
 		.setDisabled(disable)
 	const localeOptions = []
@@ -84,13 +85,14 @@ function generateServerComponents(interaction, bot, disable = false) {
 /**
  * Helper function to generate all the message components (buttons/menus) for controlling
  * channel-specific configuration in response to the /set channel command.
- * @param {MillenniumEyeBot} bot The bot.
  * @param {TextChannel} target The target channel, either currently selected or given explicitly.
  * @param {Boolean} useMenu Whether to generate a channel selection menu. 
+ * @param {Number} interactionSeed Seed value for the interaction's custom ID, to deconflict with other interactions.
  * @param {Boolean} disable Whether to disable buttons and menus.
  */
-function generateChannelComponents(bot, target, useMenu, disable = false) {
+function generateChannelComponents(interaction, target, useMenu, interactionSeed, disable = false) {
 	const messageRows = []
+	const bot = interaction.client
 	const channelOfficial = bot.getCurrentChannelSetting(target, 'official')
 	const channelRulings = bot.getCurrentChannelSetting(target, 'rulings')
 	const channelLocale = bot.getCurrentChannelSetting(target, 'locale')
@@ -98,7 +100,7 @@ function generateChannelComponents(bot, target, useMenu, disable = false) {
 	if (useMenu) {
 		const channelRow = new MessageActionRow()
 		const channelSelect = new MessageSelectMenu()
-			.setCustomId('channel_select')
+			.setCustomId(`channel_select_${interactionSeed}`)
 			.setPlaceholder('Select Channel')
 		const channelOptions = []
 		target.guild.channels.cache.filter(c => c.isText())
@@ -125,7 +127,7 @@ function generateChannelComponents(bot, target, useMenu, disable = false) {
 				.setStyle('SECONDARY')
 				.setDisabled(true),
 			new MessageButton()
-				.setCustomId('channel_official_mode')
+				.setCustomId(`channel_official_mode_${interactionSeed}`)
 				.setLabel(channelOfficial ? 'Enabled' : 'Disabled')
 				.setStyle(channelOfficial ? 'SUCCESS' : 'DANGER')
 				.setDisabled(disable)
@@ -140,7 +142,7 @@ function generateChannelComponents(bot, target, useMenu, disable = false) {
 				.setStyle('SECONDARY')
 				.setDisabled(true),
 			new MessageButton()
-				.setCustomId('channel_rulings_mode')
+				.setCustomId(`channel_rulings_mode_${interactionSeed}`)
 				.setLabel(channelRulings ? 'Enabled' : 'Disabled')
 				.setStyle(channelRulings ? 'SUCCESS' : 'DANGER')
 				.setDisabled(disable)
@@ -149,7 +151,7 @@ function generateChannelComponents(bot, target, useMenu, disable = false) {
 
 	const localeRow = new MessageActionRow()
 	const localeSelect = new MessageSelectMenu()
-		.setCustomId('channel_locale_select')
+		.setCustomId(`channel_locale_select_${interactionSeed}`)
 		.setPlaceholder('Select Locale')
 		.setDisabled(disable)
 	const localeOptions = []
@@ -174,18 +176,19 @@ function generateChannelComponents(bot, target, useMenu, disable = false) {
 /**
  * Helper function to generate the interactive buttons for the "print" command.
  * @param {String} selection The currently selected configuration to print (channel or server).
+ * @param {Number} interactionSeed Seed value for the interaction's custom ID, to deconflict with other interactions.
  */
-function generateConfigSelectComponents(selection = undefined) {
+function generateConfigSelectComponents(interactionSeed, selection = undefined) {
 	const messageRows = []
 
 	const selectRow = new MessageActionRow()
 		.addComponents(
 			new MessageButton()
-				.setCustomId('guild_print')
+				.setCustomId(`guild_print_${interactionSeed}`)
 				.setLabel('Server Configuration')
 				.setStyle(selection === 'guild' ? 'SUCCESS' : 'SECONDARY'),
 			new MessageButton()
-				.setCustomId('channel_print')
+				.setCustomId(`channel_print_${interactionSeed}`)
 				.setLabel('Channel Configuration')
 				.setStyle(selection === 'channel' ? 'SUCCESS' : 'SECONDARY')
 		)
@@ -287,57 +290,60 @@ module.exports = new Command({
 			}
 		}
 		else if (sc === 'settings') {
+			const seed = Math.floor(Math.random() * 1000)
+
 			let configSelection = undefined
 			let channelTarget = interaction.channel
 			let msgContent = 'Select which configuration to print.'
 			const useChannelMenu = interaction.guild.channels.cache.filter(c => c.isText()).size <= 25
-			let msgComps = generateConfigSelectComponents()
+			let msgComps = generateConfigSelectComponents(seed)
 
 			await interaction.reply({ content: msgContent, components: msgComps })
 
 			const filter = i => {
 				return (i.isButton() || i.isSelectMenu()) &&
-						(/^channel_/.test(i.customId) || /^guild_/.test(i.customId)) &&
-						i.user.id === interaction.user.id
+						i.user.id === interaction.user.id &&
+						(new RegExp(`^channel_\\D+?_${seed}`).test(i.customId) ||
+						 new RegExp(`^guild_\\D+?_${seed}`).test(i.customId))
 			}
 			const collector = interaction.channel.createMessageComponentCollector({ 'filter': filter, time: 15000 })
 
 			collector.on('collect', async i => {
-				// changing which settings are being shown to be interacted with
-				if (i.customId === 'guild_print') {
+				// Changing which settings are being shown to be interacted with.
+				if (/^guild_print/.test(i.customId)) {
 					configSelection = 'guild'
 				}
-				else if (i.customId === 'channel_print') {
+				else if (/^channel_print/.test(i.customId)) {
 					configSelection = 'channel'
 					msgContent = `**Channel Configuration for <#${channelTarget.id}>:**`
 				}
-				else if (i.customId === 'channel_select') {
+				else if (/^channel_select/.test(i.customId)) {
 					channelTarget = interaction.guild.channels.cache.get(i.values[0])
 					msgContent = `**Channel Configuration for <#${channelTarget.id}>:**`
 				}
-				// setting server-related configuration
-				else if (i.customId === 'guild_official_mode') {
+				// Setting server-related configuration.
+				else if (/^guild_official_mode/.test(i.customId)) {
 					const currOfficial = bot.getCurrentGuildSetting(interaction.guild, 'official')
 					bot.setGuildSetting(interaction.guild, 'official', !currOfficial)
 				}
-				else if (i.customId === 'guild_rulings_mode') {
+				else if (/^guild_rulings_mode/.test(i.customId)) {
 					const currRulings = bot.getCurrentGuildSetting(interaction.guild, 'rulings')
 					bot.setGuildSetting(interaction.guild, 'rulings', !currRulings)
 				}
-				else if (i.customId === 'guild_locale_select') {
+				else if (/^guild_locale_select/.test(i.customId)) {
 					const newLocale = i.values[0]
 					bot.setGuildSetting(interaction.guild, 'locale', newLocale)
 				}
-				// setting channel-related configuration
-				else if (i.customId === 'channel_official_mode') {
+				// Setting channel-related configuration.
+				else if (/^channel_official_mode/.test(i.customId)) {
 					const currOfficial = bot.getCurrentChannelSetting(channelTarget, 'official')
 					bot.setChannelSetting(channelTarget, 'official', !currOfficial)
 				}
-				else if (i.customId === 'channel_rulings_mode') {
+				else if (/^channel_rulings_mode/.test(i.customId)) {
 					const currRulings = bot.getCurrentChannelSetting(channelTarget, 'rulings')
 					bot.setChannelSetting(channelTarget, 'rulings', !currRulings)
 				}
-				else if (i.customId === 'channel_locale_select') {
+				else if (/^channel_locale_select/.test(i.customId)) {
 					const newLocale = i.values[0]
 					bot.setChannelSetting(channelTarget, 'locale', newLocale)
 				}
@@ -364,10 +370,10 @@ module.exports = new Command({
 						queryString = `__Query Syntaxes__\n${queryString}`
 					
 					msgContent = `**Current Server Configuration:**\n${queryString}`
-					msgComps = [...generateServerComponents(interaction, bot), ...generateConfigSelectComponents(configSelection)]
+					msgComps = [...generateServerComponents(interaction, seed), ...generateConfigSelectComponents(seed, configSelection)]
 				}
 				else
-					msgComps = [...generateChannelComponents(bot, channelTarget, useChannelMenu), ...generateConfigSelectComponents(configSelection)]
+					msgComps = [...generateChannelComponents(interaction, channelTarget, useChannelMenu, seed), ...generateConfigSelectComponents(seed, configSelection)]
 
 				await i.update({ content: msgContent, components: msgComps })
 				collector.resetTimer()
