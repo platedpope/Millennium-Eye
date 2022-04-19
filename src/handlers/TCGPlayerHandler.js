@@ -5,7 +5,7 @@ const { performance } = require('perf_hooks')
 const config = require('config')
 const { getCachedProductData } = require('./BotDBHandler')
 const { TCGPLAYER_API, API_TIMEOUT, TCGPLAYER_API_VERSION } = require('lib/models/Defines')
-const { TCGPlayerSet, TCGPlayerProduct } = require('lib/models/TCGPlayer')
+const { TCGPlayerSet, TCGPlayerProduct, TCGPlayerPrice } = require('lib/models/TCGPlayer')
 const { logError, logger } = require('lib/utils/logging')
 
 const requestHeaders = {
@@ -352,13 +352,16 @@ async function getProductPriceData(products) {
 
 			const prodId = r.productId
 			const origProduct = prodMap[prodId]
-			origProduct.priceData.set(r.subTypeName, {
-				lowPrice: r.lowPrice,
-				midPrice: r.midPrice,
-				highPrice: r.highPrice,
-				marketPrice: r.marketPrice,
-				cacheTime: new Date()
-			})
+
+			const pd = new TCGPlayerPrice()
+			pd.type = r.subTypeName
+			pd.lowPrice = r.lowPrice
+			pd.midPrice = r.midPrice
+			pd.highPrice = r.highPrice
+			pd.marketPrice = r.marketPrice
+			pd.updateCacheTime(new Date())
+
+			origProduct.priceData.push(pd)
 		}
 	}
 
@@ -392,13 +395,16 @@ async function getProductPriceData(products) {
 
 			const prodId = r.productId
 			const origProduct = prodMap[prodId]
-			origProduct.priceData.set(r.subTypeName, {
-				lowPrice: r.lowPrice,
-				midPrice: r.midPrice,
-				highPrice: r.highPrice,
-				marketPrice: r.marketPrice,
-				cacheTime: new Date()
-			})
+
+			const pd = new TCGPlayerPrice()
+			pd.type = r.subTypeName
+			pd.lowPrice = r.lowPrice
+			pd.midPrice = r.midPrice
+			pd.highPrice = r.highPrice
+			pd.marketPrice = r.marketPrice
+			pd.updateCacheTime(new Date())
+			
+			origProduct.priceData.push(pd)
 		}
 	}
 

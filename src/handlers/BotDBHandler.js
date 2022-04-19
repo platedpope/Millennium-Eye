@@ -4,7 +4,7 @@ const fs = require('fs')
 const Search = require('lib/models/Search')
 const { BOT_DB_PATH, TCGPLAYER_PRICE_TIMEOUT } = require('lib/models/Defines')
 const { logger, logError } = require('lib/utils/logging')
-const { TCGPlayerSet, TCGPlayerProduct } = require('lib/models/TCGPlayer')
+const { TCGPlayerSet, TCGPlayerProduct, TCGPlayerPrice } = require('lib/models/TCGPlayer')
 const Card = require('lib/models/Card')
 
 const botDb = new Database(BOT_DB_PATH)
@@ -226,13 +226,17 @@ function searchTcgplayerData(searches) {
 					// Get the product's price data if we have it.
 					const priceRows = priceQry.all(tcgProduct.productId)
 					for (const p of priceRows) {
-						tcgProduct.priceData.set(p.type, {
-							lowPrice: p.lowPrice,
-							midPrice: p.midPrice,
-							highPrice: p.highPrice,
-							marketPrice: p.marketPrice,
-							cacheTime: new Date(p.cachedTimestamp)
-						})
+						const pd = new TCGPlayerPrice()
+						// Ignore this if the cache time is too old.
+						const cacheTime = new Date(p.cachedTimestamp)
+						if (!pd.updateCacheTime(cacheTime)) continue
+
+						pd.type = p.type
+						pd.lowPrice = p.lowPrice
+						pd.midPrice = p.midPrice
+						pd.highPrice = p.highPrice
+						pd.marketPrice = p.marketPrice
+						tcgProduct.priceData.push(pd)
 					}
 					tcgSet.products.push(tcgProduct)
 				}
@@ -256,13 +260,17 @@ function searchTcgplayerData(searches) {
 				// Get the product's price data if we have it.
 				const priceRows = priceQry.all(tcgProduct.productId)
 				for (const p of priceRows) {
-					tcgProduct.priceData.set(p.type, {
-						lowPrice: p.lowPrice,
-						midPrice: p.midPrice,
-						highPrice: p.highPrice,
-						marketPrice: p.marketPrice,
-						cacheTime: new Date(p.cachedTimestamp)
-					})
+					const pd = new TCGPlayerPrice()
+					// Ignore this if the cache time is too old.
+					const cacheTime = new Date(p.cachedTimestamp)
+					if (!pd.updateCacheTime(cacheTime)) continue
+
+					pd.type = p.type
+					pd.lowPrice = p.lowPrice
+					pd.midPrice = p.midPrice
+					pd.highPrice = p.highPrice
+					pd.marketPrice = p.marketPrice
+					tcgProduct.priceData.push(pd)
 				}
 				searchData.products.push(tcgProduct)
 			}
@@ -375,8 +383,6 @@ function addToTermCache(searchData, fromLoc) {
 			card.printData.get(r.locale).set(r.printCode, r.printDate)
 		}
 	}
-
-	// TODO: Gather pricing information as well.
 }
 
 /**
@@ -474,9 +480,8 @@ function addTcgplayerDataToDb(tcgData) {
 			else if (s instanceof Search) {
 				const searchData = s.data
 				for (const p of searchData.products) {
-					p.priceData.forEach((pData, type) => {
-						insertProductPriceData.run(p.productId, type, pData.lowPrice, pData.midPrice, pData.highPrice, pData.marketPrice, pData.cacheTime.toISOString())
-					})
+					for (const pd of p.priceData)
+						insertProductPriceData.run(p.productId, pd.type, pd.lowPrice, pd.midPrice, pd.highPrice, pd.marketPrice, pd.cacheTime.toISOString())
 					// Update card database ID too.
 					if (searchData instanceof Card)
 						botDb.prepare('UPDATE tcgplayerProducts SET dbId = ? WHERE fullName = ?').run(searchData.dbId, searchData.name.get('en'))
@@ -539,19 +544,19 @@ function getCachedProductData() {
 	// but may as well check.
 	dbRows = getProductPrices.all()
 	for (const r of dbRows) {
+		const pd = new TCGPlayerPrice()
 		// Ignore this if the cache time is too old.
 		const cacheTime = new Date(r.cachedTimestamp)
-		if ((new Date() + TCGPLAYER_PRICE_TIMEOUT) > cacheTime) continue
+		if (!pd.updateCacheTime(cacheTime)) continue
 
 		const forProduct = cachedData.products[r.tcgplayerProductId]
 		if (forProduct) {
-			forProduct.priceData.set(r.type, {
-				lowPrice: r.lowPrice,
-				midPrice: r.midPrice,
-				highPrice: r.highPrice,
-				marketPrice: r.marketPrice,
-				cacheTime: cacheTime
-			})
+			pd.type = r.type
+			pd.lowPrice = r.lowPrice
+			pd.midPrice = r.midPrice
+			pd.highPrice = r.highPrice
+			pd.marketPrice = r.marketPrice
+			forProduct.priceData.push(pd)
 		}
 	}
 

@@ -364,6 +364,8 @@ class Card {
 
 		// Gather the prices to put in the table.
 		let pricesToDisplay = []
+		// Keep track of the price cache times of products we're displaying.
+		// They're not all guaranteed to be the same, so just display the oldest one.
 		for (const p of this.products) {
 			// Apply any filters so we know which products we don't care about.
 			if (filters && Object.keys(filters).length) {
@@ -372,8 +374,9 @@ class Card {
 			}
 
 			const productDisplayData = p.getPriceDataForDisplay(filters)
-			if (productDisplayData.length)
+			if (productDisplayData.length) {
 				pricesToDisplay.push(...productDisplayData)
+			}
 		}
 		// Didn't find any prices to display.
 		if (!pricesToDisplay.length) return embedData
@@ -385,6 +388,7 @@ class Card {
 		priceTable.setHeading('Print', 'Rarity', 'Low-Market')
 		// We're not going to display every price for cards with lots of prints, keep track of our omissions.
 		const seenRarities = {}
+		let oldestPriceCache = undefined
 		for (const price of pricesToDisplay) {
 			if (!(price.rarity in seenRarities))
 				seenRarities[price.rarity] = 0
@@ -396,9 +400,13 @@ class Card {
 			// Distinguish 1st Ed prints in the table.
 			const typeRarity = price.type === '1st Edition' ? `${price.rarity} (1st)` : price.rarity
 			priceTable.addRow(price.identifier, typeRarity, `$${price.lowPrice}-${price.marketPrice}`)
+			// Find a representative price cache time from among the prices we're displaying.
+			// They can be different, so just pick the oldest one.
+			if (!oldestPriceCache || price.cacheTime < oldestPriceCache)
+				oldestPriceCache = price.cacheTime
 		}
 		
-		let extraInfo = `\nShowing maximum ${maxRarityLimit} ${sort === 'asc' ? 'least expensive' : 'most expensive'} prints per rarity. This ignores 1st Edition prices unless they are 25%+ more expensive than the Unlimited print.`
+		let extraInfo = `\nOldest price(s) cached at **${oldestPriceCache.toUTCString()}**, will go stale after 8 hrs.\nShowing maximum ${maxRarityLimit} ${sort === 'asc' ? 'least expensive' : 'most expensive'} prints per rarity. This ignores 1st Edition prices unless they are 25%+ more expensive than the Unlimited print.`
 		// Count our omissions.
 		const omissions = []
 		for (const r in seenRarities) {
@@ -763,7 +771,7 @@ class Card {
 	 * @returns {Array<TCGPlayerProduct>}
 	 */
 	getProductsWithoutPriceData() {
-		return this.products.filter(p => !p.priceData.size)
+		return this.products.filter(p => !p.priceData.length)
 	}
 
 	/**

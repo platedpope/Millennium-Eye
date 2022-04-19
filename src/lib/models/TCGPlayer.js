@@ -1,8 +1,9 @@
 const { MessageEmbed } = require('discord.js')
 const Table = require('ascii-table')
 
-const { TCPLAYER_LOGO, TCGPLAYER_SET_SEARCH } = require('./Defines')
+const { TCPLAYER_LOGO, TCGPLAYER_SET_SEARCH, TCGPLAYER_PRICE_TIMEOUT } = require('./Defines')
 const table = require('better-sqlite3/lib/methods/table')
+const { logger } = require('lib/utils/logging')
 
 /**
  * @typedef {Object} Prices
@@ -22,18 +23,14 @@ class TCGPlayerProduct {
 		this.productId = null			// TCGPlayer product ID. Unique per print.
 		this.fullName = null			// TCGPlayer product full name.
 
-		/**
-		 * @type {TCGPlayerSet}
-		 */
+		/** @type {TCGPlayerSet} */
 		this.set = null					// TCGPlayer set this product is in.
 
 		this.rarity = null				// The rarity this card was printed in.
 		this.printCode = null			// The print code (i.e., <SETCODE>-<CARD#>) associated with this print.
 
-		/**
-		 * @type {Map<String,Prices>}
-		 */
-		this.priceData = new Map()		// Price data for this card. Each key is a type of print (Unlimited, 1st Ed, etc.).
+		/** @type {Array<TCGPlayerPrice>} */
+		this.priceData = []				// Price data associated with this product.
 	
 		this.cacheTime = undefined		// A Date timestamp for when this product's data finished being cached.
 	}
@@ -52,7 +49,7 @@ class TCGPlayerProduct {
 
 		const useName = options && options.useName 
 		
-		if (this.priceData.size) {
+		if (this.priceData.length) {
 			// Trim the "Rare" from the rarity, it's redundant for display purposes.
 			let trimmedRarity = this.rarity !== 'Rare' ? this.rarity.replace(/\s*Rare$/, '') : this.rarity
 			// Also trim down DT and prismatic rarities, they're friggin' long otherwise.
@@ -66,17 +63,17 @@ class TCGPlayerProduct {
 
 			let cheapestPrint = undefined
 			let expensivePrint = undefined
-			this.priceData.forEach((prices, type) => {
+			for (const pd of this.priceData) {
 				// If there's only one type in here, treat it as Unlimited.
 				// (There's no distinction to be made with 1st Ed in this case).
-				const adjType = this.priceData.size === 1 ? 'Unlimited' : type
+				const adjType = this.priceData.length === 1 ? 'Unlimited' : pd.type
 
 				// Find the cheapest + most expensive prices among these.
-				if (!cheapestPrint || prices.marketPrice < cheapestPrint.marketPrice)
-					cheapestPrint = { type: adjType, ...prices, ...productData }
-				if (!expensivePrint || prices.marketPrice > expensivePrint.marketPrice)
-					expensivePrint = { type: adjType, ...prices, ...productData }
-			})
+				if (!cheapestPrint || pd.marketPrice < cheapestPrint.marketPrice)
+					cheapestPrint = { ...pd, type: adjType, ...productData }
+				if (!expensivePrint || pd.marketPrice > expensivePrint.marketPrice)
+					expensivePrint = { ...pd, type: adjType, ...productData }
+			}
 			// If the difference between the market price of the cheapest and most expensive prints are >=25%, display both.
 			const diff = Math.abs(cheapestPrint.marketPrice - expensivePrint.marketPrice) /
 				( (cheapestPrint.marketPrice + expensivePrint.marketPrice) / 2 )
@@ -99,9 +96,7 @@ class TCGPlayerSet {
 		this.setCode = null				// Abbreviated code of the set (e.g., ROTD, MRD, etc.)
 		this.fullName = null			// Full name of the set (e.g., Return of the Duelist, Metal Raiders, etc.)
 
-		/**
-		 * @type {Array<TCGPlayerProduct>}
-		 */
+		/** @type {Array<TCGPlayerProduct>} */
 		this.products = []				// The products that are a part of this set.
 
 		this.cacheTime = undefined		// A Date timestamp for when this set's data finished being cached.
@@ -164,8 +159,9 @@ class TCGPlayerSet {
 			if (filters)
 				priceDataOptions = { ...priceDataOptions, ...filters }
 			const productDisplayData = p.getPriceDataForDisplay(priceDataOptions)
-			if (productDisplayData.length)
+			if (productDisplayData.length) {
 				pricesToDisplay.push(...productDisplayData)
+			}
 		}
 		// Didn't find any prices to display.
 		if (!pricesToDisplay.length) return embedData
@@ -178,6 +174,7 @@ class TCGPlayerSet {
 		// Only display prices until our table is too big for one field. Keep track of any we omit.
 		let fieldFull = false
 		const omittedPrints = {}
+		let oldestPriceCache = undefined
 		for (const price of pricesToDisplay) {
 			if (!fieldFull) {
 				// Distinguish 1st Ed prints in the table.
@@ -200,8 +197,14 @@ class TCGPlayerSet {
 					omittedPrints[price.rarity] = 0
 				omittedPrints[price.rarity]++
 			}
+			else {
+				// Find a representative price cache time from among the prices we're displaying.
+				// They can be different, so just pick the oldest one.
+				if (!oldestPriceCache || price.cacheTime < oldestPriceCache)
+					oldestPriceCache = price.cacheTime
+			}
 		}
-		let extraInfo = `\nDisplaying ${sort === 'desc' ? 'most expensive' : 'least expensive'} prices first. This ignores 1st Edition prices unless they are 25%+ more expensive than the Unlimited print.`
+		let extraInfo = `\nOldest price(s) cached at **${oldestPriceCache.toUTCString()}**, will go stale after 8 hrs.\nDisplaying ${sort === 'desc' ? 'most expensive' : 'least expensive'} prices first. This ignores 1st Edition prices unless they are 25%+ more expensive than the Unlimited print.`
 		// Count our omissions.
 		const omissions = []
 		for (const rarity in omittedPrints) 
@@ -229,7 +232,7 @@ class TCGPlayerSet {
 	 * @returns {Array<TCGPlayerProduct>}
 	 */
 	getProductsWithoutPriceData() {
-		return this.products.filter(p => !p.priceData.size)
+		return this.products.filter(p => !p.priceData.length)
 	}
 
 	/**
@@ -268,6 +271,40 @@ class TCGPlayerSet {
 	}
 }
 
+/**
+ * Container class for all information relevant to us related to a TCGPlayer price.
+ */
+class TCGPlayerPrice {
+	constructor() {
+		this.type = null			// Price type (Unlimited, 1st Ed, etc.)
+		this.lowPrice = null		// Lowest price listing.
+		this.midPrice = null		// Median price listing.
+		this.highPrice = null		// Highest price listing.
+		this.marketPrice = null		// TCGPlayer market price.
+		/** @type {Date} */
+		this.cacheTime = null		// When this data was retrieved.
+	}
+
+	/**
+	 * Sets the cache time for the price.
+	 * This wraps a check for whether the given time is stale (i.e., too old).
+	 * If so, it does not set the cache time and keeps it null.
+	 * @param {Date | String} time The new cache time.
+	 * @returns Whether the cache time was updated.
+	 */
+	updateCacheTime(newTime) {
+		if (newTime instanceof String)
+			newTime = new Date(newTime)
+			
+		const staleTime = new Date(newTime.valueOf() + TCGPLAYER_PRICE_TIMEOUT)
+		const update = new Date() < staleTime
+
+		if (update) this.cacheTime = newTime
+
+		return update
+	}
+}
+
 module.exports = {
-	TCGPlayerProduct, TCGPlayerSet
+	TCGPlayerProduct, TCGPlayerSet, TCGPlayerPrice
 }
