@@ -69,7 +69,10 @@ const { TCGPlayerSet } = require('./TCGPlayer')
 	 */
 	hasType(type) {
 		for (const l of this.localeToTypesMap.keys()) 
-			return this.localeToTypesMap.get(l).has(type)
+			if (this.localeToTypesMap.get(l).has(type))
+				return true
+		
+		return false
 	}
 
 	/**
@@ -84,10 +87,16 @@ const { TCGPlayerSet } = require('./TCGPlayer')
 		for (const locale of this.localeToTypesMap.keys()) {
 			// Broad case: if this is a Card and we don't have a name in this locale,
 			// pretty good bet we don't have the data resolved.
-			if (this.data instanceof Card)
+			if (this.data instanceof Card) {
 				if ( !this.data.name.has(locale) ) 
 					return false
+			}
+			// Otherwise, if this is a Set then we want to check whether our price data is resolved.
+			else if (this.data instanceof TCGPlayerSet) {
+				return this.data.hasResolvedPriceData()
+			}
 
+			// Alright, this is a Card and we have the basic info. Check for what we need for any further types.
 			const types = this.localeToTypesMap.get(locale)
 			// If this has 'r' or 'i'-type search, it needs name + effect text for this locale at a minimum.
 			if (types.has('i') || types.has('r'))
@@ -137,13 +146,20 @@ const { TCGPlayerSet } = require('./TCGPlayer')
 		this.localeToTypesMap.forEach((types, locale) => {
 			// Broad case: if this is a Card and we don't have name or effect text in this locale,
 			// pretty good bet we don't have the data resolved.
-			if (this.data instanceof Card)
+			if (this.data instanceof Card) {
 				if ( !this.data.name.has(locale) ) {
 					unresolvedLocaleTypes.set(locale, types)
 					return
 				}
-				
-			// Assuming we have that as a baseline, check some more specific data.
+			}
+			// Otherwise, if this is a Set then we want to check whether our price data is resolved.
+			else if (this.data instanceof TCGPlayerSet) {
+				if ( !this.data.hasResolvedPriceData() )
+					unresolvedLocaleTypes.set(locale, types)
+				return
+			}
+
+			// Alright, this is a Card and we have the basic info. Check for what we need for any further types.
 			for (const t of types) {
 				let unresolvedType = false
 				// Any 'a'-type search should have image data.

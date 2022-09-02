@@ -88,7 +88,7 @@ module.exports = new Command({
 		if ('embed' in embedData)
 			msgOptions.embeds = [embedData.embed]
 		else {
-			await interaction.reply( { content: 'Could not find any price data with the given search and filter(s).', ephemeral: true } )
+			await queryRespond(bot, interaction, 'Could not find any price data with the given search and filter(s).', qry, { ephemeral: true })
 			return
 		}
 		

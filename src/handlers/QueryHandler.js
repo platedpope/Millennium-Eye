@@ -2,19 +2,14 @@ const { Message, CommandInteraction } = require('discord.js')
 const Cache = require('timed-cache')
 
 const Query = require('lib/models/Query')
-const Search = require('lib/models/Search')
 const { MillenniumEyeBot } = require('lib/models/MillenniumEyeBot')
 const { SEARCH_TIMEOUT_TRIGGER } = require('lib/models/Defines')
 const { logger, logError } = require('lib/utils/logging')
-const { searchTermCache } = require('./BotDBHandler')
 const { searchKonamiDb } = require('./KonamiDBHandler')
 const { searchYgorgDb } = require('./YGOrgDBHandler')
 const { searchYugipedia } = require('./YugipediaHandler')
-const { convertBotDataToSearchData, convertKonamiDataToSearchData, convertYgorgDataToSearchData, convertYugipediaDataToSearchData, cacheTcgplayerPriceData } = require('./DataHandler')
+const { convertKonamiDataToSearchData, convertYgorgDataToSearchData, convertYugipediaDataToSearchData, cacheTcgplayerPriceData } = require('./DataHandler')
 const { searchTcgplayer } = require('./TCGPlayerHandler')
-const Card = require('lib/models/Card')
-const { TCGPlayerSet } = require('lib/models/TCGPlayer')
-const Ruling = require('lib/models/Ruling')
 
 /**
  * @typedef {Object} searchStep
@@ -28,16 +23,23 @@ const Ruling = require('lib/models/Ruling')
 // If a user passes the acceptable number over the course of that minute, no future searches within that minute are allowed.
 const userSearchCounter = new Cache({ defaultTtl: 60 * 1000 })
 
+// Cached search data. This is an object with keys mapping a search term to the associated data it resulted in.
+// Multiple keys (i.e., search terms) can match to the same Search object.
+// The contents are cleared every 24 hrs.
+let searchCache = {}
+
 // This defines the default path searches take through the multiple databases and APIs available to the bot.
 /**
  * @type {Array<searchStep>}
  */
 const processSteps = [
-	{ 
-		'searchFunction': searchTermCache,
-		'dataHandler': convertBotDataToSearchData,
-		'useForOfficial': false,
-		'evaluatesTypes': new Set(['i', 'r', 'a', 'd', '$', 'f'])
+	// TCGPlayer search step is first because otherwise set price searches end up getting interpreted as card searches.
+	// e.g., searching SESL will think you're looking for Time Seal instead of the prices of cards in Secret Slayers.
+	{
+		'searchFunction': searchTcgplayer,
+		'dataHandler': cacheTcgplayerPriceData,
+		'useForOfficial': true,
+		'evaluatesTypes': new Set(['$'])
 	},
 	{
 		'searchFunction': searchKonamiDb,
@@ -45,6 +47,8 @@ const processSteps = [
 		'useForOfficial': true,
 		'evaluatesTypes': new Set(['i', 'r', 'a', 'd', '$', 'f']),
 	},
+	// And another TCGPlayer search step because otherwise card price searches before a card's data is cached result in empty data.
+	// Going TCGPlayer -> Konami -> TCGPlayer allows the search logic to first find set price searches, then card data, then price data for that card.
 	{
 		'searchFunction': searchTcgplayer,
 		'dataHandler': cacheTcgplayerPriceData,
@@ -72,6 +76,16 @@ const processSteps = [
  * @param {Query} qry The query to process.
  */
 async function processQuery(qry) {
+	// Before we try any of the steps, go through the cache to resolve anything we can.
+	for (const s of qry.searches) {
+		const cachedData = searchCache[s.term]
+		// We've seen this before, grab it from the cache.
+		if (cachedData) {
+			s.data = cachedData
+			logger.debug(`Search term ${s.term} mapped to cached result ${s.data}.`)
+		}
+	}
+
 	for (const step of processSteps) {
 		// Some steps are not used when "official mode" is turned on.
 		if (qry.official && !step.useForOfficial)
@@ -102,11 +116,42 @@ async function processQuery(qry) {
 			logError(err, `Process query step ${stepSearch.name} encountered an error.`)
 		}
 
-		// Log out our new successes.
+		// Double check the cache again, since performing this search step might have resulted in us
+		// finding something that was actually in our cache but we didn't know due to this being a new search term.
+		for (const s of searchesToEval) {
+			const cachedData = searchCache[s.term]
+			// Yep, we've seen this before and this is just a new way to refer to it we didn't know about yet.
+			if (cachedData) {
+				// Update our search data to point to what was cached rather than what we just found.
+				// The cached data may be more "complete," and it also probably has other terms pointing to it already.
+				s.data = cachedData
+				logger.debug(`Search step ${stepSearch.name} mapped to cached result ${s.data} after original search(es) [${[...s.originals].join(', ')}] produced search term ${s.term}.`)
+			}
+		}
+
+		// Cache the successes and log them out.
 		for (const s of searchesToEval)
-			if (s.isDataFullyResolved())
-				logger.info(`Step ${stepSearch.name} finished resolving original search(es) [${[...s.originals].join(', ')}] to ${s.data}.`)
+			if (s.isDataFullyResolved()) {
+				logger.info(`Search step ${stepSearch.name} finished resolving original search(es) [${[...s.originals].join(', ')}] to ${s.data}. Updating cache.`)
+
+				for (const ot of s.originals)
+					if (!(ot in searchCache))
+						searchCache[ot] = s.data
+				if (!(s.term in searchCache))
+					searchCache[s.term] = s.data
+			}
 	}
+}
+
+/**
+ * Resets the search cache, deleting all previously cached data.
+ * It basically just declares a new, empty object. It's a deceptively simple function,
+ * only necessary since other modules need the ability to reset the cache and can't do so with a simple import.
+ */
+function clearSearchCache() {
+	searchCache = {}
+
+	logger.info('Search term cache cleared.')
 }
 
 /**
@@ -154,9 +199,9 @@ async function queryRespond(bot, origMessage, replyContent, qry, replyOptions) {
 	let reply = undefined
 
 	// Empty reply, why are we here?
-	if ( (!('content' in fullReply) || !fullReply.content) && 
-		 (!('embeds' in fullReply) || !fullReply.embeds.length) &&
-		 (!('components' in fullReply || !fullReply.components.length) ))
+	if ( (!('content' in fullReply) || ('content' in fullReply && !fullReply.content)) && 
+		 (!('embeds' in fullReply) || ('embeds' in fullReply && !fullReply.embeds.length)) &&
+		 (!('components' in fullReply || ('components' in fullReply && !fullReply.components.length)) ) )
 		return reply
 	
 	let edited = false
@@ -183,8 +228,7 @@ async function queryRespond(bot, origMessage, replyContent, qry, replyOptions) {
 		else
 			bot.replyCache.put(origMessage.id, {
 				'author': origMessage.author,
-				'replies': [reply],
-				'qry': qry
+				'replies': [reply]
 			})
 	}
 
@@ -192,5 +236,5 @@ async function queryRespond(bot, origMessage, replyContent, qry, replyOptions) {
 }
 
 module.exports = {
-	processQuery, queryRespond, updateUserTimeout
+	processQuery, queryRespond, clearSearchCache, updateUserTimeout
 }

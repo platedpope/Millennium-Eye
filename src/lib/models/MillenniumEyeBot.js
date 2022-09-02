@@ -6,12 +6,19 @@ const { generateError } = require('lib/utils/logging')
 const { setupQueryRegex } = require('lib/utils/regex')
 const ConfigCache = require('./ConfigCache')
 const { Locales, MESSAGE_TIMEOUT } = require('./Defines')
-
-const intents = new Discord.Intents(32767)
+const { GatewayIntentBits } = require('discord.js')
 
 class MillenniumEyeBot extends Discord.Client {
 	constructor() {
-		super({ intents })
+		super({ intents: [
+			GatewayIntentBits.Guilds,
+			GatewayIntentBits.GuildMessages,
+			GatewayIntentBits.GuildMessageTyping,
+			GatewayIntentBits.GuildMessageReactions,
+			GatewayIntentBits.DirectMessages,
+			GatewayIntentBits.DirectMessageTyping,
+			GatewayIntentBits.DirectMessageReactions
+		] })
 
 		/**
 		 * @type {Discord.Collection<string, Command>}
@@ -116,7 +123,7 @@ class MillenniumEyeBot extends Discord.Client {
 				`This syntax is already being used for **${fullLocale}** queries.`
 			)
 		}
-		// now check all other locales this server might have set (if applicable)
+		// Now check all other locales this server might have set (if applicable).
 		const currQueries = this.guildSettings.get([guild.id, 'queries'])
 		if (currQueries) {
 			for (const qLocale in currQueries) {
@@ -182,7 +189,15 @@ class MillenniumEyeBot extends Discord.Client {
 	 * @returns {Object} The set of query syntaxes associated with the guild.
 	 */
 	getGuildQueries(guild) {
-		return guild ? this.guildQueries.get([guild.id]) : this.guildQueries.get(['default'])
+		if (guild) {
+			let queries = this.guildQueries.get([guild.id])
+			const defaultSyntaxRemoved = this.guildSettings.get([guild.id, 'defaultSyntaxRemoved']) ?? false
+			if (!queries && !defaultSyntaxRemoved)
+				queries = this.guildQueries.get(['default'])
+			
+			return queries
+		}
+		else return this.guildQueries.get(['default'])
 	}
 
 	/**

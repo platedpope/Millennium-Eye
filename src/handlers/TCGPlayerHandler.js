@@ -3,7 +3,7 @@ const rateLimit = require('axios-rate-limit')
 const { performance } = require('perf_hooks')
 
 const config = require('config')
-const { getCachedProductData } = require('./BotDBHandler')
+const { getCachedProductData, searchTcgplayerData } = require('./BotDBHandler')
 const { TCGPLAYER_API, API_TIMEOUT, TCGPLAYER_API_VERSION } = require('lib/models/Defines')
 const { TCGPlayerSet, TCGPlayerProduct, TCGPlayerPrice } = require('lib/models/TCGPlayer')
 const { logError, logger } = require('lib/utils/logging')
@@ -338,6 +338,9 @@ async function cacheSetProductData(dataHandlerCallback) {
  * @param {Array<TCGPlayerProduct>} products  
  */
 async function getProductPriceData(products) {
+	// Nothing to do without a good bearer token to send requests with.
+	if (!(await cacheBearerToken())) return false
+
 	// Make a map out of these for easy lookup once we have our results.
 	const prodMap = {}
 	for (const p of products)
@@ -382,6 +385,9 @@ async function getProductPriceData(products) {
  * @param {Array<TCGPlayerSet>} sets
  */
  async function getSetPriceData(sets) {
+	// Nothing to do without a good bearer token to send requests with.
+	if (!(await cacheBearerToken())) return false
+	
 	// Make a map out of the products in these sets for easy future lookups.
 	const prodMap = {}
 	for (const s of sets)
@@ -440,14 +446,19 @@ async function searchTcgplayer(searches, qry, dataHandlerCallback) {
 	// For sets, just hit the group price data endpoint.
 	const setsWithoutPriceData = []
 
+	// First search through the persistent data we've saved off.
+	searchTcgplayerData(searches)
+
 	for (const s of searches) {
-		// Not a TCGPlayer search, don't care about it.
+		// Sanity check. We shouldn't get non-TCGPlayer searches here, but just in case, discard them anyway.
 		if (!s.hasType('$')) continue
 		// Don't know what this is, nothing to search for.
 		if (!s.data) continue
 
-		if (s.data instanceof TCGPlayerSet)
-			setsWithoutPriceData.push(s.data)
+		if (s.data instanceof TCGPlayerSet) {
+			if (!s.data.hasResolvedPriceData())
+				setsWithoutPriceData.push(s.data)
+		}
 		else {
 			let prods = s.data.getProductsWithoutPriceData()
 			// Filter out any that don't have product IDs.

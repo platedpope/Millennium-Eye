@@ -1,8 +1,8 @@
-const { MessageEmbed } = require('discord.js')
+const { EmbedBuilder } = require('discord.js')
 const Table = require('ascii-table')
+const table = require('better-sqlite3/lib/methods/table')
 
 const { TCPLAYER_LOGO, TCGPLAYER_SET_SEARCH, TCGPLAYER_PRICE_TIMEOUT } = require('./Defines')
-const table = require('better-sqlite3/lib/methods/table')
 const { logger } = require('lib/utils/logging')
 
 /**
@@ -107,7 +107,7 @@ class TCGPlayerSet {
 	 * @param {Object} options Relevant options (type, locale, etc.) that are passed on to more specific embed functions.
 	 * @returns {Object} An object containing the generated embed and data relevant to it (e.g., attachments).
 	 */
-	generateEmbed(options) {
+	async generateEmbed(options) {
 		let embedData = {}
 
 		if ('type' in options)
@@ -117,8 +117,8 @@ class TCGPlayerSet {
 		if ('official' in options)
 			var official = options.official
 
-		if (type === '$')
-			embedData = this.generatePriceEmbed(locale, official)
+		// Always assume set embeds are price embeds.
+		embedData = this.generatePriceEmbed(locale, official)
 
 		return embedData
 	}
@@ -128,7 +128,7 @@ class TCGPlayerSet {
 	 * @param {String} locale The locale to reference for the price data. 
 	 * @param {Boolean} official Whether to only include official Konami information.
 	 * @param filters Any data filters (rarity, name, price, etc.) to be applied to the data.
-	 * @returns The generated MessageEmbed.
+	 * @returns The generated EmbedBuilder.
 	 */
 	generatePriceEmbed(locale, official, filters) {
 		const embedData = {}
@@ -137,7 +137,7 @@ class TCGPlayerSet {
 		if (!this.products.length)
 			return embedData
 		
-		const finalEmbed = new MessageEmbed()
+		const finalEmbed = new EmbedBuilder()
 
 		// Default descending (most expensive first). If we're given a sort, use that.
 		const sort = filters && 'sort' in filters ? filters.sort : 'desc'
@@ -215,13 +215,13 @@ class TCGPlayerSet {
 		// Set up the embed now that we have all our info.
 		// Still display the typical "author line" (name, property, link, etc.)
 		const embedName = this.fullName + ` (${this.setCode})`
-		finalEmbed.setAuthor(embedName)
-		finalEmbed.setFooter('This bot uses TCGPlayer price data, but is not endorsed or certified by TCGPlayer.', TCPLAYER_LOGO)
+		finalEmbed.setAuthor({ name: embedName })
+		finalEmbed.setFooter({ text: 'This bot uses TCGPlayer price data, but is not endorsed or certified by TCGPlayer.', iconURL: TCPLAYER_LOGO })
 		finalEmbed.setTitle('View on TCGPlayer')
 		const tcgplayerUrlName = this.fullName.replace(/\s/g, '-').toLowerCase()
 		finalEmbed.setURL(`${TCGPLAYER_SET_SEARCH}${tcgplayerUrlName}?setName=${tcgplayerUrlName}`)
 		finalEmbed.setDescription(extraInfo)
-		finalEmbed.addField('__Price Data__', '```\n' + priceTable.toString() + '```', false)
+		finalEmbed.addFields({ name: '__Price Data__', value: '```\n' + priceTable.toString() + '```', inline: false })
 
 		embedData.embed = finalEmbed
 		return embedData

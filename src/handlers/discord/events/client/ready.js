@@ -1,38 +1,38 @@
 const config = require('config')
 const { logger, logError } = require ('lib/utils/logging')
-const { updateCommandPermissions } = require('lib/utils/permissions')
 const { MillenniumEyeBot } = require('lib/models/MillenniumEyeBot')
 const Event = require('lib/models/Event')
-const { clearBotCache, addTcgplayerDataToDb, loadCachedPriceData } = require('handlers/BotDBHandler')
+const { clearSearchCache } = require('handlers/QueryHandler')
+const { addTcgplayerDataToDb } = require('handlers/BotDBHandler')
 const { cacheNameToIdIndex, cacheManifestRevision, cachePropertyMetadata } = require('handlers/YGOrgDBHandler')
 const { updateKonamiDb } = require('handlers/KonamiDBHandler')
-const { cacheSetInfo, cacheSetProductData } = require('handlers/TCGPlayerHandler')
+const { cacheSetProductData } = require('handlers/TCGPlayerHandler')
+const { ActivityType, PresenceUpdateStatus, Events } = require('discord.js')
 
 module.exports = new Event({
-	event: 'ready', 
+	event: Events.ClientReady, 
 	once: true,
 	/**
 	 * @param {MillenniumEyeBot} bot 
 	 */
 	execute: async bot => {
 		// Cache log channel.
-		bot.logChannel = bot.channels.cache.get(bot.logChannel)
+		bot.logChannel = await bot.channels.fetch(bot.logChannel)
 		
 		// Refresh slash commands.
 		try {
 			const applicationGuildCommands = []
 			const applicationGlobalCommands = []
 			for (const cmd of bot.commands.values()) {
-				// If it requires specific permissions, make it a guild command
-				// because slash command permissions are only configurable by user/role ID, which has to be guild specific.
-				if (config.testMode || cmd.permissions) 
+				// Currently, everything is a global command unless test mode is enabled.
+				// Future commands may be implemented that are guild-only.
+				if (config.testMode)
 					applicationGuildCommands.push(cmd.options)
 				else 
 					applicationGlobalCommands.push(cmd.options)
 			}
 
 			logger.info('Beginning refresh of application commands.')
-
 			if (applicationGuildCommands.length) {
 				logger.info(`Refreshing ${applicationGuildCommands.length} guild commands.`)
 				applicationGuildCommands.map(cmd => logger.debug(`- ${cmd.name}`))
@@ -40,14 +40,10 @@ module.exports = new Event({
 					logger.info('Test mode is enabled, only refreshing in test server.')
 					const testGuild = bot.guilds.cache.get(config.testGuild)
 					await testGuild.commands.set(applicationGuildCommands)
-					// Update permissions as well.
-					await updateCommandPermissions(bot, testGuild)
 				}
 				else {
 					bot.guilds.cache.each(async guild => {
 						await guild.commands.set(applicationGuildCommands)
-						// Update permissions as well.
-						await updateCommandPermissions(bot, guild)
 					})
 				}
 			}
@@ -65,10 +61,9 @@ module.exports = new Event({
 
 		// Set up all our caches and periodics updates.
 		
-		// Bot cache clear: once per week.
-		clearBotCache(true)
-		setInterval(clearBotCache, 7 * 24 * 60 * 60 * 1000, true)
-		if (!config.testMode) {
+		// Search term cache clear: once every 24 hours.
+		setInterval(clearSearchCache, 7 * 24 * 60 * 60 * 1000)
+		if (config.testMode) {
 			// Konami database update: once per day.
 			await updateKonamiDb()
 			setInterval(updateKonamiDb, 24 * 60 * 60 * 1000)
@@ -85,7 +80,10 @@ module.exports = new Event({
 		setInterval(cacheSetProductData, 24 * 60 * 60 * 1000, addTcgplayerDataToDb)
 
 		// Set bot presence.
-		bot.user.setActivity('/help for info!', { type: 'WATCHING' })
+		bot.user.setPresence({ 
+			activities: [{ name: 'for /help!', type: ActivityType.Watching }],
+			status: PresenceUpdateStatus.Online
+		})
 
 		logger.info('Bot has finished initialization!')
 		bot.isReady = true

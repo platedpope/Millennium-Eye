@@ -1,8 +1,6 @@
-const { Message, CommandInteraction } = require('discord.js')
+const { Message, CommandInteraction, GuildChannel } = require('discord.js')
 
 const Search = require('./Search')
-const Card = require('./Card')
-const Ruling = require('./Ruling')
 const { MillenniumEyeBot } = require('./MillenniumEyeBot')
 const { KONAMI_DB_CARD_REGEX, KONAMI_DB_QA_REGEX, YGORG_DB_CARD_REGEX, YGORG_DB_QA_REGEX, IGNORE_LINKS_REGEX, Locales } = require('./Defines')
 const { logError, logger } = require('lib/utils/logging')
@@ -18,8 +16,9 @@ class Query {
 	 * by referencing the properties of the given qry.
 	 * @param {Message | CommandInteraction | Query | Array<Search>} qry The message associated with the query, another Query to copy the data of, or an array of searches to treat as a query.
 	 * @param {MillenniumEyeBot} bot The bot.
+	 * @param {GuildChannel} channel The channel this message/interaction was sent in.
 	 */
-	constructor(qry, bot) {
+	constructor(qry, bot, channel) {
 		if (qry instanceof Query) {
 			this.official = qry.official
 			this.rulings = qry.rulings
@@ -247,18 +246,18 @@ class Query {
 	 * Gets all embed data (embeds and associated attachments) formed from these searches.
 	 * @returns {Object} Every embed and attachment for this Query.
 	 */
-	getDataEmbeds() {
+	async getDataEmbeds() {
 		const embedData = {}
 
 		for (const s of this.searches) {
 			if (!s.data) continue
-			s.localeToTypesMap.forEach((searchTypes, searchLocale) => {
+			for (const [searchLocale, searchTypes] of s.localeToTypesMap) {
 				for (const t of searchTypes) {
-					let newData = s.data.generateEmbed({
+					let newData = await s.data.generateEmbed({
 						'type': t,
 						'locale': searchLocale,
 						'official': this.official,
-						'rulings': t === 'r' ? true : false,
+						'rulings': t === 'r',
 						'random': false
 					})
 					
@@ -273,7 +272,7 @@ class Query {
 						}
 					}
 				}
-			})
+			}
 		}
 
 		return embedData

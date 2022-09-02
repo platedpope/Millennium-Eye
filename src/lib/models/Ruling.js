@@ -1,7 +1,8 @@
-const { MessageEmbed } = require('discord.js')
-const { logError, breakUpDiscordMessage } = require('lib/utils/logging')
+const { EmbedBuilder } = require('discord.js')
 
 const { LocaleEmojis, KONAMI_QA_LINK, KONAMI_REQUEST_LOCALE, YGORG_QA_LINK  } = require('./Defines')
+const { logError, breakUpDiscordMessage } = require('lib/utils/logging')
+const { replaceIdsWithNames } = require('lib/utils/regex')
 
 class Ruling {
 	/**
@@ -21,7 +22,7 @@ class Ruling {
 	 * Generic wrapper for generating any type of embed.
 	 * @param {Object} options Relevant options (type, locale, etc.) that are passed on to more specific embed functions.
 	 */
-	 generateEmbed(options) {
+	 async generateEmbed(options) {
 		let embedData = {}
 		// Do not send any of these in "Official" mode.
 		if ('official' in options && options.official)
@@ -31,7 +32,7 @@ class Ruling {
 		if ('random' in options)
 			var random = options.random
 			
-		embedData = this.generateRulingEmbed(locale, random)
+		embedData = await this.generateRulingEmbed(locale, random)
 
 		return embedData
 	}
@@ -40,9 +41,9 @@ class Ruling {
 	 * Generate an embed containing the data for this ruling in the given locale.
 	 * @param {String} locale The locale to use when generating the embed.
 	 * @param {Boolean} random Whether the ruling is random. Spoilers the answer if so.
-	 * @returns {MessageEmbed} The generated embed, or null if none could be generated (probably unsupported locale).
+	 * @returns {EmbedBuilder} The generated embed, or null if none could be generated (probably unsupported locale).
 	 */
-	generateRulingEmbed(locale, random = false) {
+	async generateRulingEmbed(locale, random = false) {
 		const embedData = {}
 
 		// We shouldn't be here without data for this locale, but do a final sanity check to make sure we leave if so.
@@ -52,9 +53,9 @@ class Ruling {
 		const konamiDbLink = `${KONAMI_QA_LINK}${this.id}${KONAMI_REQUEST_LOCALE}ja`
 		const ygorgDbLink = `${YGORG_QA_LINK}${this.id}:${locale}`
 
-		let replacedTitle = this.replaceIdsWithNames(this.title.get(locale), locale, false)
-		let replacedQuestion = this.replaceIdsWithNames(this.question.get(locale), locale)
-		let replacedAnswer = this.replaceIdsWithNames(this.answer.get(locale), locale)
+		let replacedTitle = await replaceIdsWithNames(this.title.get(locale), locale, false)
+		let replacedQuestion = await replaceIdsWithNames(this.question.get(locale), locale)
+		let replacedAnswer = await replaceIdsWithNames(this.answer.get(locale), locale)
 		if (random)
 			replacedAnswer = `||${replacedAnswer}||`
 		// Add translation info to the answer field.
@@ -75,53 +76,20 @@ class Ruling {
 		// Maximum field length is 1024 characters. Break up answers before they're too long.
 		replacedAnswer = breakUpDiscordMessage(replacedAnswer, 1024, '\n')
 
-		const finalEmbed = new MessageEmbed()
+		const finalEmbed = new EmbedBuilder()
 
-		finalEmbed.setAuthor(replacedTitle, null, konamiDbLink)
-		finalEmbed.addField('__Question__', replacedQuestion, false)
+		finalEmbed.setAuthor({ name: replacedTitle, iconURL: konamiDbLink })
+		finalEmbed.addFields({ name: '__Question__', value: replacedQuestion, inline: false })
 		for (let i = 0; i < replacedAnswer.length; i++) {
-			finalEmbed.addField(
-				i == 0 ? '__Answer__' : '__cont.__',
-				replacedAnswer[i], false
-			)
+			finalEmbed.addFields({
+				name: i == 0 ? '__Answer__' : '__cont.__',
+				value: replacedAnswer[i], inline: false
+			})
 		}
 
 		embedData.embed = finalEmbed
 
 		return embedData
-	}
-
-	/**
-	 * Replace all card IDs with their corresponding card names in the given locale.
-	 * @param {String} text The text that contains IDs to be replaced.
-	 * @param {String} locale The locale to use when replacing IDs.
-	 * @param {Boolean} bold Whether to bold the newly replaced names.
-	 */
-	replaceIdsWithNames(text, locale, bold = true) {
-		const idMatches = [...text.matchAll(/<<\s*(\d+)\s*>>/g)]
-		if (idMatches.length) {
-			const ids = []
-			// Convert to a set to eliminate dupes and convert them to integers.
-			const idSet = new Set()
-			for (const match of idMatches) {
-				const idMatch = match[1]
-				idSet.add(parseInt(idMatch.trim(), 10))
-			}
-			for (const id of idSet)
-				ids.push(id)
-
-			// All of these IDs should be in our associated cards.
-			for (const id of ids) {
-				const card = this.cards.find(c => c.dbId === id)
-				if (card)
-					if (bold) text = text.replace(new RegExp(`<<\s*${id}\s*>>`, 'g'), `**${card.name.get(locale)}**`)
-					else text = text.replace(new RegExp(`<<\s*${id}\s*>>`, 'g'), card.name.get(locale))
-				// This shouldn't happen, but I guess this ID isn't among our associated cards?
-				// else { logError(this.cards, `Could not find ID ${id} among associated cards for ruling ${this.id}.`) }
-			}
-		}
-
-		return text
 	}
 
 	/**

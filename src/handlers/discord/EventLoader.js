@@ -5,7 +5,6 @@ const Table = require('ascii-table')
 const { logger } = require('lib/utils/logging')
 const { MillenniumEyeBot } = require('lib/models/MillenniumEyeBot')
 const Event = require('lib/models/Event')
-const { EventTypes } = require('lib/models/Defines')
 
 const GP = promisify(glob)
 
@@ -22,7 +21,7 @@ module.exports = async bot => {
 			 */
 			const e = require(file)
 
-			if (!e.event || !EventTypes.includes(e.event)) {
+			if (!e.event) {
 				const path = file.split('/')
 				eventTable.addRow(`${e.event || 'MISSING'}`, `❌ Invalid/missing event name: ${path.at(-2)}/${path.at(-1)}`)
 			}

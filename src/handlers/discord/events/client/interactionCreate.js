@@ -5,7 +5,7 @@ const { MillenniumEyeBot } = require('lib/models/MillenniumEyeBot')
 const Event = require('lib/models/Event')
 
 module.exports = new Event({
-	event: 'interactionCreate',
+	event: Discord.Events.InteractionCreate,
 	once: false,
 	/**
 	 * @param {MillenniumEyeBot} bot 

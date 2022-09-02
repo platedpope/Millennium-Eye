@@ -51,7 +51,12 @@ async function logError(error, desc, ...more) {
 			
 		}
 		for (const m of msgs) {
-			await meInstance.logChannel.send(m)
+			try {
+				await meInstance.logChannel.send(m)
+			}
+			catch(err) {
+				logger.error('Failed to log error to Discord channel. Possibly not initialized yet?')
+			}
 		}
 	}
 }

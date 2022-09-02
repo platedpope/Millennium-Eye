@@ -5,7 +5,6 @@ const { logError, logger } = require('lib/utils/logging')
 const { CardDataFilter } = require('lib/utils/search')
 const Search = require('lib/models/Search')
 const Query = require('lib/models/Query')
-const { evictFromBotCache } = require('handlers/BotDBHandler')
 const { Locales, YGORG_NAME_ID_INDEX, YGORG_PROPERTY_METADATA, YGORG_DB_PATH, YGORG_MANIFEST, YGORG_QA_DATA_API, API_TIMEOUT, YGORG_CARD_DATA_API, YGORG_ARTWORK_API } = require('lib/models/Defines')
 
 const ygorgDb = new Database(YGORG_DB_PATH)
@@ -71,10 +70,8 @@ async function processManifest(newRevision) {
 					for (const id of ids) delFaq.run(id)
 				})
 				delMany(evictIds)
-				// Delete any bot-specific data.
-				evictFromBotCache(evictIds)
 
-				logger.info(`Evicted all FAQ and cached bot data associated with database IDs: ${evictIds.join(', ')}`)
+				logger.info(`Evicted all FAQ and cached bot data associated with ${evictIds.length} database ID(s).`)
 			}
 			// Invalidate cached QA data.
 			if ('qa' in changes) {
@@ -90,7 +87,7 @@ async function processManifest(newRevision) {
 				})
 				delMany(evictQas)
 
-				logger.info(`Evicted all QA data for QA IDs: ${evictQas.join(', ')}`)
+				logger.info(`Evicted all QA data for ${evictQas.length} QA ID(s).`)
 			}
 			// Invalidate any cached indices we care about.
 			if ('idx' in changes) {
@@ -152,17 +149,28 @@ async function searchYgorgDb(searches, qry, dataHandlerCallback) {
 				qaApiSearches.push(currSearch)
 		}
 		else if (isFaqSearch) {
-			const dbRows = ygorgDb.prepare('SELECT * FROM faqData WHERE dbId = ?').all(currSearch.term)
+			const dbRows = ygorgDb.prepare('SELECT * FROM faqData WHERE cardId = ?').all(currSearch.term)
 			if (dbRows.length) {
 				if (currSearch.data === undefined) 
 					// How the hell did we get this far with unresolved card data? This shouldn't happen.
 					cardApiSearches.push(currSearch)
-				else 
-					for (const r of dbRows) {
-						if (!currSearch.data.faqData.has(r.locale))
-							currSearch.data.faqData.set(r.locale, [])
-						currSearch.data.faqData.get(r.locale).push(r.data)
-					}
+				else {
+					const faqMap = currSearch.data.faqData
+					for (const r of dbRows)
+						insertFaqData(faqMap, r.locale, r.effectNumber, r.data)
+					// Lastly, sort each array of FAQBlocks by index.
+					faqMap.forEach((fbs, lan) => {
+						fbs.sort((a, b) => {
+							// Convert the indices to numbers and sort them that way. Some might have decimals (0.5) which sorts improperly on a string comparison.
+							return parseFloat(a.index) - parseFloat(b.index)
+						})
+					})
+				}
+
+				// Make sure this wasn't all we needed to look for. If we still need more data, kick it to the API.
+				// This can happen for OCG-only cards that we have FAQ data stored in the database for.
+				if (!currSearch.isDataFullyResolved() && Number.isInteger(currSearch.term))
+					cardApiSearches.push(currSearch)
 			}
 			else
 				// If there's nothing in the DB, go to the API, but only if we have an ID we're working with.
@@ -473,33 +481,66 @@ async function populateRulingAssociatedCardsData(ruling, locales, qry) {
 			
 		}
 	}
-	// YGOrg API also returns FAQ data for card queries, may as well populate that while we're here too.
+	// YGOrg API also returns FAQ data for card queries, may as well populate that while we're here too if we need to.
 	const apiFaqData = apiData.faqData
-	if (apiFaqData) {
-		for (const effect in apiFaqData.entries)
-			for (const entry of effect)
-				for (const locale in entry) {
-					if (!card.faqData.has(locale)) card.faqData.set(locale, [])
-					card.faqData.get(locale).push({
-						'effectNumber': parseInt(effect, 10),
-						'effectType': 'normal',
-						'entryData': entry[locale],
-					})
-				}
+	if (apiFaqData && card.faqData.size === 0) {
+		const faqMap = card.faqData
+		for (const effect in apiFaqData.entries) {
+			for (const entry of apiFaqData.entries[effect])
+				for (const locale in entry) 
+					insertFaqData(faqMap, locale, effect, entry[locale])
+		}
 		// Check for pendulum effect entries too.
 		if ('pendEntries' in apiFaqData) {			
 			for (const effect in apiFaqData.pendEntries)
-				for (const entry of effect) 
-					for (const locale in entry) {
-						if (!card.faqData.has(locale)) card.faqData.set(locale, [])
-						card.faqData.get(locale).push({
-							'effectNumber': parseInt(effect, 10),
-							'effectType': 'pendulum',
-							'entryData': entry[locale],
-						})
-					}
+				for (const entry of apiFaqData.pendEntries[effect])
+					for (const locale in entry)
+						// Add 100 to the indices on FAQs to do with pendulum effects.
+						// This is an ugly hack, but they need to be separated from normal FAQ entries.
+						insertFaqData(faqMap, locale, String(parseFloat(effect)+100), entry[locale])
 		}
-			
+		// Lastly, sort each array of FAQBlocks by index.
+		faqMap.forEach((fbs, lan) => {
+			fbs.sort((a, b) => {
+				// Convert the indices to numbers and sort them that way. Some might have decimals (0.5) which sorts improperly on a string comparison.
+				return parseFloat(a.index) - parseFloat(b.index)
+			})
+		})
+	}
+}
+
+/**
+ * A helper function to add to (and organize) FAQ data as it's being inserted into Card data.
+ * @param {Map<>} faqMap A Card's faqData. 
+ * @param {String} locale The locale of the FAQ entry being added.
+ * @param {String} effectIndex The effect "index" of the entry being added.
+ * @param {String} entry The entry to add.
+ */
+function insertFaqData(faqMap, locale, effectIndex, entry) {
+	if (!faqMap.has(locale)) 
+		faqMap.set(locale, [])
+	const faqBlocks = faqMap.get(locale)
+	// Find the block associated with this index. If none exists, make a new one and go from there.
+	let assocBlock = faqBlocks.find(b => b.index === effectIndex)
+	if (!assocBlock) {
+		assocBlock = {
+			index: effectIndex,
+			lines: [entry]
+		}
+		faqBlocks.push(assocBlock)
+	}
+	else {
+		// If one already exists, add this row's data to it.
+		// Be on the lookout for a label row (starts with "About...", or is wrapped in【 】in JP) and make sure to add it to the front of the array.
+		if (locale === 'en' && entry.startsWith('About ')) {
+			assocBlock.lines.unshift(entry)
+		}
+		else if (locale === 'ja' && 
+				(entry.startsWith('【') && entry.endsWith('】')) || (entry.startsWith('【『') && entry.includes('』】'))) {
+			assocBlock.lines.unshift(entry)
+		}
+		// Treat all other entries equally.
+		else assocBlock.lines.push(entry)
 	}
 }
 
@@ -520,19 +561,23 @@ function addToYgorgDb(qaSearches, faqSearches) {
 				qa.title.forEach((t, l) => {
 					insertQa.run(qa.id, l, t, qa.question.get(l), qa.answer.get(l), qa.date.get(l))
 				})
-				for (const c of qa.cards) insertCard.run(qa.id, c.dbId)
+				for (const c of qa.cards)
+					if (c.dbId)
+						insertCard.run(qa.id, c.dbId)
 			}
 		})
 		insertAllQas(qaSearches)
 	}
 	if (faqSearches && faqSearches.length) {
-		const insertFaq = ygorgDb.prepare(`INSERT OR REPLACE INTO faqData(cardId, locale, effectNumber, effectType, data)
-									  VALUES(?, ?, ?, ?, ?)`)
+		const insertFaq = ygorgDb.prepare(`INSERT OR REPLACE INTO faqData(cardId, locale, effectNumber, data)
+									  VALUES(?, ?, ?, ?)`)
 		let insertAllFaqs = ygorgDb.transaction(searchData => {
 			for (const s of searchData) {
 				const card = s.data
-				card.faqData.forEach((entries, locale) => {
-					for (const entry of entries) insertFaq.run(card.dbId, locale, entry.effectNumber, entry.effectType, entry.entryData)
+				card.faqData.forEach((blocks, locale) => {
+					for (const b of blocks)
+						for (const l of b.lines)
+							insertFaq.run(card.dbId, locale, b.index, l)
 				})
 			}
 		})
@@ -621,14 +666,14 @@ function searchNameToIdIndex(search, locales, returnMatches = 1) {
 	}
 
 	// If we had more than one locale and more than one match, we need to re-sort our matches in case each locale added some.
-	if (locales.length > 1 && tempMatches.size > 1) {
+	if (locales.length > 1 && matches.size > 1) {
 		// If scores are different, descending sort by score (i.e., higher scores first).
 		// If scores are the same, ascending sort by ID (i.e., lower IDs first).
 		const sortedResult = [...matches.entries()].sort(([idA, scoreA], [idB, scoreB]) => {
 			return (scoreA !== scoreB) ? (scoreB - scoreA) : (idA - idB)
 		})
 		// Splice the array to only include the number of requested matches.
-		sortedResult.splice(returnMatches).
+		sortedResult.splice(returnMatches)
 		// Reset the map.
 		matches.clear()
 		sortedResult.forEach(r => matches.set(r[0], r[1]))

@@ -6,7 +6,7 @@ const Query = require('lib/models/Query')
 const { processQuery, updateUserTimeout, queryRespond } = require('handlers/QueryHandler')
 
 module.exports = new Event({
-	event: 'messageCreate',
+	event: Discord.Events.MessageCreate,
 	once: false,
 	/**
 	 * @param {MillenniumEyeBot} bot 
@@ -33,7 +33,7 @@ module.exports = new Event({
 			
 			await processQuery(qry)
 			
-			const embedData = qry.getDataEmbeds()
+			const embedData = await qry.getDataEmbeds()
 			// Build message data.
 			const replyOptions = { 
 				allowedMentions: { repliedUser: false }

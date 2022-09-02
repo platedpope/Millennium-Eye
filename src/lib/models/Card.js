@@ -3,18 +3,18 @@ const path = require('path')
 const sharp = require('sharp')
 const sanitize = require('sanitize-filename') 
 const deasync = require('deasync')
-const { MessageEmbed } = require('discord.js')
+const { EmbedBuilder } = require('discord.js')
 const Table = require('ascii-table')
 
 const { EmbedIcons, EmbedColors, BanlistStatus, LocaleEmojis, YGORG_CARD_LINK, YUGIPEDIA_WIKI, KONAMI_CARD_LINK, KONAMI_REQUEST_LOCALE, TCPLAYER_LOGO, TCGPLAYER_SEARCH, TCGPLAYER_PRODUCT_SEARCH } = require('./Defines')
-const { logError, breakUpDiscordMessage } = require('lib/utils/logging')
+const { logError, breakUpDiscordMessage, logger } = require('lib/utils/logging')
 const { TCGPlayerProduct } = require('./TCGPlayer')
+const { replaceIdsWithNames } = require('lib/utils/regex')
 
 /**
- * @typedef {Object} FAQEntry
- * @property {Number} effectNumber
- * @property {String} effectType
- * @property {String} entryData
+ * @typedef {Object} FAQBlock
+ * @property {Number} index
+ * @property {Array<String>} lines
  */
 
 class Card {
@@ -46,14 +46,10 @@ class Card {
 		this.notInCg = null				// True if the card isn't from the TCG or OCG; from anime/manga/game instead.
 		this.printData = new Map()		// Data about when this card was printed and in which sets. Each key is a locale, with value a further map of print code -> print date.
 		this.imageData = new Map()		// Image(s) associated with the card. Each key is an ID, with value a link to that image (either local file or on the web).
-		/**
-		 * @type {Array<TCGPlayerProduct>}
-		 */
+		/** @type {Array<TCGPlayerProduct>} */
 		this.products = []				// The TCGPlayer product data associated with this card, which contain price info.
-		/**
-		 * @type {Map<String,Array<FAQEntry>>}
-		 */
-		this.faqData = new Map()		// Any FAQ data for this card. Each key is a locale, with value the array of entries in that language.
+		/** @type {Map<String,Array<FAQBlock>} */
+		this.faqData = new Map()		// Any FAQ data for this card. Each key is a locale, an array of the FAQ blocks for that language.
 
 		// Data unique to Rush Duel cards.
 		// NOTE: These are not filled out or used yet. I can't be bothered.
@@ -69,7 +65,7 @@ class Card {
 	 * @param {Object} options Relevant options (type, locale, etc.) that are passed on to more specific embed functions.
 	 * @returns {Object} An object containing the generated embed and data relevant to it (e.g., attachments).
 	 */
-	generateEmbed(options) {
+	async generateEmbed(options) {
 		let embedData = {}
 
 		if ('type' in options)
@@ -95,6 +91,9 @@ class Card {
 		else if (type === '$') {
 			embedData = this.generatePriceEmbed(locale, official)
 		}
+		else if (type === 'f') {
+			embedData = await this.generateFaqEmbed(locale)
+		}
 
 		return embedData
 	}
@@ -104,7 +103,7 @@ class Card {
 	 * @param {String} locale Which locale to use when generating the embed.
 	 * @param {Boolean} rulings Whether to include additional information relevant to rulings for the card.
 	 * @param {Boolean} official Whether to only include official Konami information. This overrides any inclusion from rulings mode being true.
-	 * @returns The generated MessageEmbed and its image attachment (if any).
+	 * @returns The generated EmbedBuilder and its image attachment (if any).
 	 */
 	generateInfoEmbed(locale, rulings, official) {
 		const embedData = {}
@@ -113,13 +112,13 @@ class Card {
 		if (!this.name.has(locale))
 			return embedData
 		
-		const finalEmbed = new MessageEmbed()
+		const finalEmbed = new EmbedBuilder()
 
 		const cardName = this.name.get(locale)
 		const colorIcon = this.getEmbedColorAndIcon()
 		const titleUrl = this.getEmbedTitleLink(locale, official)
 
-		finalEmbed.setAuthor(cardName, colorIcon[1], titleUrl)
+		finalEmbed.setAuthor({ name: cardName, iconURL: colorIcon[1], url: titleUrl })
 		finalEmbed.setColor(colorIcon[0])
 		const imageAttach = this.setEmbedImage(finalEmbed)
 
@@ -172,20 +171,20 @@ class Card {
 		// Pendulum Effect
 		const pendEffect = this.pendEffect.get(locale)
 		if (pendEffect)
-			finalEmbed.addField(searchPropertyToLocaleIndex('Pendulum Effect', locale), pendEffect, false)
+			finalEmbed.addFields({ name: searchPropertyToLocaleIndex('Pendulum Effect', locale), value: pendEffect, inline: false })
 		// Effect
 		let effect = this.effect.get(locale)
 		if (effect) {
 			if (this.types.includes('Normal'))
 				effect = `*${effect}*`
-			finalEmbed.addField(searchPropertyToLocaleIndex('Effect', locale), effect, false)
+			finalEmbed.addFields({ name: searchPropertyToLocaleIndex('Effect', locale), value: effect, inline: false })
 		}
 
 		// Display ruling data if necessary. Only do this for cards that are on the database.
 		if (rulings && this.dbId) {
 			const rulingsText = this.buildRulingsField(locale, official)
 			if (rulingsText)
-				finalEmbed.addField('Additional Information', rulingsText, false)
+				finalEmbed.addFields({ name: 'Additional Information', value: rulingsText, inline: false })
 		}
 
 		// Put banlist data in the footer.
@@ -209,7 +208,7 @@ class Card {
 			}
 		}
 		if (footerString)
-			finalEmbed.setFooter(footerString)
+			finalEmbed.setFooter({ text: footerString })
 
 		embedData.embed = finalEmbed
 		if (imageAttach)
@@ -223,7 +222,7 @@ class Card {
 	 * @param {String} locale The locale to use for the card name.
 	 * @param {Boolean} official Whether to only include official Konami information. 
 	 * @param {Number} artId The ID of the art to display.
-	 * @returns The generated MessageEmbed and its image attachment (if any).
+	 * @returns The generated EmbedBuilder and its image attachment (if any).
 	 */
 	generateArtEmbed(locale, official, artId = 1) {
 		const embedData = {}
@@ -232,14 +231,14 @@ class Card {
 		if (!this.imageData.size || !this.imageData.get(artId)) 
 			return embedData
 
-		const finalEmbed = new MessageEmbed()
+		const finalEmbed = new EmbedBuilder()
 
 		// Still display the typical "author line" (name, property, link, etc.)
 		const cardName = this.name.get(locale)
 		const colorIcon = this.getEmbedColorAndIcon()
 		const titleUrl = this.getEmbedTitleLink(locale, official)
 
-		finalEmbed.setAuthor(cardName, colorIcon[1], titleUrl)
+		finalEmbed.setAuthor({ name: cardName, iconURL: colorIcon[1], url: titleUrl })
 		finalEmbed.setColor(colorIcon[0])
 		// Set the image.
 		const imageAttach = this.setEmbedImage(finalEmbed, artId, false)
@@ -256,7 +255,7 @@ class Card {
 	 * Generates an embed containing all of the print data associated with this card.
 	 * @param {String} locale The locale to reference for the print data. 
 	 * @param {Boolean} official Whether to only include official Konami information. 
-	 * @returns The generated MessageEmbed and its image attachment (if any).
+	 * @returns The generated EmbedBuilder and its image attachment (if any).
 	 */
 	generateDateEmbed(locale, official) {
 		const embedData = {}
@@ -265,13 +264,13 @@ class Card {
 		if (!this.printData.size || !this.printData.get(locale))
 			return embedData
 		
-		const finalEmbed = new MessageEmbed()
+		const finalEmbed = new EmbedBuilder()
 
 		// Still display the typical "author line" (name, property, link, etc.)
 		const cardName = this.name.get(locale)
 		const colorIcon = this.getEmbedColorAndIcon()
 		const titleUrl = this.getEmbedTitleLink(locale, official)
-		finalEmbed.setAuthor(cardName, colorIcon[1], titleUrl)
+		finalEmbed.setAuthor({ name: cardName, iconURL: colorIcon[1], url: titleUrl })
 		finalEmbed.setColor(colorIcon[0])
 
 		// Set the description field to be the first and last print dates in this locale.
@@ -327,10 +326,10 @@ class Card {
 		// Break things up if necessary.
 		const fields = breakUpDiscordMessage(printTable.toString(), 1018)
 		for (let i = 0; i < fields.length; i++) {
-			finalEmbed.addField(
-				i === 0 ? `__Full Print Data (${totalPrints} ${totalPrints > 1 ? 'prints' : 'print'})__` : '__cont.__',
-				`\`\`\`\n${fields[i]}\`\`\``, false
-			)
+			finalEmbed.addFields({
+				name: i === 0 ? `__Full Print Data (${totalPrints} ${totalPrints > 1 ? 'prints' : 'print'})__` : '__cont.__',
+				value: `\`\`\`\n${fields[i]}\`\`\``, inline: false
+			})
 		}
 
 		embedData.embed = finalEmbed
@@ -342,7 +341,7 @@ class Card {
 	 * @param {String} locale The locale to reference for the price data. 
 	 * @param {Boolean} official Whether to only include official Konami information.
 	 * @param filters Any data filters (rarity, name, price, etc.) to be applied to the data.
-	 * @returns The generated MessageEmbed. No images are included for price embeds.
+	 * @returns The generated EmbedBuilder. No images are included for price embeds.
 	 */
 	generatePriceEmbed(locale, official, filters) {
 		const embedData = {}
@@ -351,7 +350,7 @@ class Card {
 		if (!this.products.length)
 			return embedData
 		
-		const finalEmbed = new MessageEmbed()
+		const finalEmbed = new EmbedBuilder()
 
 		// Default display 3 of each rarity. If we're filtering on rarity, increase that to 15.
 		const maxRarityLimit = filters && 'rarity' in filters ? 15 : 3
@@ -393,7 +392,7 @@ class Card {
 			if (!(price.rarity in seenRarities))
 				seenRarities[price.rarity] = 0
 			seenRarities[price.rarity]++
-			// Only display a maximum of 3 prints per rarity.
+			// Only display prints for a given rarity up to the maximum.
 			if (seenRarities[price.rarity] > maxRarityLimit)
 				continue
 			
@@ -422,9 +421,9 @@ class Card {
 		const cardName = this.name.get(locale)
 		const colorIcon = this.getEmbedColorAndIcon()
 		const titleUrl = this.getEmbedTitleLink(locale, official)
-		finalEmbed.setAuthor(cardName, colorIcon[1], titleUrl)
+		finalEmbed.setAuthor({ name: cardName, iconURL: colorIcon[1], url: titleUrl })
 		finalEmbed.setColor(colorIcon[0])
-		finalEmbed.setFooter('This bot uses TCGPlayer price data, but is not endorsed or certified by TCGPlayer.', TCPLAYER_LOGO)
+		finalEmbed.setFooter({ text: 'This bot uses TCGPlayer price data, but is not endorsed or certified by TCGPlayer.', iconURL: TCPLAYER_LOGO })
 		finalEmbed.setTitle('View on TCGPlayer')
 		finalEmbed.setURL(`${TCGPLAYER_PRODUCT_SEARCH}${encodeURI(this.name.get('en'))}`)
 		finalEmbed.setDescription(extraInfo)
@@ -432,13 +431,72 @@ class Card {
 		const fields = breakUpDiscordMessage(priceTable.toString(), 1018)
 		// Only display 2 fields maximum so this embed doesn't get waaaaaay too big.
 		for (let i = 0; i < Math.min(fields.length, 2); i++) {
-			finalEmbed.addField(
-				i === 0 ? `__Price Data__` : '__cont.__',
-				`\`\`\`\n${fields[i]}\`\`\``, false
-			)
+			finalEmbed.addFields({
+				name: i === 0 ? `__Price Data__` : '__cont.__',
+				value: `\`\`\`\n${fields[i]}\`\`\``, inline: false
+			})
 		}
 
 		embedData.embed = finalEmbed
+		return embedData
+	}
+
+	/**
+	 * Generates an embed containing the card's FAQ information.
+	 * @param {String} locale Which locale to use when generating the embed.
+	 * @returns The generated EmbedBuilder and its image attachment (if any).
+	 */
+	 async generateFaqEmbed(locale) {
+		const embedData = {}
+
+		// We shouldn't be here without data for this locale, but do a final sanity check to make sure we leave if so.
+		if (!this.faqData.has(locale))
+			return embedData
+		
+		const finalEmbed = new EmbedBuilder()
+
+		const cardName = this.name.get(locale)
+		const colorIcon = this.getEmbedColorAndIcon()
+
+		finalEmbed.setAuthor({ name: cardName, iconURL: colorIcon[1] })
+		finalEmbed.setColor(colorIcon[0])
+
+		const faqBlocks = this.faqData.get(locale)
+
+		let numFields = 0
+		let currFaqField = ''
+		for (const fb of faqBlocks) {
+			let blockString = ''
+
+			// If this block has a label at the front, use that first and make it stand out.
+			let currLine = 0
+			if (fb.lines[currLine].startsWith('About ') || (fb.lines[currLine].startsWith('【') && fb.lines[currLine].endsWith('】'))) {
+				blockString += `**${fb.lines[currLine]}**\n`
+				currLine++
+			}
+			// Add all other lines normally.
+			for (currLine; currLine < fb.lines.length; currLine++) {
+				blockString += await replaceIdsWithNames(`● ${fb.lines[currLine]}\n`, locale, true)
+			}
+
+			// Add the complete block to the field. If this would push us over the 1024 field character limit, then push the current field to the embed and start again with this block.
+			const tempField = currFaqField + blockString
+			if (tempField.length > 1024) {
+				finalEmbed.addFields({ name: numFields === 0 ? '__FAQ Entries__' : '__cont.__',
+									value: currFaqField, inline: false })
+				numFields++
+				currFaqField = blockString
+			}
+			else {
+				currFaqField += `\n${blockString}`
+			}
+		}
+		// Finish up the fields.
+		finalEmbed.addFields({ name: numFields === 0 ? '__FAQ Entries__' : '__cont.__',
+							value: currFaqField, inline: false })
+
+		embedData.embed = finalEmbed
+
 		return embedData
 	}
 
@@ -518,7 +576,7 @@ class Card {
 	/**
 	 * Sets the given embed's image to this image ID and returns
 	 * the corresponding attachment (if any) that is necessary to attach with the message.
-	 * @param {MessageEmbed} embed The embed to set the image for.
+	 * @param {EmbedBuilder} embed The embed to set the image for.
 	 * @param {Number} id The ID of the image.
 	 * @param {Boolean} thumbnail Whether to set the thumbnail rather than the actual image. Defaults to true.
 	 * @returns The URL for the attachment, if any (null if no attachment).
@@ -529,25 +587,60 @@ class Card {
 			id = this.imageData.keys().next().value
 		
 		let attach = null
-		const imagePath = this.imageData.get(id)
+		const imageData = this.imageData.get(id)
 
-		if (imagePath) {
-			// If this path is in data/card_images, it's local and needs an attachment.
-			if (imagePath.includes('data/card_images')) {
-				attach = imagePath
-				const imageName = path.basename(imagePath)
-				if (thumbnail)
-					embed.setThumbnail(`attachment://${imageName}`)
-				else
-					embed.setImage(`attachment://${imageName}`)
+		if (imageData.includes('http')) {
+			// It's some URL rather than raw data.
+			if (thumbnail)
+				embed.setThumbnail(imageData)
+			else
+				embed.setImage(imageData)
+		}
+		else {
+			// This is or was raw data that already does, or will, exist at a path on disk.
+			const artPath = `${process.cwd()}/data/card_images`
+			if (this.dbId)
+				var artFilename = `${this.dbId}_${id}`
+			else if (this.passcode)
+				artFilename = `${this.passcode}_${id}`
+			else
+				artFilename = `${sanitize(this.name.get('en'))}_${id}`
+	
+			const fullArtPath = `${artPath}/${artFilename}.png`
+			attach = fullArtPath
+			const imageName = path.basename(fullArtPath)
+
+			if (!imageData.includes('data/card_images')) {
+				// Still raw data that needs to be saved to disk.
+				let artCropDims = { 'top': 69, 'left': 32, 'width': 193, 'height': 191 }
+				// Pendulums have squished arts, so the crop needs to be different.
+				if (this.pendScale !== null || this.types.includes('Pendulum')) {
+					// Not only that, but OCG Pendulums have different art dimensions than TCG Pendulums.
+					// OCG has a larger Pendulum Effect text box, so the art isn't as tall.
+					if (!this.printData.has('en') || !this.name.has('en'))
+						artCropDims = { 'top': 67, 'left': 18, 'width': 220, 'height': 165 }
+					else 
+						artCropDims = { 'top': 67, 'left': 18, 'width': 220, 'height': 177 }
+				}
+				
+				// This is really ugly, but I realized too late this was asynchronous and it's lead to some scenarios
+				// where the card embed is generated before the image is saved...
+				// This is a bad hack to force it to be synchronous.
+				let sync = true
+				sharp(imageData).extract(artCropDims).toFile(fullArtPath, err => {
+					if (err) logError(err, 'Failed to save card cropped image.')
+					sync = false
+				})
+				while (sync) deasync.sleep(100)
+
+				// Update the image data too so we don't have to lug around a bunch of raw data.
+				this.imageData.set(id, fullArtPath)
 			}
-			else {
-				// Otherwise just assume it's a URL to somewhere and use it as the image.
-				if (thumbnail)
-					embed.setThumbnail(imagePath)
-				else
-					embed.setImage(imagePath)
-			}
+
+			if (thumbnail)
+				embed.setThumbnail(`attachment://${imageName}`)
+			else
+				embed.setImage(`attachment://${imageName}`)
 		}
 
 		return attach
@@ -655,6 +748,7 @@ class Card {
 			return
 		}
 
+		// Otherwise, see if the image is saved already.
 		const artPath = `${process.cwd()}/data/card_images`
 		if (this.dbId)
 			var artFilename = `${this.dbId}_${id}`
@@ -667,41 +761,10 @@ class Card {
 
 		if (fs.existsSync(fullArtPath))
 			this.imageData.set(id, fullArtPath)
-		else if (img !== undefined) {
-			if (fromNeuron) {
-				let artCropDims = { 'top': 69, 'left': 32, 'width': 193, 'height': 191 }
-				// Pendulums have squished arts, so the crop needs to be different.
-				if (this.pendScale !== null || this.types.includes('Pendulum')) {
-					// Not only that, but OCG Pendulums have different art dimensions than TCG Pendulums.
-					if (!this.printData.has('en') || !this.name.has('en'))
-						// OCG has a larger Pendulum Effect text box, so the art isn't as tall.
-						artCropDims = { 'top': 67, 'left': 18, 'width': 220, 'height': 165 }
-					else 
-						artCropDims = { 'top': 67, 'left': 18, 'width': 220, 'height': 177 }
-				}
-				
-				// This is really ugly, but I realized too late this was asynchronous and it's lead to some scenarios
-				// where the card embed is generated before the image is saved.
-				// As such, I'm changing this to synchronous for saving the FIRST art file. The rest can stay async.
-				if (id === 1) {
-					let sync = true
-					sharp(img).extract(artCropDims).toFile(fullArtPath, err => {
-						if (err) logError(err, 'Failed to save card cropped image.')
-						sync = false
-					})
-					while (sync) deasync.sleep(100)
-				}
-				else {
-					sharp(img).extract(artCropDims).toFile(fullArtPath, err => {
-						if (err) logError(err, 'Failed to save card cropped image.')
-					})
-				}
-			}
-			else
-				fs.writeFileSync(fullArtPath, img)
-			
-			this.imageData.set(id, fullArtPath)
-		}
+		else
+			// Save the raw data. Don't write the image to disk yet, just save the path we came up with.
+			// The image will be saved to disk when necessary (i.e., when it's actually going to be used for an embed).
+			this.imageData.set(id, img)
 	}
 
 	/**
@@ -781,9 +844,14 @@ class Card {
 	 * @returns {Boolean} Whether the price data is to be considered resolved.
 	 */
 	 hasResolvedPriceData() {
+		let fullyResolved = false
+
+		// If we have no products at all, then we haven't even gotten our price data yet.
+		if (!this.products.length) return fullyResolved
+
 		const numProductsWithoutPriceData = this.getProductsWithoutPriceData().length
 		// If all of our products have price data, we're definitely resolved.
-		let fullyResolved = numProductsWithoutPriceData === 0
+		fullyResolved = numProductsWithoutPriceData === 0
 
 		// If not, call a threshold for declaring whether things are "good enough".
 		// Currently, if >90% of our products have price data, we call it resolved.

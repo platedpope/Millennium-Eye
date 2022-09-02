@@ -14,7 +14,7 @@ function setupQueryRegex(openSymbol, closeSymbol) {
 	}
 
 	return new RegExp(
-		'((' + regexQueryTypes + ')*)?' +                                  // match query type if present, e.g. the 'r' in r[card name]
+		'((' + regexQueryTypes + ')*)?' +                               // match query type if present, e.g. the 'r' in r[card name]
 		'(?<!^' + open + ')' +                                          // ignore cases with multiple of the open symbol in a row, e.g. [[card name]]
 		open + '(' + angleIgnore + '[^' + close + ']+?)' + close +      // match what's in between the open/close symbols, e.g. the 'card name' in [card name]
 		'(?!' + close + ')' +                                           // ignore cases with multiple of the close symbol in a row
@@ -52,6 +52,56 @@ function findYugipediaProperty(prop, data, toInt = false) {
 	return retval
 }
 
+/**
+ * Replace all card IDs with their corresponding card names in the given locale.
+ * @param {String} text The text that contains IDs to be replaced.
+ * @param {String} locale The locale to use when replacing IDs.
+ * @param {Boolean} bold Whether to bold the newly replaced names.
+ */
+ async function replaceIdsWithNames(text, locale, bold = true) {
+	// This is in here to avoid a circular dependency. Not ideal, but easy.
+	const Query = require('lib/models/Query')
+	const Search = require('lib/models/Search')
+	const { processQuery } = require('handlers/QueryHandler')
+
+	const idMatches = [...text.matchAll(/<<\s*(\d+)\s*>>/g)]
+	if (idMatches.length) {
+		const ids = []
+		// Convert to a set to eliminate dupes and convert them to integers.
+		const idSet = new Set()
+		for (const match of idMatches) {
+			const idMatch = match[1]
+			idSet.add(parseInt(idMatch.trim(), 10))
+		}
+		for (const id of idSet)
+			ids.push(id)
+
+		// Bootstrap a query from the IDs that need resolution.
+		const searches = []
+		for (const id of ids) {
+			searches.push(new Search(id, 'i', locale))
+		}
+		const qry = new Query(searches)
+		
+		await processQuery(qry)
+		for (const id of ids) {
+			const cardSearch = qry.searches.find(s => s.data && s.data.dbId === id)
+			if (cardSearch) {
+				const card = cardSearch.data
+				//console.log('Card with ID to replace:')
+				//console.log(card)
+				//console.log(`Replacing instances of <<${id}>> with ${card.name.get(locale)} (locale ${locale})`)
+				if (bold) text = text.replace(new RegExp(`<<\s*${id}\s*>>`, 'g'), `**${card.name.get(locale)}**`)
+				else text = text.replace(new RegExp(`<<\s*${id}\s*>>`, 'g'), card.name.get(locale))
+			}
+			// This shouldn't happen, but if this fails then we couldn't map the ID to a card.
+		}
+	}
+
+	return text
+}
+
 module.exports = {
-	setupQueryRegex, escRegex, findYugipediaProperty
+	setupQueryRegex, escRegex, 
+	findYugipediaProperty, replaceIdsWithNames
 }

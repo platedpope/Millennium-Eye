@@ -1,4 +1,4 @@
-const { MessageActionRow, MessageSelectMenu } = require('discord.js')
+const { ActionRowBuilder, SelectMenuBuilder } = require('discord.js')
 
 const Command = require('lib/models/Command')
 const { CommandTypes } = require('lib/models/Defines')
@@ -11,15 +11,14 @@ const { generateError } = require('lib/utils/logging')
  * Helper function to generate the select menu for which art to display.
  * @param {Number} selectedId The selected art ID.
  * @param {Number} availableArtIds The number of available art IDs.
- * @param {Number} interactionSeed Seed value for the interaction's custom ID, to deconflict with other interactions.
  * @returns {Array} The array of message rows.
  */
-function generateArtSelect(selectedId, availableArtIds, interactionSeed, disable = false) {
+function generateArtSelect(selectedId, availableArtIds, disable = false) {
 	const messageRows = []
 
-	const artRow = new MessageActionRow()
-	const artSelect = new MessageSelectMenu()
-		.setCustomId(`art_id_select_${interactionSeed}`)
+	const artRow = new ActionRowBuilder()
+	const artSelect = new SelectMenuBuilder()
+		.setCustomId(`art_id_select`)
 		.setPlaceholder('Select Art ID')
 		.setDisabled(disable)
 	const selectOptions = []
@@ -91,26 +90,25 @@ module.exports = new Command({
 		
 		// Only give + handle an art selection menu if we've got more than one to choose from.
 		if (availableArts > 1) {
-			const seed = Math.floor(Math.random() * 1000)
-			msgOptions.components = generateArtSelect(viewedArt, availableArts, seed)
+			msgOptions.components = generateArtSelect(viewedArt, availableArts)
 
 			const resp = await queryRespond(bot, interaction, '', qry, msgOptions)
 
-			const filter = i => {
-				return i.isSelectMenu() && 
-					   i.user.id === interaction.user.id &&
-					   new RegExp(`art_id_select_${seed}`).test(i.customId)
-			}
-			const collector = interaction.channel.createMessageComponentCollector({ 'filter': filter, time: 15000 })
+			const collector = resp.createMessageComponentCollector({ time: 15000 })
 
 			collector.on('collect', async i => {
+				if (i.user.id !== interaction.user.id) {
+					i.reply({ content: 'Only the user that originally sent the command can interact with these options.', ephemeral: true })
+					return
+				}
+
 				viewedArt = parseInt(i.values[0], 10)
 				const embedData = artSearch.data.generateArtEmbed(locale, qry.official, viewedArt)
 				if ('embed' in embedData)
 					msgOptions.embeds = [embedData.embed]
 				if ('attachment' in embedData)
 					msgOptions.files = [embedData.attachment]
-				msgOptions.components = generateArtSelect(viewedArt, availableArts, seed)
+				msgOptions.components = generateArtSelect(viewedArt, availableArts)
 
 				await i.message.removeAttachments()
 				await i.update(msgOptions)
@@ -118,7 +116,7 @@ module.exports = new Command({
 			})
 
 			collector.on('end', async () => {
-				msgOptions.components = generateArtSelect(viewedArt, availableArts, seed, true)
+				msgOptions.components = generateArtSelect(viewedArt, availableArts, true)
 				await resp.edit(msgOptions)
 			})
 		}

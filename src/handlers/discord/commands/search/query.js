@@ -36,7 +36,7 @@ module.exports = new Command({
 			await interaction.deferReply()
 			await processQuery(qry)
 			
-			const embedData = qry.getDataEmbeds()
+			const embedData = await qry.getDataEmbeds()
 
 			// Build message data.
 			const replyOptions = {}

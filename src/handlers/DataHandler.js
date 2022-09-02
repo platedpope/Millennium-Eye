@@ -2,51 +2,24 @@ const Card = require('lib/models/Card')
 const Query = require('lib/models/Query')
 const Ruling = require('lib/models/Ruling')
 const Search = require('lib/models/Search')
-const { addToTermCache, addToBotDb, populateCardFromBotData, addTcgplayerDataToDb, searchTcgplayerData } = require('./BotDBHandler')
+const { addTcgplayerDataToDb, searchTcgplayerData } = require('./BotDBHandler')
 const { searchKonamiDb, populateCardFromKonamiData } = require('./KonamiDBHandler')
+const { searchTcgplayer } = require('./TCGPlayerHandler')
 const { addToYgorgDb, searchArtworkRepo, populateCardFromYgorgApi, populateRulingFromYgorgDb, populatedRulingFromYgorgApi, populateRulingAssociatedCardsData } = require('./YGOrgDBHandler')
 const { populateCardFromYugipediaApi } = require('./YugipediaHandler')
 
-/**
- * This is the callback data handler for turning data from the bot database into
- * usable Search data (in this case, a Card object).
- * @param {Array<Search>} resolvedSearches Searches that were resolved during this run of the bot database.
- * @param {Array<Search>} termUpdates Searches for which we found better search terms that should be updated.
- * @param {Array<Search>} konamiSearches Searches that had terms that mapped to the Konami database.
- */
-function convertBotDataToSearchData(resolvedBotSearches, termUpdates, konamiSearches) {
-	for (const s of resolvedBotSearches) {
-		if (!(s.data instanceof Card)) s.data = new Card()
-		populateCardFromBotData(s.rawData, s.data)
-		s.rawData = undefined
-	}
-
-	if (termUpdates.length)
-		addToTermCache(termUpdates, 'bot')
-	if (konamiSearches.length) 
-		searchKonamiDb(konamiSearches, null, convertKonamiDataToSearchData)
-}
 
 /**
  * This is the callback data handler for turning data from the konami database into
  * usable Search data (in this case, a Card object).
  * @param {Array<Search>} resolvedSearches Searches that were resolved during this run of the bot database. 
- * @param {Array<Search>} termUpdates Searches for which we found better search terms that should be updated.
  */
-function convertKonamiDataToSearchData(resolvedSearches, termUpdates) {
-	const priceSearches = []
+function convertKonamiDataToSearchData(resolvedSearches) {
 	for (const s of resolvedSearches) {
 		if (!(s.data instanceof Card)) s.data = new Card()
 		populateCardFromKonamiData(s.rawData, s.data)
 		s.rawData = undefined
-		// Check if this search wanted price data now that we have a name/ID to search for.
-		if (s.hasType('$'))
-			priceSearches.push(s)
 	}
-	if (priceSearches.length)
-		searchTcgplayerData(priceSearches)
-	if (termUpdates.length)
-		addToTermCache(termUpdates, 'konami')
 }
 
 /**
@@ -62,13 +35,13 @@ async function convertYgorgDataToSearchData(qry, qaSearches, cardSearches = []) 
 		s.data = new Ruling()
 		populateRulingFromYgorgDb(s.rawData, s.data)
 		s.rawData = undefined
-		await populateRulingAssociatedCardsData(s.data, [...s.localeToTypesMap.keys()], qry)
+		// await populateRulingAssociatedCardsData(s.data, [...s.localeToTypesMap.keys()], qry)
 	}
 	for (const s of qaSearches.api) {
 		s.data = new Ruling()
 		populatedRulingFromYgorgApi(s.rawData, s.data)
 		s.rawData = undefined
-		await populateRulingAssociatedCardsData(s.data, [...s.localeToTypesMap.keys()], qry)
+		// await populateRulingAssociatedCardsData(s.data, [...s.localeToTypesMap.keys()], qry)
 	}
 	// Process the cards we got from the API.
 	const cardsWithoutArt = []
@@ -84,9 +57,8 @@ async function convertYgorgDataToSearchData(qry, qaSearches, cardSearches = []) 
 	if (cardsWithoutArt.length)
 		await searchArtworkRepo(cardSearches)
 
-	// Add anything from the API to the bot and YGOrg DBs as necessary.
+	// Add anything from the API to the YGOrg DB as necessary.
 	addToYgorgDb(qaSearches.api, cardSearches)
-	addToBotDb(cardSearches)
 }
 
 /**
@@ -136,22 +108,18 @@ function convertYugipediaDataToSearchData(searches, qry) {
 	// If these have a DB ID, fill in some data like prints and banlist from the Konami DB.
 	const konamiSearches = resolvedSearches.filter(s => s.data.dbId)
 	searchKonamiDb(konamiSearches, qry, convertKonamiDataToSearchData)
-	// Otherwise, add them to the bot database.
-	const newSearches = resolvedSearches.filter(s => !s.data.dbId)
-	addToBotDb(newSearches)
 }
 
 function cacheTcgplayerPriceData(searches) {
 	// Any searches that have price data in them are ones to put into the bot database.
 	const searchesWithPriceData = searches.filter(s => {
-		return s.data.products.length !== s.data.getProductsWithoutPriceData().length
+		return s.data && s.data.products.length !== s.data.getProductsWithoutPriceData().length
 	})
 
 	addTcgplayerDataToDb(searchesWithPriceData)
 }
 
 module.exports = {
-	convertBotDataToSearchData, convertKonamiDataToSearchData, 
-	convertYgorgDataToSearchData, convertYugipediaDataToSearchData,
-	cacheTcgplayerPriceData
+	convertKonamiDataToSearchData, convertYgorgDataToSearchData, 
+	convertYugipediaDataToSearchData, cacheTcgplayerPriceData
 }

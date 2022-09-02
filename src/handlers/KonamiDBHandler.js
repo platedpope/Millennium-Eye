@@ -17,7 +17,6 @@ const konamiDb = new Database(KONAMI_DB_PATH)
 function searchKonamiDb(searches, qry, dataHandlerCallback) {
 	// Keep track of the searches that we've resolved during this trip through the database.
 	const resolvedSearches = []
-	const termsToUpdate = []
 
 	const getDbId = konamiDb.prepare('SELECT * FROM card_data WHERE id = ?')
 	// Iterate through the array backwards because we might modify it as we go.
@@ -55,7 +54,6 @@ function searchKonamiDb(searches, qry, dataHandlerCallback) {
 						const mergedSearch = qry.updateSearchTerm(currSearch.term, dbId)
 						if (!mergedSearch) {
 							resolvedSearches.push(currSearch)
-							termsToUpdate.push(currSearch)
 						}
 					}
 				}
@@ -63,7 +61,7 @@ function searchKonamiDb(searches, qry, dataHandlerCallback) {
 		}
 	}
 
-	dataHandlerCallback(resolvedSearches, termsToUpdate)
+	dataHandlerCallback(resolvedSearches)
 }
 
 /**

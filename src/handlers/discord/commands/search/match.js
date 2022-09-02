@@ -1,4 +1,4 @@
-const { MessageActionRow, MessageSelectMenu } = require('discord.js')
+const { ActionRowBuilder, SelectMenuBuilder } = require('discord.js')
 const { processQuery, queryRespond } = require('handlers/QueryHandler')
 const { searchNameToIdIndex } = require('handlers/YGOrgDBHandler')
 const Command = require('lib/models/Command')
@@ -12,15 +12,14 @@ const { logger, generateError, logError } = require('lib/utils/logging')
  * @param {Number} selectedMatch The index of the currently selected match in the availableMatches array.
  * @param {Array<Search>} availableMatches The array of available matched Searches.
  * @param {String} locale The locale these were searched in.
- * @param {Number} interactionSeed Seed value for the interaction's custom ID, to deconflict with other interactions.
- * @returns {Array<MessageActionRow>} The array of message rows.
+ * @returns {Array<ActionRowBuilder>} The array of message rows.
  */
-function generateMatchSelect(selectedMatch, availableMatches, locale, interactionSeed, disable = false) {
+function generateMatchSelect(selectedMatch, availableMatches, locale, disable = false) {
 	const messageRows = []
 
-	const matchRow = new MessageActionRow()
-	const matchSelect = new MessageSelectMenu()
-		.setCustomId(`match_id_select_${interactionSeed}`)
+	const matchRow = new ActionRowBuilder()
+	const matchSelect = new SelectMenuBuilder()
+		.setCustomId(`match_id_select`)
 		.setPlaceholder('Select Card Name')
 		.setDisabled(disable)
 	const selectOptions = []
@@ -60,8 +59,8 @@ module.exports = new Command({
 				type: CommandTypes.STRING,
 				required: true,
 				choices: [
-					{ name: 'Card Name', value: 'name' },
-					{ name: 'Card Text', value: 'text' }
+					{ name: 'Card Name', value: 'name' }
+					// NYI { name: 'Card Text', value: 'text' }
 				]
 			}
 		]
@@ -69,6 +68,7 @@ module.exports = new Command({
 	execute: async (interaction, bot) => {
 		let term = interaction.options.getString('term', true)
 		const matchType = interaction.options.getString('type', true)
+
 		const locale = bot.getCurrentChannelSetting(interaction.channel, 'locale')
 		const rulings = bot.getCurrentChannelSetting(interaction.channel, 'rulings')
 		const official = bot.getCurrentChannelSetting(interaction.channel, 'official')
@@ -118,20 +118,19 @@ module.exports = new Command({
 		}
 		
 		const msgOptions = {}
-		const seed = Math.floor(Math.random() * 1000)
 		
 		let selectedMatch = null
-		msgOptions.components = generateMatchSelect(selectedMatch, resolvedMatchSearches, locale, seed)
+		msgOptions.components = generateMatchSelect(selectedMatch, resolvedMatchSearches, locale)
 		const resp = await queryRespond(bot, interaction, '', qry, msgOptions)
 
-		const filter = i => {
-			return i.isSelectMenu() &&
-				   i.user.id === interaction.user.id &&
-				   new RegExp(`match_id_select_${seed}`).test(i.customId)
-		}
-		const collector = interaction.channel.createMessageComponentCollector({ 'filter': filter, time: 15000 })
+		const collector = resp.createMessageComponentCollector({ time: 15000 })
 
 		collector.on('collect', async i => {
+			if (i.user.id !== interaction.user.id) {
+				i.reply({ content: 'Only the user that originally sent the command can interact with these options.', ephemeral: true })
+				return
+			}
+
 			selectedMatch = parseInt(i.values[0], 10)
 			const selectedSearch = resolvedMatchSearches[selectedMatch]
 			const embedData = selectedSearch.data.generateInfoEmbed(locale, rulings, official)
@@ -139,7 +138,7 @@ module.exports = new Command({
 				msgOptions.embeds = [embedData.embed]
 			if ('attachment' in embedData)
 				msgOptions.files = [embedData.attachment]
-			msgOptions.components = generateMatchSelect(selectedMatch, resolvedMatchSearches, locale, seed)
+			msgOptions.components = generateMatchSelect(selectedMatch, resolvedMatchSearches, locale)
 
 			await i.message.removeAttachments()
 			await i.update(msgOptions)
@@ -152,7 +151,7 @@ module.exports = new Command({
 				await resp.delete()
 			else {
 				// Otherwise, just make the select menu unusable to indicate it's timed out.
-				msgOptions.components = generateMatchSelect(selectedMatch, resolvedMatchSearches, locale, seed, true)
+				msgOptions.components = generateMatchSelect(selectedMatch, resolvedMatchSearches, locale, true)
 				await resp.edit(msgOptions)
 			}
 		})
