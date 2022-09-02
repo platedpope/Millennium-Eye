@@ -369,7 +369,11 @@ class Card {
 			// Apply any filters so we know which products we don't care about.
 			if (filters && Object.keys(filters).length) {
 				if ('rarity' in filters)
-					if (!p.rarity.match(new RegExp(filters.rarity))) continue
+					// Special case the "Rare" filter, because so many rarities have "Rare" in their names but aren't literally "Rare".
+					if (filters.rarity === 'Rare' && (!p.rarity || p.rarity !== filters.rarity)) {
+						continue
+					}
+					else if (!p.rarity || !p.rarity.match(new RegExp(filters.rarity))) continue
 			}
 
 			const productDisplayData = p.getPriceDataForDisplay(filters)

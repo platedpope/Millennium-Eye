@@ -10,15 +10,20 @@ const { GatewayIntentBits } = require('discord.js')
 
 class MillenniumEyeBot extends Discord.Client {
 	constructor() {
-		super({ intents: [
-			GatewayIntentBits.Guilds,
-			GatewayIntentBits.GuildMessages,
-			GatewayIntentBits.GuildMessageTyping,
-			GatewayIntentBits.GuildMessageReactions,
-			GatewayIntentBits.DirectMessages,
-			GatewayIntentBits.DirectMessageTyping,
-			GatewayIntentBits.DirectMessageReactions
-		] })
+		super({ 
+			intents: [
+				GatewayIntentBits.Guilds,
+				GatewayIntentBits.GuildMessages,
+				GatewayIntentBits.GuildMessageTyping,
+				GatewayIntentBits.GuildMessageReactions,
+				GatewayIntentBits.DirectMessages,
+				GatewayIntentBits.DirectMessageTyping,
+				GatewayIntentBits.DirectMessageReactions
+			], 
+			partials: [
+				// Need the channel partial to be able to receive DM events.
+				Discord.Partials.Channel
+			]})
 
 		/**
 		 * @type {Discord.Collection<string, Command>}
