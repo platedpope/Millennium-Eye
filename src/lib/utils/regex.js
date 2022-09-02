@@ -88,9 +88,6 @@ function findYugipediaProperty(prop, data, toInt = false) {
 			const cardSearch = qry.searches.find(s => s.data && s.data.dbId === id)
 			if (cardSearch) {
 				const card = cardSearch.data
-				//console.log('Card with ID to replace:')
-				//console.log(card)
-				//console.log(`Replacing instances of <<${id}>> with ${card.name.get(locale)} (locale ${locale})`)
 				if (bold) text = text.replace(new RegExp(`<<\s*${id}\s*>>`, 'g'), `**${card.name.get(locale)}**`)
 				else text = text.replace(new RegExp(`<<\s*${id}\s*>>`, 'g'), card.name.get(locale))
 			}
