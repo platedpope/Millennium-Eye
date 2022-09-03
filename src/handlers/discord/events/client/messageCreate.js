@@ -28,23 +28,23 @@ module.exports = new Event({
 				})
 				return
 			}
-			
-			await message.channel.sendTyping()
-			
-			await processQuery(qry)
-			
-			const embedData = await qry.getDataEmbeds()
-			// Build message data.
-			const replyOptions = { 
-				allowedMentions: { repliedUser: false }
-			}
-			if ('embeds' in embedData)
-				replyOptions.embeds = embedData.embeds
-			if ('attachments' in embedData)
-				replyOptions.files = embedData.attachments
-			const report = Query.generateSearchResolutionReport(qry.searches)
-
-			await queryRespond(bot, message, report, qry, replyOptions)
 		}
+			
+		await message.channel.sendTyping()
+		
+		await processQuery(qry)
+		
+		const embedData = await qry.getDataEmbeds()
+		// Build message data.
+		const replyOptions = { 
+			allowedMentions: { repliedUser: false }
+		}
+		if ('embeds' in embedData)
+			replyOptions.embeds = embedData.embeds
+		if ('attachments' in embedData)
+			replyOptions.files = embedData.attachments
+		const report = Query.generateSearchResolutionReport(qry.searches)
+
+		await queryRespond(bot, message, report, qry, replyOptions)
 	}
 })

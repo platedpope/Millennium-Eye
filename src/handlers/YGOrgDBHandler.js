@@ -343,7 +343,7 @@ async function searchArtworkRepo(artSearches) {
 					// Therefore, our index in the array +1 is the art ID.
 					const artId = i + 1
 					// Repo artwork should always be from Neuron.
-					await origSearch.data.addImageData(artId, resp.value.data, true)
+					await origSearch.data.addImageData(artId, resp.value.data)
 				}
 			}
 		}

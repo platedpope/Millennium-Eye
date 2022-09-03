@@ -1,4 +1,4 @@
-const { ActionRowBuilder, SelectMenuBuilder } = require('discord.js')
+const { ActionRowBuilder, SelectMenuBuilder, ButtonBuilder } = require('discord.js')
 const { processQuery, queryRespond } = require('handlers/QueryHandler')
 const { searchNameToIdIndex } = require('handlers/YGOrgDBHandler')
 const Command = require('lib/models/Command')
@@ -36,6 +36,15 @@ function generateMatchSelect(selectedMatch, availableMatches, locale, disable = 
 	matchSelect.addOptions(selectOptions)
 	matchRow.addComponents(matchSelect)
 	messageRows.push(matchRow)
+
+	const confirmRow = new ActionRowBuilder()
+	const confirmButton = new ButtonBuilder()
+		.setCustomId('confirm_match_button')
+		.setLabel('Post to Chat')
+		.setStyle('Success')
+		.setDisabled(disable)
+	confirmRow.addComponents(confirmButton)
+	messageRows.push(confirmRow)
 
 	return messageRows
 }
@@ -90,7 +99,7 @@ module.exports = new Command({
 					matchSearches.push(new Search(parseInt(id, 10), rulings ? 'r' : 'i', locale))
 			if (matchSearches.length) {
 				// Defer reply for now in case this query takes a while.
-				await interaction.deferReply()
+				await interaction.deferReply({ ephemeral: true })
 				// Now bootstrap a query from these searches.
 				qry = new Query(matchSearches)
 				qry.rulings = rulings
@@ -123,7 +132,8 @@ module.exports = new Command({
 		msgOptions.components = generateMatchSelect(selectedMatch, resolvedMatchSearches, locale)
 		const resp = await queryRespond(bot, interaction, '', qry, msgOptions)
 
-		const collector = resp.createMessageComponentCollector({ time: 15000 })
+		let postToChat = false
+		const collector = resp.createMessageComponentCollector({ time: 30000 })
 
 		collector.on('collect', async i => {
 			if (i.user.id !== interaction.user.id) {
@@ -131,28 +141,37 @@ module.exports = new Command({
 				return
 			}
 
-			selectedMatch = parseInt(i.values[0], 10)
-			const selectedSearch = resolvedMatchSearches[selectedMatch]
-			const embedData = selectedSearch.data.generateInfoEmbed(locale, rulings, official)
-			if ('embed' in embedData)
-				msgOptions.embeds = [embedData.embed]
-			if ('attachment' in embedData)
-				msgOptions.files = [embedData.attachment]
-			msgOptions.components = generateMatchSelect(selectedMatch, resolvedMatchSearches, locale)
-
-			await i.message.removeAttachments()
-			await i.update(msgOptions)
-			collector.resetTimer()
+			if (/^match_id_select/.test(i.customId)) {
+				selectedMatch = parseInt(i.values[0], 10)
+				const selectedSearch = resolvedMatchSearches[selectedMatch]
+				const embedData = selectedSearch.data.generateInfoEmbed(locale, rulings, official)
+				if ('embed' in embedData)
+					msgOptions.embeds = [embedData.embed]
+				if ('attachment' in embedData)
+					msgOptions.files = [embedData.attachment]
+				msgOptions.components = generateMatchSelect(selectedMatch, resolvedMatchSearches, locale)
+	
+				await i.update(msgOptions)
+				collector.resetTimer()
+			}
+			else if (/^confirm_match_button/.test(i.customId)) {
+				msgOptions.components = generateMatchSelect(selectedMatch, resolvedMatchSearches, locale, true)
+				i.update(msgOptions)
+				postToChat = true
+				collector.stop()
+			}
+			
 		})
 
 		collector.on('end', async () => {
-			// If there are no embeds, then nothing was ever selected. Just delete the reply.
-			if (!('embeds' in msgOptions) || !msgOptions.embeds.length)
-				await resp.delete()
+			if (postToChat) {
+				delete msgOptions.components
+				delete msgOptions.ephemeral
+				interaction.followUp(msgOptions)
+			}
 			else {
-				// Otherwise, just make the select menu unusable to indicate it's timed out.
-				msgOptions.components = generateMatchSelect(selectedMatch, resolvedMatchSearches, locale, true)
-				await resp.edit(msgOptions)
+				msgOptions.components = generateArtSelect(viewedArt, availableArts, true)
+				interaction.editReply(msgOptions)
 			}
 		})
 	}

@@ -18,6 +18,6 @@ module.exports = new Event({
 
 		// Set up default query syntax.
 		const defRegex = setupQueryRegex(config.defaultOpen, config.defaultClose)
-		bot.guildQueries.put([guild.id, config.defaultLocale], defRegex)
+		bot.guildQueries.put([guild.id, 'default'], defRegex)
 	}
 })

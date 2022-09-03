@@ -17,14 +17,27 @@ module.exports = new Event({
 	execute: async (bot, oldMessage, newMessage) => {
 		if (!bot.isReady) return
 		if (newMessage.author.bot) return
-		if (!newMessage.content) return
 		if (newMessage.content === oldMessage.content) return
 		// If the message is too old (sent >15sec ago by default), ignore this edit.
 		const timeout = new Date(oldMessage.createdAt.getTime() + (1000 * MESSAGE_TIMEOUT))
 		if (newMessage.editedAt > timeout) return
+		if (!newMessage.content) {
+			// Did the old message have content?
+			// If so, then someone pinged us but then removed the ping and we need to delete our reply.
+			if (oldMessage.content) {
+				var cachedReply = bot.replyCache.get(oldMessage.id)
+				if (cachedReply) {
+					for (const cr of cachedReply.replies)
+						await cr.delete()
+					bot.replyCache.remove(oldMessage.id)
+				}
+			}
+			// Otherwise nothing to see here.
+			else return
+		}
 
 		// If the message edited was replied to by us, grab that reply ID so we can edit it with any changed info.
-		const cachedReply = bot.replyCache.get(oldMessage.id)
+		cachedReply = bot.replyCache.get(oldMessage.id)
 		newQry = new Query(newMessage, bot)
 
 		if (newQry.searches.length) {

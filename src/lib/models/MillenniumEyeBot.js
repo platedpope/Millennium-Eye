@@ -55,22 +55,13 @@ class MillenniumEyeBot extends Discord.Client {
 
 	start(token) {
 		const defRegex = setupQueryRegex(config.defaultOpen, config.defaultClose)
-		// Track default regex for use outside of guilds or in newly joined guilds.
-		this.guildQueries.put(['default', config.defaultLocale], defRegex)
+		// Add a "default" server to reference for DMs.
+		this.guildQueries.put(['default', 'default'], defRegex)
 		// Repopulate server regexes based on locale + open/close symbols saved in JSON config.
 		for (const [sid, settings] of this.guildSettings.entries()) {
 			if ('queries' in settings && settings.queries) {
 				for (const [locale, symbols] of Object.entries(settings.queries))
 					this.guildQueries.put([sid, locale], setupQueryRegex(symbols.open, symbols.close))
-			}
-			
-			const defaultSyntaxRemoved = this.guildSettings.get([sid, 'defaultSyntaxRemoved']) ?? false
-			// Add default regex if necessary (not removed, and no custom syntax to conflict with).
-			if (!defaultSyntaxRemoved && 
-				(!('queries' in settings) || 
-				('queries' in settings && !(config.defaultLocale in settings.queries))))
-			{
-				this.guildQueries.put([sid, config.defaultLocale], defRegex)
 			}
 		}
 
@@ -115,20 +106,10 @@ class MillenniumEyeBot extends Discord.Client {
 	 * @param {String} locale The locale associated with the query syntax.
 	 */
 	setGuildQuery(guild, open, close, locale) {
-		const defaultSyntaxRemoved = this.guildSettings.get([guild.id, 'defaultSyntaxRemoved']) ?? false
+		let readdDefault = false
 		const fullLocale = Locales[locale]
 		// Check to make sure no other different-locale syntax is using those symbols.
 		// Overwriting the same locale with a different syntax is fine.
-		// Check default syntax overlap first if this server hasn't opted out of using it.
-		if (!defaultSyntaxRemoved && locale !== config.defaultLocale && 
-			open === config.defaultOpen && close === config.defaultClose) 
-		{
-			throw generateError(
-				null,
-				`This syntax is already being used for **${fullLocale}** queries.`
-			)
-		}
-		// Now check all other locales this server might have set (if applicable).
 		const currQueries = this.guildSettings.get([guild.id, 'queries'])
 		if (currQueries) {
 			for (const qLocale in currQueries) {
@@ -147,21 +128,29 @@ class MillenniumEyeBot extends Discord.Client {
 							`This syntax is already being used for **${conflictedLocale}** queries. No changes were made.`
 						)
 				}
+				// We're overwriting the old symbols with new ones.
+				// Check to see if the old ones were the "default", because if so we need to re-add the default after these change.
+				else if (qLocale === locale) {
+					if (currQueries[qLocale]['open'] === config.defaultOpen &&
+						currQueries[qLocale]['close'] === config.defaultClose)
+					{
+						readdDefault = true
+						break
+					}
+				}
 			}
 		}
 
 		const queryRegex = setupQueryRegex(open, close)
+		this.guildSettings.put([guild.id, 'queries', locale], { 'open': open, 'close': close })
 		this.guildQueries.put([guild.id, locale], queryRegex)
-		// If this is the default query syntax + locale again and they've previously removed it,
-		// then just reflect they no longer want it removed and stop at quietly adding it back.
-		if (defaultSyntaxRemoved && locale === config.defaultLocale &&
-			open === config.defaultOpen && close == config.defaultClose)
-		{
-			this.guildSettings.remove([guild.id, 'defaultSyntaxRemoved'])
+		// If this syntax was the same as default syntax, then remove the previous default.
+		if (open === config.defaultOpen && config.defaultClose) {
+			this.guildQueries.remove([guild.id, 'default'])
 		}
-		else {
-			// Otherwise save to config as well.
-			this.guildSettings.put([guild.id, 'queries', locale], { 'open': open, 'close': close })
+		// Alternatively, if the default was gone but this addition warrants readding it, then do so.
+		else if (readdDefault) {
+			this.guildQueries.put([guild.id, 'default'], setupQueryRegex(config.defaultOpen, config.defaultClose))
 		}
 	}
 
@@ -172,18 +161,8 @@ class MillenniumEyeBot extends Discord.Client {
 	 * @returns The removed query syntax, or undefined if none existed.
 	 */
 	removeGuildQuery(guild, locale) {
-		const defaultSyntaxRemoved = this.guildSettings.get([guild.id, 'defaultSyntaxRemoved']) ?? false
-
 		let removed = this.guildSettings.remove([guild.id, 'queries', locale])
 		this.guildQueries.remove([guild.id, locale])
-		// If nothing was removed at first blush, check whether this is the default,
-		// and if so, track that they no longer want it.
-		if (!removed && !defaultSyntaxRemoved &&
-			locale === config.defaultLocale) 
-		{
-			this.guildSettings.put([guild.id, 'defaultSyntaxRemoved'], true)
-			removed = { 'open': config.defaultOpen, 'close': config.defaultClose }
-		}
 
 		return removed
 	}
@@ -194,15 +173,7 @@ class MillenniumEyeBot extends Discord.Client {
 	 * @returns {Object} The set of query syntaxes associated with the guild.
 	 */
 	getGuildQueries(guild) {
-		if (guild) {
-			let queries = this.guildQueries.get([guild.id])
-			const defaultSyntaxRemoved = this.guildSettings.get([guild.id, 'defaultSyntaxRemoved']) ?? false
-			if (!queries && !defaultSyntaxRemoved)
-				queries = this.guildQueries.get(['default'])
-			
-			return queries
-		}
-		else return this.guildQueries.get(['default'])
+		return guild ? this.guildQueries.get([guild.id]) : this.guildQueries.get(['default'])
 	}
 
 	/**

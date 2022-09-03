@@ -38,36 +38,17 @@ module.exports = new Command({
 			embedData.setTitle('Millennium Eye Help: Syntax')
 
 			const defaultSyntax = { open: config.defaultOpen, close: config.defaultClose }
-			let syntax = undefined
-			if (interaction.guild) {
-				const guildSyntaxes = bot.getGuildQueries(interaction.guild)
-				// By default, use the EN syntax when building examples. If none exists, grab the first other language we find.
-				if (guildSyntaxes && 'en' in guildSyntaxes) {
-					syntax = bot.guildSettings.get([interaction.guildId, 'queries', 'en'])
-					// If this locale is in guildQueries but not in guildSettings, then it's the default.
-					if (!syntax)
-						syntax = defaultSyntax
+			const guildSyntaxes = bot.getGuildQueries(interaction.guild)
+			// If the default syntax is still available, use it. Otherwise, find the first one we can use.
+			if ('default' in guildSyntaxes)
+				var syntax = defaultSyntax
+			else
+				for (const locale in guildSyntaxes) {
+					syntax = bot.guildSettings.get([interaction.guildId, 'queries', locale])
+					if (syntax)
+						break
 				}
-				else if (guildSyntaxes) {
-					// No EN syntax. Just use the first locale we find.
-					for (const locale in guildSyntaxes) {
-						syntax = bot.guildSettings.get([interaction.guildId, 'queries', locale])
-						if (syntax)
-							break
-					}
-				}
-			}
-			// In DMs, default query syntax is the only one that's possible.
-			else syntax = defaultSyntax
 
-			let desc = ''
-			// It is possible for a server to remove all of its query syntaxes. Why they'd do this I have no idea,
-			// but add a disclaimer in servers that don't have syntax that what's being displayed won't actually work.
-			if (!syntax) {
-				desc =  '**Warning**: This server does not have a query syntax set, which makes querying impossible. ' +
-						'For the sake of example the bot will display what *would be* the default syntax, but keep in mind that it will not work in this server.\n\n'
-				syntax = defaultSyntax
-			}
 			desc += `You **MUST** mention the bot (<@${bot.user.id}>) in your message so it can see the query, or use the /query command (see Commands Help for more on the latter). The bot also tracks message edits for up to 15 seconds if you need to adjust your query (or forgot to mention it initially).`
 			embedData.setDescription(desc)
 

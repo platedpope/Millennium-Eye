@@ -7,7 +7,7 @@ const logger = createLogger({
 	transports: [
 		new transports.Console({
 			// change log level of console depending on whether we're in test mode
-			level: testMode ? 'debug' : 'warn',
+			level: testMode ? 'debug' : 'info',
 			handleExceptions: true,
 		}),
 		new transports.File({

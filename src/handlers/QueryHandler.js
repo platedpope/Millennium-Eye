@@ -1,4 +1,4 @@
-const { Message, CommandInteraction } = require('discord.js')
+const { Message, CommandInteraction, DiscordjsErrorCodes } = require('discord.js')
 const Cache = require('timed-cache')
 
 const Query = require('lib/models/Query')
@@ -205,19 +205,24 @@ async function queryRespond(bot, origMessage, replyContent, qry, replyOptions) {
 		return reply
 	
 	let edited = false
-	// Interactions might be deferred, in which case we need to edit rather than reply.
-	if (origMessage instanceof CommandInteraction && (origMessage.deferred || origMessage.replied)) {
-		reply = await origMessage.editReply(fullReply)
-		edited = true
+	try {
+		// Interactions might be deferred, in which case we need to edit rather than reply.
+		if (origMessage instanceof CommandInteraction && (origMessage.deferred || origMessage.replied)) {
+			reply = await origMessage.editReply(fullReply)
+			edited = true
+		}
+		// If the "original message" was sent by us, then this is actually a reply we should edit.
+		else if (origMessage.author === bot.user) {
+			reply = await origMessage.edit(fullReply)
+			edited = true
+		}
+		// Otherwise just a normal reply.
+		else {
+			reply = await origMessage.reply(fullReply)
+		}
 	}
-	// If the "original message" was sent by us, then this is actually a reply we should edit.
-	else if (origMessage.author === bot.user) {
-		reply = await origMessage.edit(fullReply)
-		edited = true
-	}
-	// Otherwise just a normal reply.
-	else {
-		reply = await origMessage.reply(fullReply)
+	catch (err) {
+		logError(err)
 	}
 
 	// Cache the reply if one was sent.

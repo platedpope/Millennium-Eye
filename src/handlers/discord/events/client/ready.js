@@ -8,6 +8,7 @@ const { cacheNameToIdIndex, cacheManifestRevision, cachePropertyMetadata } = req
 const { updateKonamiDb } = require('handlers/KonamiDBHandler')
 const { cacheSetProductData } = require('handlers/TCGPlayerHandler')
 const { ActivityType, PresenceUpdateStatus, Events } = require('discord.js')
+const { setupQueryRegex } = require('lib/utils/regex')
 
 module.exports = new Event({
 	event: Events.ClientReady, 
@@ -60,6 +61,23 @@ module.exports = new Event({
 		}
 
 		// Set up all our caches and periodics updates.
+		
+		// Add the default regex to every server, if it doesn't already have a language with the default syntax.
+		const defRegex = setupQueryRegex(config.defaultOpen, config.defaultClose)
+		bot.guilds.cache.forEach(g => {
+			let needsDefault = true
+			const guildQuerySyntax = bot.guildSettings.get([g.id, 'queries'])
+			if (guildQuerySyntax) {
+				for (const [locale, symbols] of Object.entries(guildQuerySyntax))
+					if (symbols.open === config.defaultOpen && symbols.close === config.defaultClose) {
+						needsDefault = false
+						break
+					}
+			}
+
+			if (needsDefault) 
+				bot.guildQueries.put([g.id, 'default'], defRegex)
+		})
 		
 		// Search term cache clear: once every 24 hours.
 		setInterval(clearSearchCache, 7 * 24 * 60 * 60 * 1000)

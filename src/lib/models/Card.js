@@ -44,6 +44,7 @@ class Card {
 		this.tcgList = null				// Status on the TCG F/L list (-1 = unreleased, 0 = forbidden, 1 = limited, 2 = semi-limited, anything else = unlimited)
 		this.ocgList = null				// Status on the OCG F/L list (same values as above).
 		this.notInCg = null				// True if the card isn't from the TCG or OCG; from anime/manga/game instead.
+		/** @type {Map<String,Map<String, String>>} */
 		this.printData = new Map()		// Data about when this card was printed and in which sets. Each key is a locale, with value a further map of print code -> print date.
 		this.imageData = new Map()		// Image(s) associated with the card. Each key is an ID, with value a link to that image (either local file or on the web).
 		/** @type {Array<TCGPlayerProduct>} */
@@ -510,7 +511,7 @@ class Card {
 	 */
 	getEmbedColorAndIcon() {
 		let color = EmbedColors['None']
-		let icon = ''
+		let icon = undefined
 
 		if (this.cardType) {
 			// Ignore case just for good measure.
@@ -593,6 +594,9 @@ class Card {
 		let attach = null
 		const imageData = this.imageData.get(id)
 
+		if (!imageData)
+			return
+
 		if (imageData.includes('http')) {
 			// It's some URL rather than raw data.
 			if (thumbnail)
@@ -674,15 +678,10 @@ class Card {
 
 		// Information links. Don't print these for official mode, the card name is already a link to the Konami DB in that case.
 		if (!official) {
-			/*
-			const cardKonamiInfoLink = `${KONAMI_CARD_LINK}${this.dbId}${KONAMI_REQUEST_LOCALE}${locale}`
-			const cardKonamiRulingsLink = `${KONAMI_QA_LINK}${this.dbId}${KONAMI_REQUEST_LOCALE}ja`
-			*/
-			const cardYgorgCardLink = `${YGORG_CARD_LINK}${this.dbId}:en`
+			const cardYgorgCardLink = `${YGORG_CARD_LINK}${this.dbId}`
 			const cardYugipediaCardLink = `${YUGIPEDIA_WIKI}/${nameLink}`
 
-			// const konamiLinks = `${LocaleEmojis[locale]} [card](${cardKonamiInfoLink})` + jaReleased ? `, ${LocaleEmojis.ja} [faq/qa](${cardKonamiRulingsLink})` : ''
-			fieldText += `YGOrg (${LocaleEmojis.en} [card/faq/qa](${cardYgorgCardLink})) **·** Yugipedia (${LocaleEmojis.en} [card](${cardYugipediaCardLink}))`
+			fieldText += `YGOrg (${LocaleEmojis.en} [data/rulings](${cardYgorgCardLink})) **·** Yugipedia (${LocaleEmojis.en} [card](${cardYugipediaCardLink}))`
 		}
 
 		// Most recent print date.
@@ -745,7 +744,7 @@ class Card {
 	 * @param {Boolean} fromNeuron Whether this image comes from Neuron.
 	 * @param {Boolean} url Whether this image is a URL rather than raw data.
 	 */
-	addImageData(id, img, fromNeuron, url = false) {
+	addImageData(id, img, url = false) {
 		// If this is a URL, we don't need to save this at all, just set it.
 		if (url) {
 			this.imageData.set(id, img)
@@ -814,7 +813,11 @@ class Card {
 		const localePrints = this.printData.get(locale)
 
 		if (localePrints && localePrints.size) {
-			const printDates = [...localePrints.values()]
+			// Sometimes a print date is blank, usually due to DB formatting problems.
+			// Create a new array of all the prints in this locale, minus any blank ones.
+			const printDates = [...localePrints.values()].map(d => {
+				if (d.trim().length) return d
+			})
 
 			sortedPrintDates = printDates.sort((a, b) => {
 				return new Date(b) - new Date(a)

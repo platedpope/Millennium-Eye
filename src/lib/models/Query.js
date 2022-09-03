@@ -16,14 +16,13 @@ class Query {
 	 * by referencing the properties of the given qry.
 	 * @param {Message | CommandInteraction | Query | Array<Search>} qry The message associated with the query, another Query to copy the data of, or an array of searches to treat as a query.
 	 * @param {MillenniumEyeBot} bot The bot.
-	 * @param {GuildChannel} channel The channel this message/interaction was sent in.
 	 */
-	constructor(qry, bot, channel) {
+	constructor(qry, bot) {
 		if (qry instanceof Query) {
+			this.channel = qry.channel
 			this.official = qry.official
 			this.rulings = qry.rulings
 			this.locale = qry.locale
-			this.rawSearchData = qry.rawSearchData
 			this.bot = qry.bot
 			/**
 			 * @type {Array<Search>}
@@ -37,19 +36,17 @@ class Query {
 			this.searches = qry
 		else {
 			// Save off state info about where this message was sent.
-			this.official = bot.getCurrentChannelSetting(qry.channel, 'official')
-			this.rulings = bot.getCurrentChannelSetting(qry.channel, 'rulings')
-			this.locale = bot.getCurrentChannelSetting(qry.channel, 'locale')
+			this.channel = qry.channel
+			this.official = bot.getCurrentChannelSetting(this.channel, 'official')
+			this.rulings = bot.getCurrentChannelSetting(this.channel, 'rulings')
+			this.locale = bot.getCurrentChannelSetting(this.channel, 'locale')
 			this.bot = bot
-			this.rawSearchData = this.evaluateMessage(qry)
-			
 			/**
 			 * @type {Array<Search>}
 			 */
 			this.searches = []
-			for (const s of this.rawSearchData) {
-				this.addSearch(s[0], s[1], s[2])
-			}
+
+			this.evaluateMessage(qry)
 		}
 	}
 
@@ -60,7 +57,16 @@ class Query {
 	 * @returns {Array} An array of raw search data, each member is an array of [search content, type, locale].
 	 */
 	evaluateMessage(msg) {
-		let msgContent = msg instanceof CommandInteraction ? msg.options.getString('content', true) : msg.content
+		if (msg instanceof CommandInteraction) {
+			var msgContent = msg.options.getString('content', true)
+		}
+		else if (msg instanceof Message) {
+			msgContent = msg.content
+		}
+		else {
+			// If it's none of the usual suspects, just assume it's a raw string.
+			msgContent = msg
+		}
 
 		/* Strip text we want to ignore from the message content:
 		* - characters between `` (code tags)
@@ -75,9 +81,14 @@ class Query {
 
 		const searchData = []
 		
-		const guildQueries = this.bot.getGuildQueries(msg.guild)
+		const guildQueries = this.bot.getGuildQueries(this.channel.guild)
 		if (guildQueries) {
 			for (const locale in guildQueries) {
+				let realLocale = locale
+				// Sub out default locale for whatever this query's locale is.
+				if (locale === 'default')
+					realLocale = this.locale
+
 				const matches = [...msgContent.matchAll(guildQueries[locale])]
 				for (const m of matches) {
 					let sContent = m[3]
@@ -85,7 +96,9 @@ class Query {
 					if (IGNORE_LINKS_REGEX.test(sContent)) continue
 
 					let sType = m[1] ?? (this.rulings ? 'r' : 'i')
-					let sLocale = m[4] ?? locale
+					let sLocale = m[4] ?? realLocale
+					// Check for JA/JP alias.
+					if (sLocale === 'jp') sLocale = 'ja'
 					// Multiple types can be contained in the first match. Iterate through all that we have.
 					for (let i = 0; i < sType.length; i++) {
 						const currType = sType.charAt(i)
@@ -130,49 +143,8 @@ class Query {
 			searchData.push([sContent, sType, sLocale])
 		}
 
-		return searchData
-	}
-
-	/**
-	 * Updates the query's content and searches array to correspond to the contents of a new message.
-	 * This will add or remove searches that are new or no longer present (respectively),
-	 * and update existing searches that may have new types or locales based on the new message.
-	 * @param {Message | CommandInteraction} msg The new message from which to update the search data. 
-	 */
-	updateSearchData(msg) {
-		const newSearchData = this.evaluateMessage(msg)
-
-		// First, just insert everything to add or update existing searches as necessary.
-		for (const s of newSearchData)
+		for (const s of searchData)
 			this.addSearch(s[0], s[1], s[2])
-		// Now remove any searches that were in the old query but not in the new one.
-		const onlyInOldSearch = 
-			this.rawSearchData.filter(os => 
-				!newSearchData.some(ns => os[0] === ns[0] && os[1] === ns[1] && os[2] === ns[2]))
-		for (const oldS of onlyInOldSearch) {
-			const sContent = oldS[0]
-			const sType = oldS[1]
-			const sLocale = oldS[2]
-
-			const currSearch = this.findSearch(sContent)
-			if (currSearch) {
-				// Remove this search's locale -> type pair from the map.
-				const currTypes = currSearch.localeToTypesMap.get(sLocale)
-				currTypes.delete(sType)
-				// If this left no types for this locale, delete the locale from the map.
-				if (!currTypes.size) {
-					currSearch.localeToTypesMap.delete(sLocale)
-					// If deleting this locale left no locales for this search,
-					// then this search isn't being used anymore. Delete it entirely.
-					if (!currSearch.localeToTypesMap.size) {
-						const removedSearch = this.searches.splice(this.searches.findIndex(s => s.originals.has(sContent)), 1)
-					}
-				} 
-			}
-		}
-
-		// Last, update our raw search data.
-		this.rawSearchData = newSearchData
 	}
 
 	/**
@@ -257,7 +229,7 @@ class Query {
 						'type': t,
 						'locale': searchLocale,
 						'official': this.official,
-						'rulings': t === 'r',
+						'rulings': this.rulings,
 						'random': false
 					})
 					

@@ -1,4 +1,4 @@
-const { ActionRowBuilder, SelectMenuBuilder } = require('discord.js')
+const { ActionRowBuilder, SelectMenuBuilder, ButtonBuilder } = require('discord.js')
 
 const Command = require('lib/models/Command')
 const { CommandTypes } = require('lib/models/Defines')
@@ -34,6 +34,15 @@ function generateArtSelect(selectedId, availableArtIds, disable = false) {
 	artRow.addComponents(artSelect)
 	messageRows.push(artRow)
 
+	const confirmRow = new ActionRowBuilder()
+	const confirmButton = new ButtonBuilder()
+		.setCustomId('confirm_art_button')
+		.setLabel('Post to Chat')
+		.setStyle('Success')
+		.setDisabled(disable)
+	confirmRow.addComponents(confirmButton)
+	messageRows.push(confirmRow)
+
 	return messageRows
 }
 
@@ -65,7 +74,7 @@ module.exports = new Command({
 		qry.locale = locale
 
 		// Defer reply in case this query takes a bit.
-		await interaction.deferReply()
+		// await interaction.deferReply()
 		await processQuery(qry)
 
 		const report = Query.generateSearchResolutionReport(qry.searches)
@@ -91,9 +100,11 @@ module.exports = new Command({
 		// Only give + handle an art selection menu if we've got more than one to choose from.
 		if (availableArts > 1) {
 			msgOptions.components = generateArtSelect(viewedArt, availableArts)
+			msgOptions.ephemeral = true
 
 			const resp = await queryRespond(bot, interaction, '', qry, msgOptions)
 
+			let postToChat = false
 			const collector = resp.createMessageComponentCollector({ time: 15000 })
 
 			collector.on('collect', async i => {
@@ -102,22 +113,36 @@ module.exports = new Command({
 					return
 				}
 
-				viewedArt = parseInt(i.values[0], 10)
-				const embedData = artSearch.data.generateArtEmbed(locale, qry.official, viewedArt)
-				if ('embed' in embedData)
-					msgOptions.embeds = [embedData.embed]
-				if ('attachment' in embedData)
-					msgOptions.files = [embedData.attachment]
-				msgOptions.components = generateArtSelect(viewedArt, availableArts)
+				if (/^art_id_select/.test(i.customId)) {
+					viewedArt = parseInt(i.values[0], 10)
+					const embedData = artSearch.data.generateArtEmbed(locale, qry.official, viewedArt)
+					if ('embed' in embedData)
+						msgOptions.embeds = [embedData.embed]
+					if ('attachment' in embedData)
+						msgOptions.files = [embedData.attachment]
+					msgOptions.components = generateArtSelect(viewedArt, availableArts)
 
-				await i.message.removeAttachments()
-				await i.update(msgOptions)
-				collector.resetTimer()
+					await i.update(msgOptions)
+					collector.resetTimer()
+				}
+				else if (/^confirm_art_button/.test(i.customId)) {
+					msgOptions.components = generateArtSelect(viewedArt, availableArts, true)
+					i.update(msgOptions)
+					postToChat = true
+					collector.stop()
+				}
 			})
 
 			collector.on('end', async () => {
-				msgOptions.components = generateArtSelect(viewedArt, availableArts, true)
-				await resp.edit(msgOptions)
+				if (postToChat) {
+					delete msgOptions.components
+					delete msgOptions.ephemeral
+					interaction.followUp(msgOptions)
+				}
+				else {
+					msgOptions.components = generateArtSelect(viewedArt, availableArts, true)
+					interaction.editReply(msgOptions)
+				}
 			})
 		}
 		else {

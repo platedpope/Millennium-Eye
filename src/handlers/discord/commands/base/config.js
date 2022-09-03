@@ -271,8 +271,14 @@ module.exports = new Command({
 				const fullLocale = Locales[qLocale]
 				
 				bot.setGuildQuery(interaction.guild, qOpen, qClose, qLocale)
+				let resp = `I will now recognize parts of messages between **${qOpen}** and **${qClose}** as **${fullLocale}** queries!`
+				// If this overwrote the default query syntax, let them know.
+				if (qOpen === config.defaultOpen && qClose === config.defaultClose)
+					resp += '\n\n**Note**: This syntax is the same as the one the bot defaults to when it has nothing else to go on. ' +
+							`With this change, the bot will only ever treat this syntax as evaluating ${fullLocale} queries. ` +
+							'To make use of the default again, you will have to change this locale\'s syntax to something else.'
 
-				await interaction.reply({ content: `I will now recognize parts of messages between **${qOpen}** and **${qClose}** as **${fullLocale}** queries!`, ephemeral: true })
+				await interaction.reply({ content: resp, ephemeral: true })
 			}
 			else if (sc === 'remove') {
 				const rLocale = interaction.options.getString('locale', true)
@@ -345,17 +351,19 @@ module.exports = new Command({
 					// Gather query syntaxes.
 					let queryString = ''
 					const defaultSyntax = { open: config.defaultOpen, close: config.defaultClose }
-					if (interaction.guild)
+					if (interaction.guild) {
+						const guildQueries = bot.getGuildQueries(interaction.guild)
+						// Display the default, if available, first.
+						if ('default' in guildQueries)
+							queryString += `Default (obeys channel/server locale): \`${config.defaultOpen}query contents${config.defaultClose}\`\n` 
 						for (const locale in bot.getGuildQueries(interaction.guild)) {
+							if (locale === 'default') continue
 							let syntax = bot.guildSettings.get([interaction.guild.id, 'queries', locale])
-							// If this locale is in guildQueries but not in guildSettings, it was the default addition.
-							if (!syntax)
-								syntax = defaultSyntax
-
 							queryString += `${LocaleEmojis[locale]} ${Locales[locale]}: \`${syntax.open}query contents${syntax.close}\`\n`
 						}
+					}
 					// Just print out the default outside of servers.
-					else queryString += `${LocaleEmojis[config.defaultLocale]} ${Locales[config.defaultLocale]}: \`${defaultSyntax.open}query contents${defaultSyntax.close}\`\n`
+					else queryString += `Default (obeys channel/server locale): \`${config.defaultOpen}query contents${config.defaultClose}\`\n`
 
 					if (queryString === '') 
 						queryString = '__Query Syntaxes__: none\n'

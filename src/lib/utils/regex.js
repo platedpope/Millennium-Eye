@@ -4,7 +4,7 @@ function setupQueryRegex(openSymbol, closeSymbol) {
 	const open = escRegex(openSymbol)
 	const close = escRegex(closeSymbol)
 	const regexQueryTypes = `[${(Object.keys(QueryTypes)).join('')}]`
-	const regexLocales = `${(Object.keys(Locales)).join('|')}`
+	const regexLocales = `${(Object.keys(Locales)).join('|')}|jp`		// JP will be an alias for JA.
 	
 	// if open/close are < >, special case: 
 	// !, @, #, : must be ignored to avoid conflict with plaintext discord formatting of stuff like mentions

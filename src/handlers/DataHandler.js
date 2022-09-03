@@ -75,16 +75,19 @@ function convertYugipediaDataToSearchData(searches, qry) {
 		const qryData = s.rawData
 		if ('pages' in qryData) {
 			const pageData = qryData.pages
+			console.log(pageData)
 			// There can be multiple pages here. Search for the first one with a title that we can use.
 			// Default to the first, but we'll find another if it exists.
 			let bestPage = pageData[0]
 			for (const page of pageData) {
 				// Ignore ones with "(anime)" in their name unless our search term includes it.
 				// Otherwise they tend to saturate the first results.
-				if (page.title.includes('(anime)') && !s.term.includes('anime'))
+				const termString = String(s.term)
+				if (page.title.includes('(anime)') && !termString.includes('anime'))
 					continue
 				
 				bestPage = page
+				break
 			}
 
 			if (!(s.data instanceof Card)) s.data = new Card()

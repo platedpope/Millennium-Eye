@@ -133,7 +133,7 @@ function searchKonamiDb(searches, qry, dataHandlerCallback) {
 	const getArtData = 'SELECT artId, artwork FROM card_artwork WHERE cardId = ?'
 	const artRows = konamiDb.prepare(getArtData).all(card.dbId)
 	for (const r of artRows) 
-		card.addImageData(r.artId, r.artwork, true)
+		card.addImageData(r.artId, r.artwork)
 
 	// TODO: Gather pricing data.
 }
