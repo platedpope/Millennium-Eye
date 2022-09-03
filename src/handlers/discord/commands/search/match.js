@@ -98,8 +98,6 @@ module.exports = new Command({
 				else
 					matchSearches.push(new Search(parseInt(id, 10), rulings ? 'r' : 'i', locale))
 			if (matchSearches.length) {
-				// Defer reply for now in case this query takes a while.
-				await interaction.deferReply({ ephemeral: true })
 				// Now bootstrap a query from these searches.
 				qry = new Query(matchSearches)
 				qry.rulings = rulings

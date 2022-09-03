@@ -49,7 +49,7 @@ module.exports = new Command({
 						break
 				}
 
-			desc += `You **MUST** mention the bot (<@${bot.user.id}>) in your message so it can see the query, or use the /query command (see Commands Help for more on the latter). The bot also tracks message edits for up to 15 seconds if you need to adjust your query (or forgot to mention it initially).`
+			const desc = `You **MUST** mention the bot (<@${bot.user.id}>) in your message so it can see the query, or use the /query command (see Commands Help for more on the latter). The bot also tracks message edits for up to 15 seconds if you need to adjust your query (or forgot to mention it initially).`
 			embedData.setDescription(desc)
 
 			const queryTypes = `(${(Object.keys(QueryTypes)).join('|')})`
