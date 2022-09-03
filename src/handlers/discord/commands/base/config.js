@@ -175,25 +175,22 @@ function generateChannelComponents(interaction, target, useMenu, disable = false
  * @param {CommandInteraction} interaction The interaction associated with the command.
  * @param {String} selection The currently selected configuration to print (channel or server).
  */
-function generateConfigSelectComponents(interaction, selection = undefined) {
+function generateConfigSelectComponents(selection = undefined) {
 	const messageRows = []
 
-	// Only prompt for the selection in servers.
-	if (interaction.guild) {
-		const selectRow = new ActionRowBuilder()
-			.addComponents(
-				new ButtonBuilder()
-					.setCustomId(`guild_print`)
-					.setLabel('Server Configuration')
-					.setStyle(selection === 'guild' ? 'Success' : 'Secondary'),
-				new ButtonBuilder()
-					.setCustomId(`channel_print`)
-					.setLabel('Channel Configuration')
-					.setStyle(selection === 'channel' ? 'Success' : 'Secondary')
-			)
-	
-		messageRows.push(selectRow)
-	}
+	const selectRow = new ActionRowBuilder()
+		.addComponents(
+			new ButtonBuilder()
+				.setCustomId(`guild_print`)
+				.setLabel('Server Configuration')
+				.setStyle(selection === 'guild' ? 'Success' : 'Secondary'),
+			new ButtonBuilder()
+				.setCustomId(`channel_print`)
+				.setLabel('Channel Configuration')
+				.setStyle(selection === 'channel' ? 'Success' : 'Secondary')
+		)
+
+	messageRows.push(selectRow)
 	
 	return messageRows
 }
@@ -296,17 +293,19 @@ module.exports = new Command({
 			}
 		}
 		else if (sc === 'settings') {
+			const msgOptions = {}
 			let configSelection = undefined
 			let channelTarget = interaction.channel
-			let msgContent = 'Select which configuration to print.'
 			const useChannelMenu = interaction.guild ? interaction.guild.channels.cache.filter(c => c.isTextBased()).size <= 25 : false
 			// Skip the server/channel selection prompt outside of servers (i.e., in DMs), just display the channel.
-			if (interaction.guild)
-				var msgComps = generateConfigSelectComponents()
+			if (interaction.guild) {
+				msgOptions.content = 'Select which configuration to print.'
+				msgOptions.components = generateConfigSelectComponents()
+			}
 			else
-				msgComps = generateChannelComponents(interaction, channelTarget, useChannelMenu)
+				msgOptions.components = generateChannelComponents(interaction, channelTarget, useChannelMenu)
 
-			const resp = await interaction.reply({ content: msgContent, components: msgComps })
+			const resp = await interaction.reply(msgOptions)
 			
 			const collector = resp.createMessageComponentCollector({ time: 15000 })
 
@@ -322,11 +321,11 @@ module.exports = new Command({
 				}
 				else if (/^channel_print/.test(i.customId)) {
 					configSelection = 'channel'
-					msgContent = `**Channel Configuration for <#${channelTarget.id}>:**`
+					msgOptions.content = `**Channel Configuration for <#${channelTarget.id}>:**`
 				}
 				else if (/^channel_select/.test(i.customId)) {
 					channelTarget = await interaction.guild.channels.fetch(i.values[0])
-					msgContent = `**Channel Configuration for <#${channelTarget.id}>:**`
+					msgOptions.content = `**Channel Configuration for <#${channelTarget.id}>:**`
 				}
 				// Setting server-related configuration.
 				else if (/^guild_official_mode/.test(i.customId)) {
@@ -358,7 +357,6 @@ module.exports = new Command({
 				if (configSelection === 'guild') {
 					// Gather query syntaxes.
 					let queryString = ''
-					const defaultSyntax = { open: config.defaultOpen, close: config.defaultClose }
 					if (interaction.guild) {
 						const guildQueries = bot.getGuildQueries(interaction.guild)
 						// Display the default, if available, first.
@@ -378,13 +376,13 @@ module.exports = new Command({
 					else
 						queryString = `__Query Syntaxes__\n${queryString}`
 					
-					msgContent = `**Current Server Configuration:**\n${queryString}`
-					msgComps = [...generateServerComponents(interaction), ...generateConfigSelectComponents(configSelection)]
+					msgOptions.content = `**Current Server Configuration:**\n${queryString}`
+					msgOptions.components = [...generateServerComponents(interaction), ...generateConfigSelectComponents(configSelection)]
 				}
 				else {
-					msgComps = [...generateChannelComponents(interaction, channelTarget, useChannelMenu), ...generateConfigSelectComponents(interaction, configSelection)]
+					msgOptions.components = [...generateChannelComponents(interaction, channelTarget, useChannelMenu), ...generateConfigSelectComponents(configSelection)]
 				}
-				await i.update({ content: msgContent, components: msgComps })
+				await i.update(msgOptions)
 				collector.resetTimer()
 			})
 
