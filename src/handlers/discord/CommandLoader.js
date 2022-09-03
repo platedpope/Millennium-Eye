@@ -39,5 +39,5 @@ module.exports = async bot => {
 			delete require.cache[require.resolve(file)]
 		})
 
-	logger.debug(`Command load results:\n${commandTable.toString()}`)
+	logger.info(`Command load results:\n${commandTable.toString()}`)
 }

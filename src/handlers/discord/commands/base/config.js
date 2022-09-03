@@ -172,24 +172,28 @@ function generateChannelComponents(interaction, target, useMenu, disable = false
 
 /**
  * Helper function to generate the interactive buttons for the "print" command.
+ * @param {CommandInteraction} interaction The interaction associated with the command.
  * @param {String} selection The currently selected configuration to print (channel or server).
  */
-function generateConfigSelectComponents(selection = undefined) {
+function generateConfigSelectComponents(interaction, selection = undefined) {
 	const messageRows = []
 
-	const selectRow = new ActionRowBuilder()
-		.addComponents(
-			new ButtonBuilder()
-				.setCustomId(`guild_print`)
-				.setLabel('Server Configuration')
-				.setStyle(selection === 'guild' ? 'Success' : 'Secondary'),
-			new ButtonBuilder()
-				.setCustomId(`channel_print`)
-				.setLabel('Channel Configuration')
-				.setStyle(selection === 'channel' ? 'Success' : 'Secondary')
-		)
+	// Only prompt for the selection in servers.
+	if (interaction.guild) {
+		const selectRow = new ActionRowBuilder()
+			.addComponents(
+				new ButtonBuilder()
+					.setCustomId(`guild_print`)
+					.setLabel('Server Configuration')
+					.setStyle(selection === 'guild' ? 'Success' : 'Secondary'),
+				new ButtonBuilder()
+					.setCustomId(`channel_print`)
+					.setLabel('Channel Configuration')
+					.setStyle(selection === 'channel' ? 'Success' : 'Secondary')
+			)
 	
-	messageRows.push(selectRow)
+		messageRows.push(selectRow)
+	}
 	
 	return messageRows
 }
@@ -295,8 +299,12 @@ module.exports = new Command({
 			let configSelection = undefined
 			let channelTarget = interaction.channel
 			let msgContent = 'Select which configuration to print.'
-			const useChannelMenu = interaction.guild.channels.cache.filter(c => c.isTextBased()).size <= 25
-			let msgComps = generateConfigSelectComponents()
+			const useChannelMenu = interaction.guild ? interaction.guild.channels.cache.filter(c => c.isTextBased()).size <= 25 : false
+			// Skip the server/channel selection prompt outside of servers (i.e., in DMs), just display the channel.
+			if (interaction.guild)
+				var msgComps = generateConfigSelectComponents()
+			else
+				msgComps = generateChannelComponents(interaction, channelTarget, useChannelMenu)
 
 			const resp = await interaction.reply({ content: msgContent, components: msgComps })
 			
@@ -374,7 +382,7 @@ module.exports = new Command({
 					msgComps = [...generateServerComponents(interaction), ...generateConfigSelectComponents(configSelection)]
 				}
 				else {
-					msgComps = [...generateChannelComponents(interaction, channelTarget, useChannelMenu), ...generateConfigSelectComponents(configSelection)]
+					msgComps = [...generateChannelComponents(interaction, channelTarget, useChannelMenu), ...generateConfigSelectComponents(interaction, configSelection)]
 				}
 				await i.update({ content: msgContent, components: msgComps })
 				collector.resetTimer()

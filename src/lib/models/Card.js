@@ -714,7 +714,7 @@ class Card {
 		const tcgString = 'TCG'
 		const ocgString = 'OCG'
 
-		if (this.tcgList)
+		if (this.tcgList !== null && this.tcgList !== undefined)
 			banlistStatus[BanlistStatus[this.tcgList]].push(tcgString)
 		else {
 			// If no status, need to distinguish between unreleased and unlimited.
@@ -724,7 +724,7 @@ class Card {
 			else
 				banlistStatus.Unreleased.push(tcgString)
 		}
-		if (this.ocgList)
+		if (this.ocgList !== null && this.ocgList !== undefined)
 			banlistStatus[BanlistStatus[this.ocgList]].push(ocgString)
 		else {
 			if (this.isReleased('ja'))

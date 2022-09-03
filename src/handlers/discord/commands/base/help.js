@@ -94,7 +94,7 @@ module.exports = new Command({
 			embedData.setTitle('Millennium Eye Help: Commands')
 
 			// Explaining /config. Only display this to users that run this that also have the necessary permissions to use it.
-			if (interaction.member.permissions.has(PermissionsBitField.Flags.ManageGuild)) {
+			if (interaction.guild && interaction.member.permissions.has(PermissionsBitField.Flags.ManageGuild)) {
 				let configHelpString =  'Contains bot configuration-related items to control bot behavior in individual channels or enitre servers. ' +
 										'Currently configurable items are:\n' +
 										'● **Query Syntax**: Controls what the bot considers a "query" and therefore what it responds to. This also allows setting up different syntaxes per language. See Syntax Help for more on how syntaxes work.\n' +
