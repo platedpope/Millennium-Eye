@@ -14,7 +14,7 @@ const GP = promisify(glob)
 module.exports = async bot => {
 	const eventTable = new Table('Events');
 	
-	(await GP(`${process.cwd()}/src/handlers/discord/events/*/*.js`))
+	(await GP(`${process.cwd()}/src/handlers/events/*.js`))
 		.map(async file => {
 			/**
 			 * @type {Event}

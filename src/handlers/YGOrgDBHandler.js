@@ -2,7 +2,7 @@ const axios = require('axios')
 const Database = require('better-sqlite3')
 
 const { logError, logger } = require('lib/utils/logging')
-const { CardDataFilter } = require('lib/utils/search')
+const { CardDataFilter } = require('lib/utils/filter')
 const Search = require('lib/models/Search')
 const Query = require('lib/models/Query')
 const { Locales, YGORG_NAME_ID_INDEX, YGORG_PROPERTY_METADATA, YGORG_DB_PATH, YGORG_MANIFEST, YGORG_QA_DATA_API, API_TIMEOUT, YGORG_CARD_DATA_API, YGORG_ARTWORK_API } = require('lib/models/Defines')

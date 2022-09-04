@@ -40,7 +40,6 @@ module.exports = new Event({
 		
 		await processQuery(qry)
 		
-		
 		const embedData = await qry.getDataEmbeds()
 		// Build message data.
 		const replyOptions = { 

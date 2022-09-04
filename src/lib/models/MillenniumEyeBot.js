@@ -1,4 +1,4 @@
-const Discord = require('discord.js')
+const { Client, Collection, Partials, GatewayIntentBits, Guild, TextChannel } = require('discord.js')
 const Cache = require('timed-cache')
 
 const config = require('config')
@@ -6,9 +6,8 @@ const { generateError } = require('lib/utils/logging')
 const { setupQueryRegex } = require('lib/utils/regex')
 const ConfigCache = require('./ConfigCache')
 const { Locales, MESSAGE_TIMEOUT } = require('./Defines')
-const { GatewayIntentBits } = require('discord.js')
 
-class MillenniumEyeBot extends Discord.Client {
+class MillenniumEyeBot extends Client {
 	constructor() {
 		super({ 
 			intents: [
@@ -22,13 +21,13 @@ class MillenniumEyeBot extends Discord.Client {
 			], 
 			partials: [
 				// Need the channel partial to be able to receive DM events.
-				Discord.Partials.Channel
+				Partials.Channel
 			]})
 
 		/**
-		 * @type {Discord.Collection<string, Command>}
+		 * @type {Collection<string, Command>}
 		 */
-		this.commands = new Discord.Collection()
+		this.commands = new Collection()
 
 		this.logChannel = config.logChannel
 
@@ -72,7 +71,7 @@ class MillenniumEyeBot extends Discord.Client {
 	 * Helper function to set a configuration item for a guild.
 	 * If the new setting is equal to the default, then it will remove the setting
 	 * from the cache entirely.
-	 * @param {Discord.Guild} guild The guild associated with this setting.
+	 * @param {Guild} guild The guild associated with this setting.
 	 * @param {String} setting The key of the setting.
 	 * @param {String | Boolean} value The value of the setting.
 	 */
@@ -86,7 +85,7 @@ class MillenniumEyeBot extends Discord.Client {
 	 * Helper function to set a configuration item for a channel.
 	 * If the new setting is equal to the default, thenn it will remove the setting
 	 * from the cache entirely.
-	 * @param {Discord.TextChannel} channel The channel associated with this setting.
+	 * @param {TextChannel} channel The channel associated with this setting.
 	 * @param {String} setting The key of the setting.
 	 * @param {String | Boolean} value The value of the setting.
 	 */
@@ -100,7 +99,7 @@ class MillenniumEyeBot extends Discord.Client {
 	 * Helper function to set a new query regex for a guild.
 	 * If the new setting is equal to the default, then it will remove the query
 	 * from the cache entirely.
-	 * @param {Discord.Guild} guild The guild associated with this setting.
+	 * @param {Guild} guild The guild associated with this setting.
 	 * @param {String} open The opening symbol of the query syntax.
 	 * @param {String} close The close symbol of the query syntax.
 	 * @param {String} locale The locale associated with the query syntax.
@@ -156,7 +155,7 @@ class MillenniumEyeBot extends Discord.Client {
 
 	/**
 	 * Helper function to remove a query regex for a guild.
-	 * @param {Discord.Guild} guild The guild for which the query syntax will be removed.
+	 * @param {Guild} guild The guild for which the query syntax will be removed.
 	 * @param {String} locale The locale associated with the query syntax to be removed.
 	 * @returns The removed query syntax, or undefined if none existed.
 	 */
@@ -169,7 +168,7 @@ class MillenniumEyeBot extends Discord.Client {
 
 	/**
 	 * Helper function get the query regexes associated with a guild.
-	 * @param {Discord.Guild} guild The guild to check the query syntaxes for, if one exists.
+	 * @param {Guild} guild The guild to check the query syntaxes for, if one exists.
 	 * @returns {Object} The set of query syntaxes associated with the guild.
 	 */
 	getGuildQueries(guild) {
@@ -189,7 +188,7 @@ class MillenniumEyeBot extends Discord.Client {
 
 	/**
 	 * Helper function to evaluate the default setting for a guild.
-	 * @param {Discord.Guild} guild The guild to check the settings for. 
+	 * @param {Guild} guild The guild to check the settings for. 
 	 * @param {String} setting The key of the setting to be checked.
 	 * @returns {String | Boolean} The string or boolean value associated with the setting.
 	 */
@@ -205,7 +204,7 @@ class MillenniumEyeBot extends Discord.Client {
 	 * taking into account server overrides.
 	 * This function really is just a more specific form of getCurrentGuildSetting,
 	 * but I keep it around for code clarity's sake.
-	 * @param {Discord.TextChannel} channel The channel to check the settings for.
+	 * @param {TextChannel} channel The channel to check the settings for.
 	 * @param {String} setting The key of the setting to be checked.
 	 * @returns {String | Boolean} The string or boolean value associated with the setting.
 	 */
@@ -216,7 +215,7 @@ class MillenniumEyeBot extends Discord.Client {
 	/**
 	 * Helper function to evaluate the current setting for a channel,
 	 * taking into account server overrides.
-	 * @param {Discord.TextChannel} channel The channel to check the settings for.
+	 * @param {TextChannel} channel The channel to check the settings for.
 	 * @param {String} setting The key of the setting to be checked.
 	 * @returns {String | Boolean} The string or boolean value with the setting.
 	 */

@@ -7,9 +7,9 @@ const { meInstance } = require('lib/models/MillenniumEyeBot')
 const loginToken = config.testMode ? config.testToken : config.mainToken
 
 // Load event handlers.
-require('handlers/discord/EventLoader')(meInstance)
+require('handlers/EventLoader')(meInstance)
 
 // Load command handlers.
-require('handlers/discord/CommandLoader')(meInstance)
+require('handlers/CommandLoader')(meInstance)
 
 meInstance.start(loginToken)

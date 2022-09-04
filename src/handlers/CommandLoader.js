@@ -15,7 +15,7 @@ const GP = promisify(glob)
 module.exports = async bot => {
 	const commandTable = new Table('Commands');
 
-	(await GP(`${process.cwd()}/src/handlers/discord/commands/*/*.js`))
+	(await GP(`${process.cwd()}/src/handlers/commands/*.js`))
 		.map(async file => {
 			/**
 			 * @type {Command}
