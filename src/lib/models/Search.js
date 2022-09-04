@@ -120,7 +120,9 @@ const { TCGPlayerSet } = require('./TCGPlayer')
 					return false
 			// If this has 'q'-type search, it needs QA data for this locale.
 			if (types.has('q'))
-				if ( !(this.data.title.has(locale)) || !(this.data.question.has(locale)) || !(this.data.answer.has(locale)) )
+				if ( (this.data.title && !(this.data.title.has(locale))) || 
+					 (this.data.question && !(this.data.question.has(locale))) || 
+					 (this.data.answer && !(this.data.answer.has(locale))) )
 					return false
 		}
 

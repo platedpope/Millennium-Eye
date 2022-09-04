@@ -75,7 +75,6 @@ function convertYugipediaDataToSearchData(searches, qry) {
 		const qryData = s.rawData
 		if ('pages' in qryData) {
 			const pageData = qryData.pages
-			console.log(pageData)
 			// There can be multiple pages here. Search for the first one with a title that we can use.
 			// Default to the first, but we'll find another if it exists.
 			let bestPage = pageData[0]

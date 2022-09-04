@@ -262,7 +262,10 @@ class Card {
 		const embedData = {}
 
 		// We shouldn't be here with no print data, but do a final sanity check to make sure we leave if so.
-		if (!this.printData.size || !this.printData.get(locale))
+		if (!this.printData.size)
+			return embedData
+		const allPrints = this.printData.get(locale)
+		if (!allPrints || !allPrints.size)
 			return embedData
 		
 		const finalEmbed = new EmbedBuilder()
@@ -292,8 +295,9 @@ class Card {
 			lastText = `Second (newest) print: **Not yet released**`
 		}
 
-		finalEmbed.setDescription(`${introText}\n● ${firstText}\n● ${lastText}`)
+		let desc = `${introText}\n● ${firstText}\n● ${lastText}`
 
+		let printFakeDisclaimer = false
 		// Now add a field(s) for more detailed print data. Print dates *should* already be in order in the map.
 		let totalPrints = this.printData.get(locale).size
 		const printTable = new Table()
@@ -321,6 +325,9 @@ class Card {
 				printLines.push([currPrint, code, date])
 			}
 			currPrint++
+
+			// Keep an eye out for "fake" print codes so we let the user know what they mean.
+			if (code.includes('FAKE')) printFakeDisclaimer = true
 		})
 		for (const l of printLines) printTable.addRow(...l)
 
@@ -332,6 +339,12 @@ class Card {
 				value: `\`\`\`\n${fields[i]}\`\`\``, inline: false
 			})
 		}
+		
+		if (printFakeDisclaimer)
+			desc += '\n\n**Note**: Prints with "FAKE-XXX" codes are placeholders (as the name implies, they\'re fake). Some prints (especially very old ones) do not have print codes at all. ' +
+					'Because prints are identified by code, those without codes would normally be treated as if they don\'t exist. The placeholder codes are therefore necessary for the bot to properly track the print dates that have no associated code.'
+
+		finalEmbed.setDescription(desc)
 
 		embedData.embed = finalEmbed
 		return embedData
@@ -561,14 +574,13 @@ class Card {
 		}
 		else {
 			let localeReleased = this.isReleased(locale)
-			const jaReleased = this.isReleased('ja')
 			if (!localeReleased) {
 				// If it's not released in this locale, look at EN.
 				localeReleased = this.isReleased('en')
 				if (localeReleased) locale = 'en'
 				// If not in EN, it's gotta be in JP. Only do this if official mode isn't being used.
 				else if (!official) {
-					localeReleased = jaReleased
+					localeReleased = this.isReleased('ja')
 					locale = 'ja'
 				}
 			}
@@ -735,40 +747,6 @@ class Card {
 
 		return banlistStatus
 	}
-	
-	/**
-	 * Adds a given image to this card's image data. If it doesn't exist on the file system,
-	 * it will save the image. If it's from Neuron, it will also crop the image to include just the art.
-	 * @param {Number} id The ID of the image.
-	 * @param img The raw image data or URL.
-	 * @param {Boolean} fromNeuron Whether this image comes from Neuron.
-	 * @param {Boolean} url Whether this image is a URL rather than raw data.
-	 */
-	addImageData(id, img, url = false) {
-		// If this is a URL, we don't need to save this at all, just set it.
-		if (url) {
-			this.imageData.set(id, img)
-			return
-		}
-
-		// Otherwise, see if the image is saved already.
-		const artPath = `${process.cwd()}/data/card_images`
-		if (this.dbId)
-			var artFilename = `${this.dbId}_${id}`
-		else if (this.passcode)
-			artFilename = `${this.passcode}_${id}`
-		else
-			artFilename = `${sanitize(this.name.get('en'))}_${id}`
-
-		const fullArtPath = `${artPath}/${artFilename}.png`
-
-		if (fs.existsSync(fullArtPath))
-			this.imageData.set(id, fullArtPath)
-		else
-			// Save the raw data. Don't write the image to disk yet, just save the path we came up with.
-			// The image will be saved to disk when necessary (i.e., when it's actually going to be used for an embed).
-			this.imageData.set(id, img)
-	}
 
 	/**
 	 * Returns whether this card is released in a given locale.
@@ -825,6 +803,40 @@ class Card {
 		}
 
 		return sortedPrintDates
+	}
+	
+	/**
+	 * Adds a given image to this card's image data. If it doesn't exist on the file system,
+	 * it will save the image. If it's from Neuron, it will also crop the image to include just the art.
+	 * @param {Number} id The ID of the image.
+	 * @param img The raw image data or URL.
+	 * @param {Boolean} fromNeuron Whether this image comes from Neuron.
+	 * @param {Boolean} url Whether this image is a URL rather than raw data.
+	 */
+	addImageData(id, img, url = false) {
+		// If this is a URL, we don't need to save this at all, just set it.
+		if (url) {
+			this.imageData.set(id, img)
+			return
+		}
+
+		// Otherwise, see if the image is saved already.
+		const artPath = `${process.cwd()}/data/card_images`
+		if (this.dbId)
+			var artFilename = `${this.dbId}_${id}`
+		else if (this.passcode)
+			artFilename = `${this.passcode}_${id}`
+		else
+			artFilename = `${sanitize(this.name.get('en'))}_${id}`
+
+		const fullArtPath = `${artPath}/${artFilename}.png`
+
+		if (fs.existsSync(fullArtPath))
+			this.imageData.set(id, fullArtPath)
+		else
+			// Save the raw data. Don't write the image to disk yet, just save the path we came up with.
+			// The image will be saved to disk when necessary (i.e., when it's actually going to be used for an embed).
+			this.imageData.set(id, img)
 	}
 
 	/**

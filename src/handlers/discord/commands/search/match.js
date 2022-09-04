@@ -75,7 +75,7 @@ module.exports = new Command({
 		]
 	},
 	execute: async (interaction, bot) => {
-		let term = interaction.options.getString('term', true)
+		const term = interaction.options.getString('term', true)
 		const matchType = interaction.options.getString('type', true)
 
 		const locale = bot.getCurrentChannelSetting(interaction.channel, 'locale')
@@ -119,7 +119,7 @@ module.exports = new Command({
 		if (!resolvedMatchSearches.length) {
 			// Somehow didn't resolve any of our matches, bail.
 			throw generateError(
-				`Match command could not find a ${type} match for term ${term}. This probably isn't an actual error.`,
+				`Match command could not find a ${matchType} match for term ${term}. This probably isn't an actual error.`,
 				'That term could not be matched with anything.'
 			)
 		}
@@ -128,6 +128,8 @@ module.exports = new Command({
 		
 		let selectedMatch = null
 		msgOptions.components = generateMatchSelect(selectedMatch, resolvedMatchSearches, locale)
+		msgOptions.ephemeral = true
+
 		const resp = await queryRespond(bot, interaction, '', qry, msgOptions)
 
 		let postToChat = false
@@ -165,10 +167,16 @@ module.exports = new Command({
 			if (postToChat) {
 				delete msgOptions.components
 				delete msgOptions.ephemeral
+				// The followUp responds to the ephemeral message, making the initial command invocation is "invisible".
+				// Add a footer identifying who invoked the command to prevent abuse.
+				const finalEmbed = msgOptions.embeds[0]
+				const footerText = finalEmbed.data.footer.text + ` | Requested by: ${interaction.user.username}#${interaction.user.discriminator}`
+				finalEmbed.setFooter({ text: footerText })
+
 				interaction.followUp(msgOptions)
 			}
 			else {
-				msgOptions.components = generateArtSelect(viewedArt, availableArts, true)
+				msgOptions.components = generateMatchSelect(selectedMatch, resolvedMatchSearches, locale, true)
 				interaction.editReply(msgOptions)
 			}
 		})
