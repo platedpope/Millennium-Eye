@@ -297,7 +297,7 @@ class Card {
 
 		let desc = `${introText}\n● ${firstText}\n● ${lastText}`
 
-		let printFakeDisclaimer = false
+		let printEmptyCodeNote = false
 		// Now add a field(s) for more detailed print data. Print dates *should* already be in order in the map.
 		let totalPrints = this.printData.get(locale).size
 		const printTable = new Table()
@@ -307,6 +307,11 @@ class Card {
 		const printLines = []
 		let currPrint = 1
 		this.printData.get(locale).forEach((date, code) => {
+			// Keep an eye out for "fake" print codes so we let the user know what they mean.
+			if (code.includes('FAKE')) {
+				code = ''
+				printEmptyCodeNote = true
+			}
 			if (totalPrints > 6) {
 				// Expecting 2 prints per table row.
 				// Because we start at print 1, odd-numbered prints indicate the start of a new table row.
@@ -325,9 +330,6 @@ class Card {
 				printLines.push([currPrint, code, date])
 			}
 			currPrint++
-
-			// Keep an eye out for "fake" print codes so we let the user know what they mean.
-			if (code.includes('FAKE')) printFakeDisclaimer = true
 		})
 		for (const l of printLines) printTable.addRow(...l)
 
@@ -340,9 +342,8 @@ class Card {
 			})
 		}
 		
-		if (printFakeDisclaimer)
-			desc += '\n\n**Note**: Prints with "FAKE-XXX" codes are placeholders (as the name implies, they\'re fake). Some prints (especially very old ones) do not have print codes at all. ' +
-					'Because prints are identified by code, those without codes would normally be treated as if they don\'t exist. The placeholder codes are therefore necessary for the bot to properly track the print dates that have no associated code.'
+		if (printEmptyCodeNote)
+			desc += '\n\n**Note**: Blank "Code" columns are due to the official database not listing a print code for some prints of this card.'
 
 		finalEmbed.setDescription(desc)
 

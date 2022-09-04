@@ -94,8 +94,10 @@ module.exports = new Event({
 		// YGOrg locale property metadata. Set this up on launch, but it's static, don't need to update periodically.
 		await cachePropertyMetadata()
 		// TCGPlayer set product data update: once per day.
-		await cacheSetProductData(addTcgplayerDataToDb)
-		setInterval(cacheSetProductData, 24 * 60 * 60 * 1000, addTcgplayerDataToDb)
+		if (config.testMode) {
+			await cacheSetProductData(addTcgplayerDataToDb)
+			setInterval(cacheSetProductData, 24 * 60 * 60 * 1000, addTcgplayerDataToDb)
+		}
 
 		// Set bot presence.
 		bot.user.setPresence({ 
