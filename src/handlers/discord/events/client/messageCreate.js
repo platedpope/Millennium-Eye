@@ -4,6 +4,7 @@ const { MillenniumEyeBot } = require('lib/models/MillenniumEyeBot')
 const Event = require('lib/models/Event')
 const Query = require('lib/models/Query')
 const { processQuery, updateUserTimeout, queryRespond } = require('handlers/QueryHandler')
+const { logError } = require('lib/utils/logging')
 
 module.exports = new Event({
 	event: Discord.Events.MessageCreate,
@@ -18,6 +19,11 @@ module.exports = new Event({
 		if (!message.content) return
 
 		const qry = new Query(message, bot)
+		if (qry.matchedDbLinks)
+			try { await message.suppressEmbeds() }
+			catch (err) {
+				// Probably didn't have permissions. Just ignore this.
+			}
 
 		if (qry.searches.length !== 0)  {
 			// Let the user know if they're timed out.
@@ -33,6 +39,7 @@ module.exports = new Event({
 		await message.channel.sendTyping()
 		
 		await processQuery(qry)
+		
 		
 		const embedData = await qry.getDataEmbeds()
 		// Build message data.

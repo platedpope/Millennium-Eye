@@ -18,6 +18,10 @@ class Query {
 	 * @param {MillenniumEyeBot} bot The bot.
 	 */
 	constructor(qry, bot) {
+		// Keep track of whether we matched any DB links (either Konami or YGOrg).
+		// They produce automatic Discord embeds that we want to try to suppress.
+		this.matchedDbLinks = false
+		
 		if (qry instanceof Query) {
 			this.channel = qry.channel
 			this.official = qry.official
@@ -123,24 +127,30 @@ class Query {
 			...msgContent.matchAll(KONAMI_DB_CARD_REGEX), 
 			...msgContent.matchAll(YGORG_DB_CARD_REGEX)
 		]
-		for (const l of cardLinks) {
-			let sType = this.rulings ? 'r' : 'i'
-			let sContent = parseInt(l[1], 10)
-			let sLocale = this.locale
+		if (cardLinks.length) {
+			for (const l of cardLinks) {
+				let sType = this.rulings ? 'r' : 'i'
+				let sContent = parseInt(l[1], 10)
+				let sLocale = this.locale
 
-			searchData.push([sContent, sType, sLocale])
+				searchData.push([sContent, sType, sLocale])
+			}
+			this.matchedDbLinks = true
 		}
 
 		const qaLinks = [
 			...msgContent.matchAll(KONAMI_DB_QA_REGEX),
 			...msgContent.matchAll(YGORG_DB_QA_REGEX)
 		]
-		for (const l of qaLinks) {
-			let sType = 'q'
-			let sContent = parseInt(l[1], 10)
-			let sLocale = this.locale
-
-			searchData.push([sContent, sType, sLocale])
+		if (qaLinks.length) {
+			for (const l of qaLinks) {
+				let sType = 'q'
+				let sContent = parseInt(l[1], 10)
+				let sLocale = this.locale
+	
+				searchData.push([sContent, sType, sLocale])
+			}
+			this.matchedDbLinks = true
 		}
 
 		for (const s of searchData)

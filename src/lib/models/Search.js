@@ -100,7 +100,8 @@ const { TCGPlayerSet } = require('./TCGPlayer')
 			const types = this.localeToTypesMap.get(locale)
 			// If this has 'r' or 'i'-type search, it needs name + effect text for this locale at a minimum.
 			if (types.has('i') || types.has('r'))
-				if ( !(this.data.name.has(locale)) || !(this.data.effect.has(locale)) )
+				if ( (this.data.name && !(this.data.name.has(locale))) || 
+					 (this.data.effect && !(this.data.effect.has(locale))) )
 					return false
 			// If this has 'a'-type search, it needs image data (locale independent).
 			if (types.has('a'))
@@ -186,7 +187,9 @@ const { TCGPlayerSet } = require('./TCGPlayer')
 				}
 				// Any 'q'-type search should have QA data in this locale.
 				else if (t === 'q') {
-					if (!this.data.title.has(locale) || !this.data.question.has(locale) || !this.data.answer.has(locale))
+					if ( (this.data.title && !this.data.title.has(locale)) || 
+						 (this.data.question && !this.data.question.has(locale)) || 
+						 (this.data.answer && !this.data.answer.has(locale)) )
 						unresolvedType = true
 				}
 
