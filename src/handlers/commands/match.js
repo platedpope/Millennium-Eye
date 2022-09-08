@@ -119,7 +119,7 @@ module.exports = new Command({
 		if (!resolvedMatchSearches.length) {
 			// Somehow didn't resolve any of our matches, bail.
 			throw generateError(
-				`Match command could not find a ${matchType} match for term ${term}. This probably isn't an actual error.`,
+				null,
 				'That term could not be matched with anything.'
 			)
 		}

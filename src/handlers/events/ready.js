@@ -79,12 +79,15 @@ module.exports = new Event({
 				bot.guildQueries.put([g.id, 'default'], defRegex)
 		})
 		
-		// Search term cache clear: once every 24 hours.
-		setInterval(clearSearchCache, 7 * 24 * 60 * 60 * 1000)
-		if (config.testMode) {
+		// Search term cache clear: once every 12 hours.
+		setInterval(clearSearchCache, 12 * 60 * 60 * 1000)
+		if (!config.testMode) {
 			// Konami database update: once per day.
 			await updateKonamiDb()
 			setInterval(updateKonamiDb, 24 * 60 * 60 * 1000)
+			// TCGPlayer set product data update: once per day.
+			await cacheSetProductData(addTcgplayerDataToDb)
+			setInterval(cacheSetProductData, 24 * 60 * 60 * 1000, addTcgplayerDataToDb)
 		}
 		// YGOrg manifest.
 		cacheManifestRevision()
@@ -93,11 +96,6 @@ module.exports = new Event({
 		await cacheNameToIdIndex()
 		// YGOrg locale property metadata. Set this up on launch, but it's static, don't need to update periodically.
 		await cachePropertyMetadata()
-		// TCGPlayer set product data update: once per day.
-		if (config.testMode) {
-			await cacheSetProductData(addTcgplayerDataToDb)
-			setInterval(cacheSetProductData, 24 * 60 * 60 * 1000, addTcgplayerDataToDb)
-		}
 
 		// Set bot presence.
 		bot.user.setPresence({ 

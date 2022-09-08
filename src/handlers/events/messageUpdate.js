@@ -38,7 +38,12 @@ module.exports = new Event({
 
 		// If the message edited was replied to by us, grab that reply ID so we can edit it with any changed info.
 		cachedReply = bot.replyCache.get(oldMessage.id)
-		newQry = new Query(newMessage, bot)
+		const newQry = new Query(newMessage, bot)
+		if (newQry.matchedDbLinks)
+			try { await message.suppressEmbeds() }
+			catch (err) {
+				// Probably didn't have permissions. Just ignore this.
+			}
 
 		if (newQry.searches.length) {
 			if (updateUserTimeout(newMessage.author.id, newQry.searches.length)) {

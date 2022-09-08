@@ -42,7 +42,6 @@ class MillenniumEyeBot extends Client {
 		 * - value: an object with properties:
 		 * 	- user: the ID of the user who sent the original message
 		 * 	- replies: array of message IDs that the bot sent as a reply
-		 * 	- query: the query data we originally produced for that message.
 		 * Data is deleted from this cache 15 seconds after being inserted, since it's only used for
 		 * time-sensitive checks on edits and message deletions.
 		 */

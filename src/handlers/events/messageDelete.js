@@ -2,6 +2,7 @@ const Discord = require('discord.js')
 
 const { MillenniumEyeBot } = require('lib/models/MillenniumEyeBot')
 const Event = require('lib/models/Event')
+const { logError } = require('lib/utils/logging')
 
 module.exports = new Event({
 	event: Discord.Events.MessageDelete,
@@ -15,8 +16,13 @@ module.exports = new Event({
 
 		const cachedMessage = bot.replyCache.get(message.id)
 		if (cachedMessage) {
-			for (const r of cachedMessage.replies) await r.delete()
-			bot.replyCache.remove(message.id)
+			try {
+				for (const r of cachedMessage.replies) await r.delete()
+				bot.replyCache.remove(message.id)
+			}
+			catch (err) {
+				logError(err)
+			}
 		}
 	}
 })

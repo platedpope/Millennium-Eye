@@ -5,7 +5,7 @@ const Search = require('lib/models/Search')
 const { addTcgplayerDataToDb, searchTcgplayerData } = require('./BotDBHandler')
 const { searchKonamiDb, populateCardFromKonamiData } = require('./KonamiDBHandler')
 const { searchTcgplayer } = require('./TCGPlayerHandler')
-const { addToYgorgDb, searchArtworkRepo, populateCardFromYgorgApi, populateRulingFromYgorgDb, populatedRulingFromYgorgApi, populateRulingAssociatedCardsData } = require('./YGOrgDBHandler')
+const { addToYgorgDb, searchArtworkRepo, populateCardFromYgorgApi, populateRulingFromYgorgDb, populatedRulingFromYgorgApi } = require('./YGOrgDBHandler')
 const { populateCardFromYugipediaApi } = require('./YugipediaHandler')
 
 
@@ -35,13 +35,11 @@ async function convertYgorgDataToSearchData(qry, qaSearches, cardSearches = []) 
 		s.data = new Ruling()
 		populateRulingFromYgorgDb(s.rawData, s.data)
 		s.rawData = undefined
-		// await populateRulingAssociatedCardsData(s.data, [...s.localeToTypesMap.keys()], qry)
 	}
 	for (const s of qaSearches.api) {
 		s.data = new Ruling()
 		populatedRulingFromYgorgApi(s.rawData, s.data)
 		s.rawData = undefined
-		// await populateRulingAssociatedCardsData(s.data, [...s.localeToTypesMap.keys()], qry)
 	}
 	// Process the cards we got from the API.
 	const cardsWithoutArt = []

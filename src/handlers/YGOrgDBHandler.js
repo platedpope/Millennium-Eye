@@ -10,6 +10,7 @@ const { Locales, YGORG_NAME_ID_INDEX, YGORG_PROPERTY_METADATA, YGORG_DB_PATH, YG
 const ygorgDb = new Database(YGORG_DB_PATH)
 
 let cachedRevision = undefined
+let artworkManifest = null
 const nameToIdIndex = {}
 // The property array is the raw data returned by the YGOrg API and is used for its own API.
 // The propertyToLocaleIndex is that data converted into a map for easy type lookups for the bot's purposes.
@@ -17,21 +18,18 @@ const nameToIdIndex = {}
 let propertyArray = []
 const propertyToLocaleIndex = {}
 
-let artworkManifest = {}
-
 /**
  * Caches the most recent manifest revision we know about.
  * @param {Number} newRevision The new revision number. 
  */
 function cacheManifestRevision(newRevision) {
-	db = new Database(YGORG_DB_PATH)
 	// First time, have to load this from the DB.
 	if (newRevision === undefined && cachedRevision === undefined) {
 		const dbData = ygorgDb.prepare('SELECT * FROM manifest').get()
 		if (dbData)
 			cachedRevision = dbData.lastKnownRevision
 	}
-	else {
+	else if (newRevision) {
 		ygorgDb.prepare('DELETE FROM manifest').run()
 		ygorgDb.prepare('INSERT INTO manifest(lastKnownRevision) VALUES (?)').run(newRevision)
 		cachedRevision = newRevision
@@ -51,19 +49,19 @@ async function processManifest(newRevision) {
 	// If we've cached something more recent or as recent, nothing to do.
 	if (cachedRevision >= newRevision) return
 
-	// Otherwise, get manifest data to see if we need to make any changes.
-	await axios.get(`${YGORG_MANIFEST}/${cachedRevision}`, {
-		'timeout': API_TIMEOUT * 1000
-	}).then(r => {
+	handleResponse = r => {
 		logger.info(`Processing new manifest revision ${newRevision}...`)
 		const changes = r.data.data 
 
 		if (changes) {
+			const cardChanges = changes.card
+			const qaChanges = changes.qa
+			const idxChanges = changes.idx
 			// Card data updates: no way to tell what exactly has changed,
 			// so just invalidate any data stored in the bot or YGOrg databases.
-			// (Don't invalidate anything from the Konami database.)
-			if ('card' in changes) {
-				const evictIds = Object.keys(changes.card)
+			// (Don't invalidate anything from the Konami database, since that's updated by a separate process.)
+			if (cardChanges) {
+				const evictIds = Object.keys(cardChanges)
 				// Delete any FAQ data from YGOrg DB.
 				const delFaq = ygorgDb.prepare('DELETE FROM faqData WHERE cardId = ?')
 				const delMany = ygorgDb.transaction(ids => {
@@ -74,8 +72,8 @@ async function processManifest(newRevision) {
 				logger.info(`Evicted all FAQ and cached bot data associated with ${evictIds.length} database ID(s).`)
 			}
 			// Invalidate cached QA data.
-			if ('qa' in changes) {
-				const evictQas = Object.keys(changes.qa)
+			if (qaChanges) {
+				const evictQas = Object.keys(qaChanges)
 
 				const delQa = ygorgDb.prepare('DELETE FROM qaData WHERE qaId = ?')
 				const delCards = ygorgDb.prepare('DELETE FROM qaCards WHERE qaId = ?')
@@ -90,19 +88,25 @@ async function processManifest(newRevision) {
 				logger.info(`Evicted all QA data for ${evictQas.length} QA ID(s).`)
 			}
 			// Invalidate any cached indices we care about.
-			if ('idx' in changes) {
-				const idxChanges = changes.idx
-				if ('name' in idxChanges) {
-					logger.info(`Evicted locales ${Object.keys(idxChanges).join(', ')} from name index.`)
-					for (l in idxChanges.name) delete nameToIdIndex[l]
-				}
+			if (idxChanges && idxChanges.name) {
+				logger.info(`Evicted locales ${Object.keys(idxChanges).join(', ')} from name index.`)
+				for (l in idxChanges.name) delete nameToIdIndex[l]
 			}
 		}
 
 		cacheManifestRevision(newRevision)
-	}).catch(err => {
+	}
+
+	// Otherwise, get manifest data to see if we need to make any changes.
+	try {
+		const resp = await axios.get(`${YGORG_MANIFEST}/${cachedRevision}`, {
+			'timeout': API_TIMEOUT * 1000
+		})
+		handleResponse(resp)
+	}
+	catch (err) {
 		logError(err.message, 'Failed processing YGOrg DB manifest.')
-	})
+	}
 }
 
 /**
@@ -159,7 +163,7 @@ async function searchYgorgDb(searches, qry, dataHandlerCallback) {
 					for (const r of dbRows)
 						insertFaqData(faqMap, r.locale, r.effectNumber, r.data)
 					// Lastly, sort each array of FAQBlocks by index.
-					faqMap.forEach((fbs, lan) => {
+					faqMap.forEach(fbs => {
 						fbs.sort((a, b) => {
 							// Convert the indices to numbers and sort them that way. Some might have decimals (0.5) which sorts improperly on a string comparison.
 							return parseFloat(a.index) - parseFloat(b.index)
@@ -193,7 +197,7 @@ async function searchYgorgDb(searches, qry, dataHandlerCallback) {
 		const req = axios.get(`${YGORG_QA_DATA_API}/${qaId}`, {
 			'timeout': API_TIMEOUT * 1000
 		}).then(r => {
-			if (r.status === 200) return r
+			return r
 		}).catch(err => {
 			throw new Error(`YGOrg API card query for ruling ID ${qaId} returned nothing.`)
 		})
@@ -205,7 +209,7 @@ async function searchYgorgDb(searches, qry, dataHandlerCallback) {
 		const req = axios.get(`${YGORG_CARD_DATA_API}/${cardId}`, {
 			'timeout': API_TIMEOUT * 1000
 		}).then(r => {
-			if (r.status === 200) return r
+			return r
 		}).catch(err => {
 			throw new Error(`YGOrg API card query for ID ${cardId} returned nothing.`)
 		})
@@ -273,20 +277,26 @@ async function searchYgorgDb(searches, qry, dataHandlerCallback) {
  */
 async function searchArtworkRepo(artSearches) {
 	// First get the manifest. Used the cached one if we've got it.
-	if (!Object.keys(artworkManifest).length) {
-		await axios.get(`${YGORG_ARTWORK_API}/manifest.json`, {
+	if (!artworkManifest) {
+		const handleResponse = r => {
+			artworkManifest = r.data
+			// Force a re-cache of the artwork manifest once per day.
+			logger.info('Cached new artwork manifest, resetting in 24 hrs.')
+			setTimeout(() => {
+				artworkManifest = {}
+				logger.info('Evicted cached artwork manifest, will re-cache the next time it is necessary.')
+			}, 24 * 60 * 60 * 1000)
+		}
+
+		try {
+			await axios.get(`${YGORG_ARTWORK_API}/manifest.json`, {
 				'timeout': API_TIMEOUT * 1000
-		}).then(r => {
-			if (r.status === 200) {
-				artworkManifest = r.data
-				// Force a re-cache of the artwork manifest once per day.
-				logger.info('Cached new artwork manifest, resetting in 24 hrs.')
-				setInterval(() => {
-					artworkManifest = {}
-					logger.info('Evicted cached artwork manifest, will re-cache the next time it is necessary.')
-				}, 24 * 60 * 60 * 1000)
-			}
-		})
+			})
+			handleResponse(resp)
+		}
+		catch (err) {
+			logError(err.message, 'Failed processing artwork repo manifest.')
+		}
 	}
 
 	if (!artworkManifest || !('cards' in artworkManifest))
@@ -300,9 +310,11 @@ async function searchArtworkRepo(artSearches) {
 	// Send all the requests.
 	for (let i = 0; i < artSearches.length; i++) {
 		const s = artSearches[i]
+		const cardId = s.data.dbId
+
+		// Store the requests/responses in the same order as the searches, for easy reference later.
 		repoResponses[i] = []
 
-		const cardId = s.data.dbId
 		if (cardId in manifestCardData) {
 			const cardArtData = manifestCardData[cardId]
 			for (const artId in cardArtData) {
@@ -312,7 +324,7 @@ async function searchArtworkRepo(artSearches) {
 				const req = axios.get(bestArtFullUrl, {
 					'timeout': API_TIMEOUT * 1000
 				}).then(r => {
-					if (r.status === 200) return r
+					return r
 				})
 
 				repoResponses[i].push(req)
@@ -320,31 +332,29 @@ async function searchArtworkRepo(artSearches) {
 		}
 	}
 
+	// Wait for all our requests to settle.
 	for (const idx in repoResponses)
 		if (repoResponses[idx].length) {
 			const reqs = repoResponses[idx]
 			repoResponses[idx] = await Promise.allSettled(reqs)
 		}
-	
+				
 	// Process the data we received.
-	for (const idx in repoResponses) {
+	for (const [idx, resps] in Object.entries(repoResponses)) {
 		const origSearch = artSearches[idx]
-		if (repoResponses[idx]) {
-			for (let i = 0; i < repoResponses[idx].length; i++) {
-				const resp = repoResponses[idx][i]
+		for (let i = 0; i < resps.length; i++) {
+			const resp = resps[i]
 
-				if (resp.status === 'rejected') {
-					logError(resp.reason.message, `YGOrg artwork repo query for ID ${origSearch.term} failed.`)
-					continue
-				}
-	
-				if (resp.value.data) {
-					// Artworks were queried in order of ID, but are zero-indexed.
-					// Therefore, our index in the array +1 is the art ID.
-					const artId = i + 1
-					// Repo artwork should always be from Neuron.
-					await origSearch.data.addImageData(artId, resp.value.data)
-				}
+			if (resp.status === 'rejected') {
+				logError(resp.reason.message, `YGOrg artwork repo query for ID ${origSearch.term} failed.`)
+				continue
+			}
+
+			if (resp.value.data) {
+				// Artworks were queried in order of ID, but are zero-indexed.
+				// Therefore, our index in the array +1 is the art ID.
+				const artId = i + 1
+				await origSearch.data.addImageData(artId, resp.value.data)
 			}
 		}
 	}
@@ -395,36 +405,6 @@ function populatedRulingFromYgorgApi(apiData, ruling) {
 
 	ruling.cards = apiData.cards
 	ruling.tags = apiData.tags
-}
-
-/**
- * Populates a Ruling's associated cards (stored as database IDs) with actual Card data.
- * @param {Ruling} ruling The ruling with cards to convert.
- * @param {Array<String>} locales The locales that the ruling was queried in, so we can attempt to match these for the cards as well.
- * @param {Query} qry The query containing this Ruling.
- */
-async function populateRulingAssociatedCardsData(ruling, locales, qry) {
-	// This is in here to avoid a circular dependency. Not ideal, but easy.
-	const { processQuery } = require('handlers/QueryHandler')
-	
-	const cardSearches = []
-	for (const cid of ruling.cards) {
-		const newSearch = new Search(cid)
-		for (const l of locales)
-			// Type doesn't matter, but we need to track the important locales for this search.
-			newSearch.addTypeToLocale('i', l)
-		cardSearches.push(newSearch)
-	}
-	// Bootstrap a Query from these searches.
-	const cardQuery = new Query(cardSearches, qry.bot)
-
-	await processQuery(cardQuery)
-
-	const convertedCardData = []
-	for (const s of cardSearches) 
-		convertedCardData.push(s.data)
-	
-	ruling.cards = convertedCardData
 }
 
 /**
@@ -599,7 +579,7 @@ async function cacheNameToIdIndex(locales = Object.keys(Locales)) {
 		const localeIndex = axios.get(`${YGORG_NAME_ID_INDEX}/${l}`, {
 			'timeout': API_TIMEOUT * 1000
 		}).then(r => {
-			if (r.status === 200) return r
+			return r
 		})
 
 		apiRequests.push(localeIndex)
@@ -789,6 +769,6 @@ function searchPropertyArray(index, locale) {
 
 module.exports = {
 	cacheManifestRevision, searchYgorgDb, searchArtworkRepo, addToYgorgDb, 
-	populateCardFromYgorgApi, populateRulingFromYgorgDb, populatedRulingFromYgorgApi, populateRulingAssociatedCardsData,
-	cacheNameToIdIndex, searchNameToIdIndex, cachePropertyMetadata, searchPropertyToLocaleIndex, searchPropertyArray
+	populateCardFromYgorgApi, populateRulingFromYgorgDb, populatedRulingFromYgorgApi, cacheNameToIdIndex, 
+	searchNameToIdIndex, cachePropertyMetadata, searchPropertyToLocaleIndex, searchPropertyArray
 }

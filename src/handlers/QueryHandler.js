@@ -25,8 +25,10 @@ const userSearchCounter = new Cache({ defaultTtl: 60 * 1000 })
 
 // Cached search data. This is an object with keys mapping a search term to the associated data it resulted in.
 // Multiple keys (i.e., search terms) can match to the same Search object.
-// The contents are cleared every 24 hrs.
+// The contents are cleared automatically at certain time intervals.
 let searchCache = {}
+// Track how many hits (i.e., repeated searches) our cached data resulted in. 
+let cacheHits = 0
 
 // This defines the default path searches take through the multiple databases and APIs available to the bot.
 /**
@@ -83,6 +85,7 @@ async function processQuery(qry) {
 		if (cachedData) {
 			s.data = cachedData
 			logger.debug(`Search term ${s.term} mapped to cached result ${s.data}.`)
+			cacheHits++
 		}
 	}
 
@@ -126,6 +129,7 @@ async function processQuery(qry) {
 				// The cached data may be more "complete," and it also probably has other terms pointing to it already.
 				s.data = cachedData
 				logger.debug(`Search step ${stepSearch.name} mapped to cached result ${s.data} after original search(es) [${[...s.originals].join(', ')}] produced search term ${s.term}.`)
+				cacheHits++
 			}
 		}
 
@@ -149,9 +153,10 @@ async function processQuery(qry) {
  * only necessary since other modules need the ability to reset the cache and can't do so with a simple import.
  */
 function clearSearchCache() {
-	searchCache = {}
+	logger.info(`Search term cache cleared, was good for ${cacheHits} hits.`)
 
-	logger.info('Search term cache cleared.')
+	searchCache = {}
+	cacheHits = 0
 }
 
 /**

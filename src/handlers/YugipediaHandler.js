@@ -23,7 +23,7 @@ async function searchYugipedia(searches, qry, dataHandlerCallback) {
 			'timeout': API_TIMEOUT * 1000,
 			'params': YUGIPEDIA_API_PARAMS
 		}).then(r => {
-			if (r.status === 200) return r
+			return r
 		}).catch(err => {
 			throw new Error(`Yugipedia API query for term ${s.term} failed.`)
 		})

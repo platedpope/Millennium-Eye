@@ -76,15 +76,6 @@ module.exports = new Command({
 		// Defer reply in case this query takes a bit.
 		// await interaction.deferReply()
 		await processQuery(qry)
-
-		const report = Query.generateSearchResolutionReport(qry.searches)
-		if (report) {
-			// Couldn't resolve this, bail.
-			throw generateError(
-				`Art command could not find any data for search ${card}. This probably isn't an actual error.`,
-				'That search didn\'t find any card to display the art for.'
-			)
-		}
 		
 		// Set up all the information beforehand.
 		const artSearch = qry.searches[0]
@@ -148,8 +139,11 @@ module.exports = new Command({
 				}
 			})
 		}
-		else {
+		else if (availableArts === 1) {
 			await queryRespond(bot, interaction, '', qry, msgOptions)
+		}
+		else {
+			await queryRespond(bot, interaction, 'Could not find any art data with the given search.', qry, { ephemeral: true })
 		}
 	}
 })

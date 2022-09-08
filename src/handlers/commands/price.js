@@ -67,14 +67,6 @@ module.exports = new Command({
 		await interaction.deferReply()
 		await processQuery(qry)
 
-		const report = Query.generateSearchResolutionReport(qry.searches)
-		if (report) {
-			throw generateError(
-				`Price command could not find any data for search ${search}. This probably isn't an actual error.`,
-				'That search didn\'t find any card to display the price for.'
-			)
-		}
-
 		const priceSearch = qry.searches[0]
 		const priceFilters = {}
 		if (rarity)
