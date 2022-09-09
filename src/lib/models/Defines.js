@@ -11,6 +11,7 @@ module.exports = {
 	MESSAGE_TIMEOUT: 15,							// 15 seconds.
 	USER_TIMEOUT: 60,								// 1 minute.
 	TCGPLAYER_PRICE_TIMEOUT: 1000 * 60 * 60 * 8,	// 8 hours.
+	CACHE_TIMEOUT: 1000 * 60 * 60 * 6,				// 6 hours.
 	SEARCH_TIMEOUT_TRIGGER: 15,
 	TCGPLAYER_API_VERSION: 'v1.39.0',
 	TCPLAYER_LOGO: 'https://cdn.discordapp.com/attachments/558000214087172101/964575710566051860/unknown.png',

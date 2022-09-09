@@ -3,7 +3,7 @@ const Cache = require('timed-cache')
 
 const Query = require('lib/models/Query')
 const { MillenniumEyeBot } = require('lib/models/MillenniumEyeBot')
-const { SEARCH_TIMEOUT_TRIGGER } = require('lib/models/Defines')
+const { SEARCH_TIMEOUT_TRIGGER, CACHE_TIMEOUT } = require('lib/models/Defines')
 const { logger, logError } = require('lib/utils/logging')
 const { searchKonamiDb } = require('./KonamiDBHandler')
 const { searchYgorgDb } = require('./YGOrgDBHandler')
@@ -27,8 +27,6 @@ const userSearchCounter = new Cache({ defaultTtl: 60 * 1000 })
 // Multiple keys (i.e., search terms) can match to the same Search object.
 // The contents are cleared automatically at certain time intervals.
 let searchCache = {}
-// Track how many hits (i.e., repeated searches) our cached data resulted in. 
-let cacheHits = 0
 
 // This defines the default path searches take through the multiple databases and APIs available to the bot.
 /**
@@ -83,9 +81,9 @@ async function processQuery(qry) {
 		const cachedData = searchCache[s.term]
 		// We've seen this before, grab it from the cache.
 		if (cachedData) {
-			s.data = cachedData
+			s.data = cachedData.data
 			logger.debug(`Search term ${s.term} mapped to cached result ${s.data}.`)
-			cacheHits++
+			cachedData.lastAccess = Date.now()
 		}
 	}
 
@@ -127,22 +125,27 @@ async function processQuery(qry) {
 			if (cachedData) {
 				// Update our search data to point to what was cached rather than what we just found.
 				// The cached data may be more "complete," and it also probably has other terms pointing to it already.
-				s.data = cachedData
+				s.data = cachedData.data
 				logger.debug(`Search step ${stepSearch.name} mapped to cached result ${s.data} after original search(es) [${[...s.originals].join(', ')}] produced search term ${s.term}.`)
-				cacheHits++
+				cachedData.lastAccess = Date.now()
 			}
 		}
 
 		// Cache the successes and log them out.
 		for (const s of searchesToEval)
-			if (s.isDataFullyResolved()) {
+			// Don't cache Q&A searches, they already go into the YGOrg database which is effectively a Q&A-specific cache.
+			if (s.isDataFullyResolved() && !s.hasType('q')) {
 				logger.info(`Search step ${stepSearch.name} finished resolving original search(es) [${[...s.originals].join(', ')}] to ${s.data}. Updating cache.`)
 
+				const cacheData = {
+					data: s.data,
+					lastAccess: Date.now()
+				}
 				for (const ot of s.originals)
 					if (!(ot in searchCache))
-						searchCache[ot] = s.data
+						searchCache[ot] = cacheData
 				if (!(s.term in searchCache))
-					searchCache[s.term] = s.data
+					searchCache[s.term] = cacheData
 			}
 	}
 }
@@ -153,10 +156,19 @@ async function processQuery(qry) {
  * only necessary since other modules need the ability to reset the cache and can't do so with a simple import.
  */
 function clearSearchCache() {
-	logger.info(`Search term cache cleared, was good for ${cacheHits} hits.`)
+	const clearedItems = 0
 
-	searchCache = {}
-	cacheHits = 0
+	const searchTerms = Object.keys(searchCache)
+	for (let i = 0; i < searchTerms.length; i++) {
+		const termLastAccess = searchCache[searchTerms[i]].lastAccess
+		if ((Date.now() - termLastAccess) > CACHE_TIMEOUT) {
+			delete searchCache[searchTerms[i]]
+			clearedItems++
+		}
+	}
+
+	logger.info(`Search term cache clear periodic evicted ${clearedItems} stale items from the cache.`)
+	cacheCheck()
 }
 
 /**
@@ -243,6 +255,46 @@ async function queryRespond(bot, origMessage, replyContent, qry, replyOptions) {
 	}
 
 	return reply
+}
+
+/**
+ * This is simply a helper function to move through the cache and check its contents.
+ * Primarily this is used as a means of making sure it's caching data properly (i.e., no repeats),
+ * to avoid memory leaks or just unnecessary re-allocation.
+ */
+function cacheCheck() {
+	const consolidatedCache = {}
+
+	for (const [term, cacheEntry] of Object.entries(searchCache)) {
+		const cacheData = cacheEntry.data
+		// Rulings don't have names. They shouldn't be getting cached anyway, but skip them just in case.
+		let dataName = cacheData.name
+		if (dataName) dataName = dataName.get('en')
+
+		const consolEntry = consolidatedCache[dataName]
+		if (consolEntry) {
+			if (cacheData === consolEntry.data) {
+				consolEntry.terms.push(term)
+			}
+			else {
+				logger.warn(`Cache check found data name ${dataName} that points to two different underlying data objects. Possible caching problem?`)
+			}
+		}
+		else if (dataName) {
+			consolidatedCache[dataName] = {
+				data: cacheData,
+				terms: [term]
+			}
+		}
+	}
+
+	logger.debug('Final cache check details:')
+	logger.debug('=================================')
+	logger.debug(`Distinct entries: ${Object.keys(consolidatedCache).length}`)
+	for (const [name, cacheEntry] of Object.entries(consolidatedCache)) {
+		logger.debug(`- ${name}: ${cacheEntry.terms.length} associated search terms (${cacheEntry.terms.join(', ')})`)
+	}
+	logger.debug('=================================')
 }
 
 module.exports = {

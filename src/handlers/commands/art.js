@@ -76,7 +76,11 @@ module.exports = new Command({
 		// Defer reply in case this query takes a bit.
 		// await interaction.deferReply()
 		await processQuery(qry)
-		
+		if (!artSearch.data) {
+			await queryRespond(bot, interaction, 'Could not find any art data with the given search.', qry, { ephemeral: true })
+			return
+		}
+
 		// Set up all the information beforehand.
 		const artSearch = qry.searches[0]
 		let viewedArt = 1

@@ -239,7 +239,7 @@ async function searchYgorgDb(searches, qry, dataHandlerCallback) {
 			const qaSearch = qaApiSearches[i]
 
 			if (qaResponse.status === 'rejected') {
-				logError(qaResponse.reason.message, `YGOrg API query for QA ID ${qaSearch.term} failed.`)
+				// logError(qaResponse.reason.message, `YGOrg API query for QA ID ${qaSearch.term} failed.`)
 				continue
 			}
 
@@ -257,7 +257,7 @@ async function searchYgorgDb(searches, qry, dataHandlerCallback) {
 			const cardSearch = cardApiSearches[i]
 
 			if (cardResponse.status === 'rejected') {
-				logError(cardResponse.reason.message, `YGOrg API query for card ID ${cardSearch.term} failed.`)
+				// logError(cardResponse.reason.message, `YGOrg API query for card ID ${cardSearch.term} failed.`)
 				continue
 			}
 
