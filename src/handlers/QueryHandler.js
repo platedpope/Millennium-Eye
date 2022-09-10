@@ -156,7 +156,7 @@ async function processQuery(qry) {
  * only necessary since other modules need the ability to reset the cache and can't do so with a simple import.
  */
 function clearSearchCache() {
-	const clearedItems = 0
+	let clearedItems = 0
 
 	const searchTerms = Object.keys(searchCache)
 	for (let i = 0; i < searchTerms.length; i++) {

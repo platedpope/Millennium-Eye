@@ -1,4 +1,7 @@
+const heapdump = require('heapdump')
+
 const Command = require('lib/models/Command')
+const config = require('config')
 
 module.exports = new Command({
 	name: 'ping',
@@ -11,5 +14,10 @@ module.exports = new Command({
 	execute: async (interaction, bot) => {
 		await interaction.reply('Pinging...')
 		await interaction.editReply(`🏓 Pong! Latency: ${bot.ws.ping} ms`)
+
+		// For testing purposes only, create a heapdump for memory analysis.
+		if (config.testMode) {
+			heapdump.writeSnapshot()
+		}
 	}
 })
