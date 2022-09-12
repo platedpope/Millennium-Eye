@@ -75,9 +75,11 @@ class Card {
 			var locale = options.locale
 		if ('official' in options)
 			var official = options.official
-		if ('rulings' in options)
-			var rulings = options.rulings
+		if (options.rulings)
+			// This is a rulings channel. Rulings should be true unless this is an 'i'-type query.
+			var rulings = type !== 'i'
 		else
+			// This isn't a rulings channel. Rulings should only be true if this is an 'r'-type query.
 			rulings = type === 'r'
 
 		if (type === 'i' || type === 'r' || type === 'p') {
