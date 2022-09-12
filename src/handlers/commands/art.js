@@ -6,6 +6,7 @@ const Query = require('lib/models/Query')
 const Search = require('lib/models/Search')
 const { queryRespond, processQuery } = require('handlers/QueryHandler')
 const { generateError } = require('lib/utils/logging')
+const { searchNameToIdIndex } = require('handlers/YGOrgDBHandler')
 
 /**
  * Helper function to generate the select menu for which art to display.
@@ -57,6 +58,7 @@ module.exports = new Command({
 				name: 'card',
 				description: 'The card to search for (name or database ID).',
 				type: CommandTypes.STRING,
+				autocomplete: true,
 				required: true
 			}
 		]
@@ -150,5 +152,24 @@ module.exports = new Command({
 		else {
 			await queryRespond(bot, interaction, 'Could not find any art data with the given search.', qry, { ephemeral: true })
 		}
+	},
+	autocomplete: async (interaction, bot) => {
+		const focus = interaction.options.getFocused(true)
+		const search = focus.value.toLowerCase()
+		const locale = bot.getCurrentChannelSetting(interaction.channel, 'locale')
+
+		const matches = searchNameToIdIndex(search, [locale], 25, true)
+
+		const options = []
+		matches.forEach((score, m) => {
+			// Matches return in the form "Name|ID". We need both, name is what we display while ID is what the choice maps to.
+			const parseMatch = m.split('|')
+			const name = parseMatch[0]
+			const id = parseMatch[1]
+
+			options.push({ name: name, value: id })
+		})
+
+		await interaction.respond(options)
 	}
 })

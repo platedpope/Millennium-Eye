@@ -3,6 +3,7 @@ const { CommandTypes } = require('lib/models/Defines')
 const Query = require('lib/models/Query')
 const { processQuery, updateUserTimeout, queryRespond } = require('handlers/QueryHandler')
 const config = require('config')
+const { searchNameToIdIndex } = require('handlers/YGOrgDBHandler')
 
 module.exports = new Command({
 	name: 'query',
@@ -15,6 +16,7 @@ module.exports = new Command({
 				name: 'content',
 				description: 'The content of the query, same as an ordinary message.',
 				type: CommandTypes.STRING,
+				autocomplete: true,
 				required: true
 			}
 		]
@@ -59,6 +61,24 @@ module.exports = new Command({
 		const report = Query.generateSearchResolutionReport(qry.searches)
 
 		await queryRespond(bot, interaction, report, qry, replyOptions)
-		
+	},
+	autocomplete: async (interaction, bot) => {
+		const focus = interaction.options.getFocused(true)
+		const search = focus.value.toLowerCase()
+		const locale = bot.getCurrentChannelSetting(interaction.channel, 'locale')
+
+		const matches = searchNameToIdIndex(search, [locale], 25, true)
+
+		const options = []
+		matches.forEach((score, m) => {
+			// Matches return in the form "Name|ID". We need both, name is what we display while ID is what the choice maps to.
+			const parseMatch = m.split('|')
+			const name = parseMatch[0]
+			const id = parseMatch[1]
+
+			options.push({ name: name, value: id })
+		})
+
+		await interaction.respond(options)
 	}
 })

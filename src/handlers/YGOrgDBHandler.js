@@ -624,9 +624,10 @@ async function cacheNameToIdIndex(locales = Object.keys(Locales)) {
  * @param {String} search The value to search for. 
  * @param {Array<String>} locales The array of locales to search for.
  * @param {Number} returnMatches The number of matches to return, sorted in descending order (better matches first).
+ * @param {Boolean} returnNames Whether to return the names of what was matched in addition to IDs.
  * @returns {Map<Number, Number>} Relevant matches mapped to their score.
  */
-function searchNameToIdIndex(search, locales, returnMatches = 1) {
+function searchNameToIdIndex(search, locales, returnMatches = 1, returnNames = false) {
 	// First make sure we've got everything cached.
 	cacheNameToIdIndex(locales)
 	// Note: in rare scenarios this can cache something but evict another (if a manifest revision demands it),
@@ -638,7 +639,7 @@ function searchNameToIdIndex(search, locales, returnMatches = 1) {
 		if (!(l in nameToIdIndex)) continue
 
 		const searchFilter = new CardDataFilter(nameToIdIndex[l], search, 'CARD_NAME')
-		const localeMatches = searchFilter.filterIndex(returnMatches)
+		const localeMatches = searchFilter.filterIndex(returnMatches, returnNames)
 		localeMatches.forEach((score, id) => {
 			if (score > 0)
 				matches.set(id, Math.max(score, matches.get(id) || 0))

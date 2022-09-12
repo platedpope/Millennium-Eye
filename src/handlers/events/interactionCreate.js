@@ -40,5 +40,14 @@ module.exports = new Event({
 					await interaction.editReply(iResponse)
 			}
 		}
+		else if (interaction.isAutocomplete()) {
+			const command = bot.commands.get(interaction.commandName)
+			if (!command) return
+			
+			try { await command.autocomplete(interaction, bot) }
+			catch (err) {
+				logError(err, 'Autocomplete interaction failed.', interaction)
+			}
+		}
 	}
 })

@@ -4,6 +4,7 @@ const Query = require('lib/models/Query')
 const Search = require('lib/models/Search')
 const { processQuery, queryRespond } = require('handlers/QueryHandler')
 const { generateError } = require('lib/utils/logging')
+const { searchNameToIdIndex } = require('handlers/YGOrgDBHandler')
 
 module.exports = new Command({
 	name: 'price',
@@ -16,7 +17,8 @@ module.exports = new Command({
 				name: 'search',
 				description: 'The set or card name to search for.',
 				type: CommandTypes.STRING,
-				required: true,
+				autocomplete: true,
+				required: true
 			},
 			{
 				name: 'rarity',
@@ -85,5 +87,26 @@ module.exports = new Command({
 		}
 		
 		await queryRespond(bot, interaction, '', qry, msgOptions)
+	},
+	autocomplete: async (interaction, bot) => {
+		const focus = interaction.options.getFocused(true)
+
+		if (focus.name === 'search') {
+			const search = focus.value.toLowerCase()
+			const locale = bot.getCurrentChannelSetting(interaction.channel, 'locale')
+			const matches = searchNameToIdIndex(search, [locale], 25, true)
+
+			const options = []
+			matches.forEach((score, m) => {
+				// Matches return in the form "Name|ID". We need both, name is what we display while ID is what the choice maps to.
+				const parseMatch = m.split('|')
+				const name = parseMatch[0]
+				const id = parseMatch[1]
+	
+				options.push({ name: name, value: id })
+			})
+	
+			await interaction.respond(options)
+		}
 	}
 })
