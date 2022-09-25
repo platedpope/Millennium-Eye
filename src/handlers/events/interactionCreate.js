@@ -12,12 +12,12 @@ module.exports = new Event({
 	 * @param {Discord.Interaction} interaction 
 	 */
 	execute: async (bot, interaction) => {
-		if (!bot.isReady) {
-			await interaction.followUp( { content: 'The bot was recently booted and is not ready yet. Try again in a bit...', ephemeral: true } )
-			return
-		}
-
 		if (interaction.isCommand()) {
+			if (!bot.isReady) {
+				await interaction.reply( { content: 'The bot was recently booted and is not ready yet. Try again in a bit...', ephemeral: true } )
+				return
+			}
+
 			const command = bot.commands.get(interaction.commandName)
 			if (!command) return await interaction.followUp({ content: 'This command no longer exists.' }) && bot.commands.delete(interaction.commandName)
 
