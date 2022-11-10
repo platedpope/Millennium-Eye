@@ -34,9 +34,9 @@ module.exports = new Event({
 				})
 				return
 			}
-		}
 			
-		await message.channel.sendTyping()
+			await message.channel.sendTyping()
+		}
 		
 		await processQuery(qry)
 		
