@@ -289,7 +289,7 @@ async function searchArtworkRepo(artSearches) {
 		}
 
 		try {
-			await axios.get(`${YGORG_ARTWORK_API}/manifest.json`, {
+			const resp = await axios.get(`${YGORG_ARTWORK_API}/manifest.json`, {
 				'timeout': API_TIMEOUT * 1000
 			})
 			handleResponse(resp)

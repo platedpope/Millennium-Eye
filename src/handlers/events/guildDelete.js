@@ -14,5 +14,7 @@ module.exports = new Event({
 		// Delete from cache if applicable.
 		bot.guildSettings.remove(guild.id)
 		bot.guildQueries.remove(guild.id)
+		// Also any channels in this server.
+		guild.channels.cache.forEach(ch => bot.channelSettings.remove(ch.id))
 	}
 })
