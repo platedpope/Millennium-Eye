@@ -11,6 +11,7 @@ class MillenniumEyeBot extends Client {
 	constructor() {
 		super({ 
 			intents: [
+				GatewayIntentBits.MessageContent,
 				GatewayIntentBits.Guilds,
 				GatewayIntentBits.GuildMessages,
 				GatewayIntentBits.GuildMessageTyping,
