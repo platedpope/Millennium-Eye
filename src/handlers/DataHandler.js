@@ -1,3 +1,5 @@
+const fs = require('fs')
+
 const Card = require('lib/models/Card')
 const Query = require('lib/models/Query')
 const Ruling = require('lib/models/Ruling')
@@ -19,6 +21,29 @@ function convertKonamiDataToSearchData(resolvedSearches) {
 		if (!(s.data instanceof Card)) s.data = new Card()
 		populateCardFromKonamiData(s.rawData, s.data)
 		s.rawData = undefined
+
+		// Also add Master Duel high-res artwork if possible.
+		// Master Duel has "common" and "tcg" art, where "tcg" is art that's censored in the TCG.
+		let artPath = `${process.cwd()}/data/card_images`
+		const commonArtPath = artPath + `/common/${s.data.dbId}.png`
+		const tcgArtPath = artPath + `/tcg/${s.data.dbId}.png`
+		let hasMasterDuelArtwork = false
+		if (fs.existsSync(commonArtPath)) {
+			artPath = commonArtPath
+			hasMasterDuelArtwork = true
+		}
+		else if (fs.existsSync(tcgArtPath)) {
+			artPath = tcgArtPath
+			hasMasterDuelArtwork = true
+		}
+		if (hasMasterDuelArtwork) {
+			// If this card only has one art from Neuron (i.e., no alts), then just get rid of it.
+			// The Master Duel high res version will be a dupe, but much better.
+			if (s.data.imageData.size === 1) {
+				s.data.imageData.clear()
+			}
+			s.data.imageData.set('md', artPath)
+		}
 	}
 }
 

@@ -25,7 +25,7 @@ module.exports = new Event({
 				// Probably didn't have permissions. Just ignore this.
 			}
 
-		if (qry.searches.length !== 0)  {
+		if (qry.searches.length)  {
 			// Let the user know if they're timed out.
 			if (updateUserTimeout(message.author.id, qry.searches.length)) {
 				await message.reply({
@@ -36,21 +36,21 @@ module.exports = new Event({
 			}
 			
 			await message.channel.sendTyping()
-		}
 		
-		await processQuery(qry)
-		
-		const embedData = await qry.getDataEmbeds()
-		// Build message data.
-		const replyOptions = { 
-			allowedMentions: { repliedUser: false }
+			await processQuery(qry)
+			
+			const embedData = await qry.getDataEmbeds()
+			// Build message data.
+			const replyOptions = { 
+				allowedMentions: { repliedUser: false }
+			}
+			if ('embeds' in embedData)
+				replyOptions.embeds = embedData.embeds
+			if ('attachments' in embedData)
+				replyOptions.files = embedData.attachments
+			const report = Query.generateSearchResolutionReport(qry.searches)
+	
+			await queryRespond(bot, message, report, qry, replyOptions)
 		}
-		if ('embeds' in embedData)
-			replyOptions.embeds = embedData.embeds
-		if ('attachments' in embedData)
-			replyOptions.files = embedData.attachments
-		const report = Query.generateSearchResolutionReport(qry.searches)
-
-		await queryRespond(bot, message, report, qry, replyOptions)
 	}
 })

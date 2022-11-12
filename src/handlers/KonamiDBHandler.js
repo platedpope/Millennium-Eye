@@ -1,5 +1,6 @@
 const Database = require('better-sqlite3')
 const PythonShell = require('python-shell').PythonShell
+const fs = require('fs')
 
 const { searchNameToIdIndex } = require('./YGOrgDBHandler')
 const { KONAMI_DB_PATH, NEURON_DB_PATH } = require('lib/models/Defines')
@@ -134,8 +135,6 @@ function searchKonamiDb(searches, qry, dataHandlerCallback) {
 	const artRows = konamiDb.prepare(getArtData).all(card.dbId)
 	for (const r of artRows) 
 		card.addImageData(r.artId, r.artwork)
-
-	// TODO: Gather pricing data.
 }
 
 /**

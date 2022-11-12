@@ -602,15 +602,21 @@ class Card {
 	 * @returns The URL for the attachment, if any (null if no attachment).
 	 */
 	setEmbedImage(embed, id, thumbnail = true) {
-		// If we weren't given an explicit ID, just use the first one that's free.
-		if (!id && this.imageData.size) 
-			id = this.imageData.keys().next().value
+		// If we weren't given an explicit ID, use the Master Duel high-res artwork if we can,
+		// otherwise just use the first one that's free.
+		if (!id && this.imageData.size) {
+			if (this.imageData.has('md'))
+				id = 'md'
+			else
+				id = this.imageData.keys().next().value
+		}
+			
 		
-		let attach = null
 		const imageData = this.imageData.get(id)
-
 		if (!imageData)
 			return
+
+		let attach = null
 
 		if (imageData.includes('http')) {
 			// It's some URL rather than raw data.
@@ -620,20 +626,17 @@ class Card {
 				embed.setImage(imageData)
 		}
 		else {
-			// This is or was raw data that already does, or will, exist at a path on disk.
-			const artPath = `${process.cwd()}/data/card_images`
-			if (this.dbId)
-				var artFilename = `${this.dbId}_${id}`
-			else if (this.passcode)
-				artFilename = `${this.passcode}_${id}`
-			else
-				artFilename = `${sanitize(this.name.get('en'))}_${id}`
-	
-			const fullArtPath = `${artPath}/${artFilename}.png`
-			attach = fullArtPath
-			const imageName = path.basename(fullArtPath)
-
+			let artPath = imageData
+			// Our "image data" is still raw data that needs to be saved to disk.
 			if (!imageData.includes('data/card_images')) {
+				artPath = `${process.cwd()}/data/card_images/alts/`
+				if (this.dbId)
+					artPath += `${this.dbId}_${id}.png`
+				else if (this.passcode)
+					artPath += `${this.passcode}_${id}.png`
+				else
+					artPath += `${sanitize(this.name.get('en'))}_${id}.png`
+
 				// Still raw data that needs to be saved to disk.
 				let artCropDims = { 'top': 69, 'left': 32, 'width': 193, 'height': 191 }
 				// Pendulums have squished arts, so the crop needs to be different.
@@ -650,16 +653,18 @@ class Card {
 				// where the card embed is generated before the image is saved...
 				// This is a bad hack to force it to be synchronous.
 				let sync = true
-				sharp(imageData).extract(artCropDims).toFile(fullArtPath, err => {
+				sharp(imageData).extract(artCropDims).toFile(artPath, err => {
 					if (err) logError(err, 'Failed to save card cropped image.')
 					sync = false
 				})
 				while (sync) deasync.sleep(100)
 
 				// Update the image data too so we don't have to lug around a bunch of raw data.
-				this.imageData.set(id, fullArtPath)
+				this.imageData.set(id, artPath)
 			}
 
+			attach = artPath
+			const imageName = path.basename(artPath)
 			if (thumbnail)
 				embed.setThumbnail(`attachment://${imageName}`)
 			else
@@ -823,21 +828,18 @@ class Card {
 			return
 		}
 
-		// Otherwise, see if the image is saved already.
-		const artPath = `${process.cwd()}/data/card_images`
+		let artPath = `${process.cwd()}/data/card_images`
 		if (this.dbId)
-			var artFilename = `${this.dbId}_${id}`
+			artPath += `/alts/${this.dbId}_${id}.png`
 		else if (this.passcode)
-			artFilename = `${this.passcode}_${id}`
+			artPath += `/alts/${this.passcode}_${id}.png`
 		else
-			artFilename = `${sanitize(this.name.get('en'))}_${id}`
-
-		const fullArtPath = `${artPath}/${artFilename}.png`
-
-		if (fs.existsSync(fullArtPath))
-			this.imageData.set(id, fullArtPath)
+			artPath = `/alts/${sanitize(this.name.get('en'))}_${id}.png`
+		
+		if (fs.existsSync(artPath))
+			this.imageData.set(id, artPath)
 		else
-			// Save the raw data. Don't write the image to disk yet, just save the path we came up with.
+			// Save the raw data. Don't write the image to disk yet.
 			// The image will be saved to disk when necessary (i.e., when it's actually going to be used for an embed).
 			this.imageData.set(id, img)
 	}

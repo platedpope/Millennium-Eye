@@ -14,7 +14,7 @@ const { searchNameToIdIndex } = require('handlers/YGOrgDBHandler')
  * @param {Number} availableArtIds The number of available art IDs.
  * @returns {Array} The array of message rows.
  */
-function generateArtSelect(selectedId, availableArtIds, disable = false) {
+function generateArtSelect(selectedId, availableArtIds, hasMasterDuelArt, disable = false) {
 	const messageRows = []
 
 	const artRow = new ActionRowBuilder()
@@ -23,6 +23,14 @@ function generateArtSelect(selectedId, availableArtIds, disable = false) {
 		.setPlaceholder('Select Art ID')
 		.setDisabled(disable)
 	const selectOptions = []
+	if (hasMasterDuelArt)
+		selectOptions.push(
+			{
+				label: 'Master Duel (High Res)',
+				value: 'md',
+				default: selectedId === 'md'
+			}
+		)
 	for (let i = 1; i <= availableArtIds; i++)
 		selectOptions.push(
 			{
@@ -87,7 +95,17 @@ module.exports = new Command({
 
 		// Set up all the information beforehand.
 		let viewedArt = 1
+		const hasMasterDuelArt = artSearch.data.imageData.has('md')
 		let availableArts = artSearch.data.imageData.size
+		if (hasMasterDuelArt) {
+			viewedArt = 'md'
+			// Other arts are indexed by ID, so if we have any,
+			// subtract the MD art from the available count because it has no ID.
+			if (availableArts > 1) 
+				availableArts -= 1 
+		}
+		console.log(artSearch.data.imageData)
+		
 		const msgOptions = {}
 		const embedData = artSearch.data.generateArtEmbed(locale, qry.official, viewedArt)
 		if ('embed' in embedData)
@@ -97,7 +115,7 @@ module.exports = new Command({
 		
 		// Only give + handle an art selection menu if we've got more than one to choose from.
 		if (availableArts > 1) {
-			msgOptions.components = generateArtSelect(viewedArt, availableArts)
+			msgOptions.components = generateArtSelect(viewedArt, availableArts, hasMasterDuelArt)
 			msgOptions.ephemeral = true
 
 			const resp = await queryRespond(bot, interaction, '', qry, msgOptions)
@@ -113,18 +131,20 @@ module.exports = new Command({
 
 				if (/^art_id_select/.test(i.customId)) {
 					viewedArt = parseInt(i.values[0], 10)
+					if (isNaN(viewedArt))
+						viewedArt = i.values[0]
 					const embedData = artSearch.data.generateArtEmbed(locale, qry.official, viewedArt)
 					if ('embed' in embedData)
 						msgOptions.embeds = [embedData.embed]
 					if ('attachment' in embedData)
 						msgOptions.files = [embedData.attachment]
-					msgOptions.components = generateArtSelect(viewedArt, availableArts)
+					msgOptions.components = generateArtSelect(viewedArt, availableArts, hasMasterDuelArt)
 
 					await i.update(msgOptions)
 					collector.resetTimer()
 				}
 				else if (/^confirm_art_button/.test(i.customId)) {
-					msgOptions.components = generateArtSelect(viewedArt, availableArts, true)
+					msgOptions.components = generateArtSelect(viewedArt, availableArts, hasMasterDuelArt, true)
 					i.update(msgOptions)
 					postToChat = true
 					collector.stop()
@@ -141,7 +161,7 @@ module.exports = new Command({
 					interaction.followUp(msgOptions)
 				}
 				else {
-					msgOptions.components = generateArtSelect(viewedArt, availableArts, true)
+					msgOptions.components = generateArtSelect(viewedArt, availableArts, hasMasterDuelArt, true)
 					interaction.editReply(msgOptions)
 				}
 			})
