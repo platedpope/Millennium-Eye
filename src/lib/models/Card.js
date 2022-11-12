@@ -227,11 +227,11 @@ class Card {
 	 * @param {Number} artId The ID of the art to display.
 	 * @returns The generated EmbedBuilder and its image attachment (if any).
 	 */
-	generateArtEmbed(locale, official, artId = 1) {
+	generateArtEmbed(locale, official, artId = undefined) {
 		const embedData = {}
 		
 		// We shouldn't be here with no art data, but do a final sanity check to make sure we leave if so.
-		if (!this.imageData.size || !this.imageData.get(artId)) 
+		if (!this.imageData.size) 
 			return embedData
 
 		const finalEmbed = new EmbedBuilder()
