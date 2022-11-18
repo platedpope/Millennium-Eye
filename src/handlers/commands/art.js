@@ -104,7 +104,6 @@ module.exports = new Command({
 			if (availableArts > 1) 
 				availableArts -= 1 
 		}
-		console.log(artSearch.data.imageData)
 		
 		const msgOptions = {}
 		const embedData = artSearch.data.generateArtEmbed(locale, qry.official, viewedArt)

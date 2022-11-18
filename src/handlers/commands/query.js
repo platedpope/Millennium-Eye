@@ -44,23 +44,23 @@ module.exports = new Command({
 				})
 				return
 			}
+
+			// Defer reply in case this takes a bit.
+			await interaction.deferReply()
+			await processQuery(qry)
+			
+			const embedData = await qry.getDataEmbeds()
+
+			// Build message data.
+			const replyOptions = {}
+			if ('embeds' in embedData)
+				replyOptions.embeds = embedData.embeds
+			if ('attachments' in embedData)
+				replyOptions.files = embedData.attachments
+			const report = Query.generateSearchResolutionReport(qry.searches)
+
+			await queryRespond(bot, interaction, report, qry, replyOptions)
 		}
-
-		// Defer reply in case this takes a bit.
-		await interaction.deferReply()
-		await processQuery(qry)
-		
-		const embedData = await qry.getDataEmbeds()
-
-		// Build message data.
-		const replyOptions = {}
-		if ('embeds' in embedData)
-			replyOptions.embeds = embedData.embeds
-		if ('attachments' in embedData)
-			replyOptions.files = embedData.attachments
-		const report = Query.generateSearchResolutionReport(qry.searches)
-
-		await queryRespond(bot, interaction, report, qry, replyOptions)
 	},
 	autocomplete: async (interaction, bot) => {
 		const focus = interaction.options.getFocused(true)

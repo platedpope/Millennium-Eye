@@ -5,6 +5,11 @@ const { MillenniumEyeBot } = require('./MillenniumEyeBot')
 const { KONAMI_DB_CARD_REGEX, KONAMI_DB_QA_REGEX, YGORG_DB_CARD_REGEX, YGORG_DB_QA_REGEX, IGNORE_LINKS_REGEX, Locales } = require('./Defines')
 const { logError, logger } = require('lib/utils/logging')
 
+const CODE_TAG_REGEX = /`+.*?`+/gs
+const SPOILER_REGEX = /\|{2}.*?\|{2}/gs
+const QUOTE_REGEX = /^\s*> .*$/gm
+const ANGLE_BRACKETS_REGEX = /<.*?>/gs
+
 /**
  * Container class that tracks the results of an entire query (which can contain multiple searches).
  * On top of tracking details about the channel the querying message was sent in,
@@ -78,9 +83,9 @@ class Query {
 		* - characters in quote lines (> text...)
 		* Also, convert entire message content to lowercase for case insensitivity.
 		*/
-		msgContent = msgContent.replace(/`+.*?`+/gs, '')
-			.replace(/\|{2}.*?\|{2}/gs, '')
-			.replace(/^\s*> .*$/gm, '')
+		msgContent = msgContent.replace(CODE_TAG_REGEX, '')
+			.replace(SPOILER_REGEX, '')
+			.replace(QUOTE_REGEX, '')
 			.toLowerCase()
 
 		const searchData = []
@@ -121,8 +126,12 @@ class Query {
 			}
 		}
 
-		// After checking for any matches to the query syntax,
-		// also check for database links (cards or QAs) we can use.
+		// Now look for database links. For this step, remove everything between < > (angle brackets) as well,
+		// since that's Discord syntax for "hiding" automatic link embeds,
+		// and we'll follow that paradigm by assuming the user wants to hide it from the bot too.
+		// This is done after query syntax matching to avoid conflicts with servers that use < > as their query syntax.
+		msgContent = msgContent.replace(ANGLE_BRACKETS_REGEX, '')
+
 		const cardLinks = [
 			...msgContent.matchAll(KONAMI_DB_CARD_REGEX), 
 			...msgContent.matchAll(YGORG_DB_CARD_REGEX)
@@ -137,7 +146,6 @@ class Query {
 			}
 			this.matchedDbLinks = true
 		}
-
 		const qaLinks = [
 			...msgContent.matchAll(KONAMI_DB_QA_REGEX),
 			...msgContent.matchAll(YGORG_DB_QA_REGEX)
