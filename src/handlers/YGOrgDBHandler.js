@@ -320,9 +320,10 @@ async function searchArtworkRepo(artSearches) {
 			for (const artId in cardArtData) {
 				// Send requests for each art.
 				const bestArtRepoLoc = cardArtData[artId].bestArt
-				const bestArtFullUrl = `${YGORG_ARTWORK_API}/${bestArtRepoLoc}`
-				const req = axios.get(bestArtFullUrl, {
-					'timeout': API_TIMEOUT * 1000
+				const bestArtFullUrl = new URL(bestArtRepoLoc, YGORG_ARTWORK_API)
+				const req = axios.get(bestArtFullUrl.toString(), {
+					'timeout': API_TIMEOUT * 1000,
+					'responseType': 'arraybuffer'
 				}).then(r => {
 					return r
 				})
@@ -338,9 +339,8 @@ async function searchArtworkRepo(artSearches) {
 			const reqs = repoResponses[idx]
 			repoResponses[idx] = await Promise.allSettled(reqs)
 		}
-				
 	// Process the data we received.
-	for (const [idx, resps] in Object.entries(repoResponses)) {
+	for (const [idx, resps] of Object.entries(repoResponses)) {
 		const origSearch = artSearches[idx]
 		for (let i = 0; i < resps.length; i++) {
 			const resp = resps[i]
