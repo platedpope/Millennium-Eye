@@ -393,6 +393,8 @@ async function searchArtworkRepo(artSearches) {
 function populatedRulingFromYgorgApi(apiData, ruling) {
 	const qaData = apiData.qaData
 	for (const locale in qaData) {
+		// Ignore outdated translations.
+		if (qaData[locale].translationStatus === 'outdated') continue
 		// For some reason QA IDs are buried in each locale. Just use the first one we come across,
 		// the rest are always the same.
 		if (!ruling.id) ruling.id = qaData[locale].id
