@@ -1,4 +1,4 @@
-const { ActionRowBuilder, ButtonBuilder, SelectMenuBuilder, CommandInteraction, TextChannel, PermissionFlagsBits } = require('discord.js')
+const { ActionRowBuilder, ButtonBuilder, StringSelectMenuBuilder, CommandInteraction, TextChannel, PermissionFlagsBits, ChannelSelectMenuBuilder, ChannelType } = require('discord.js')
 
 const config = require('config')
 const { generateError } = require('lib/utils/logging')
@@ -58,7 +58,7 @@ function generateServerComponents(interaction, disable = false) {
 	messageRows.push(rulingsRow)
 
 	const localeRow = new ActionRowBuilder()
-	const localeSelect = new SelectMenuBuilder()
+	const localeSelect = new StringSelectMenuBuilder()
 		.setCustomId(`guild_locale_select`)
 		.setPlaceholder('Select Locale')
 		.setDisabled(disable)
@@ -96,9 +96,11 @@ function generateChannelComponents(interaction, target, useMenu, disable = false
 
 	if (useMenu) {
 		const channelRow = new ActionRowBuilder()
-		const channelSelect = new SelectMenuBuilder()
+		const channelSelect = new ChannelSelectMenuBuilder()
 			.setCustomId(`channel_select`)
-			.setPlaceholder('Select Channel')
+			.setPlaceholder('Select Other Channel')
+			.addChannelTypes(ChannelType.GuildText)
+		/*
 		const channelOptions = []
 		interaction.guild.channels.cache.filter(c => c.isTextBased())
 			.each(c => {
@@ -112,6 +114,7 @@ function generateChannelComponents(interaction, target, useMenu, disable = false
 				)
 			})
 		channelSelect.addOptions(channelOptions)
+		*/
 		channelRow.addComponents(channelSelect)
 		messageRows.push(channelRow)
 	}
@@ -147,7 +150,7 @@ function generateChannelComponents(interaction, target, useMenu, disable = false
 	messageRows.push(rulingsRow)
 
 	const localeRow = new ActionRowBuilder()
-	const localeSelect = new SelectMenuBuilder()
+	const localeSelect = new StringSelectMenuBuilder()
 		.setCustomId(`channel_locale_select`)
 		.setPlaceholder('Select Locale')
 		.setDisabled(disable)
@@ -324,6 +327,7 @@ module.exports = new Command({
 					msgOptions.content = `**Channel Configuration for <#${channelTarget.id}>:**`
 				}
 				else if (/^channel_select/.test(i.customId)) {
+					console.log(i.values)
 					channelTarget = await interaction.guild.channels.fetch(i.values[0])
 					msgOptions.content = `**Channel Configuration for <#${channelTarget.id}>:**`
 				}

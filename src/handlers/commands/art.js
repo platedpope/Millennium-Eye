@@ -1,4 +1,4 @@
-const { ActionRowBuilder, SelectMenuBuilder, ButtonBuilder } = require('discord.js')
+const { ActionRowBuilder, StringSelectMenuBuilder, ButtonBuilder } = require('discord.js')
 
 const Command = require('lib/models/Command')
 const { CommandTypes } = require('lib/models/Defines')
@@ -18,7 +18,7 @@ function generateArtSelect(selectedId, availableArtIds, hasMasterDuelArt, disabl
 	const messageRows = []
 
 	const artRow = new ActionRowBuilder()
-	const artSelect = new SelectMenuBuilder()
+	const artSelect = new StringSelectMenuBuilder()
 		.setCustomId(`art_id_select`)
 		.setPlaceholder('Select Art ID')
 		.setDisabled(disable)

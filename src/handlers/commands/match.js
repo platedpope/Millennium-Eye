@@ -1,4 +1,4 @@
-const { ActionRowBuilder, SelectMenuBuilder, ButtonBuilder } = require('discord.js')
+const { ActionRowBuilder, StringSelectMenuBuilder, ButtonBuilder } = require('discord.js')
 const { processQuery, queryRespond } = require('handlers/QueryHandler')
 const { searchNameToIdIndex } = require('handlers/YGOrgDBHandler')
 const Command = require('lib/models/Command')
@@ -18,7 +18,7 @@ function generateMatchSelect(selectedMatch, availableMatches, locale, disable = 
 	const messageRows = []
 
 	const matchRow = new ActionRowBuilder()
-	const matchSelect = new SelectMenuBuilder()
+	const matchSelect = new StringSelectMenuBuilder()
 		.setCustomId(`match_id_select`)
 		.setPlaceholder('Select Card Name')
 		.setDisabled(disable)
