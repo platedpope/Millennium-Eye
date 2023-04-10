@@ -105,7 +105,8 @@ function convertYugipediaDataToSearchData(searches, qry) {
 				// Ignore ones with "(anime)" in their name unless our search term includes it.
 				// Otherwise they tend to saturate the first results.
 				const termString = String(s.term)
-				if (page.title.includes('(anime)') && !termString.includes('anime'))
+				if ((page.title.includes('(anime)') && !termString.includes('anime')) ||
+					(page.title.includes('(manga)') && !termString.includes('manga')))
 					continue
 				
 				bestPage = page

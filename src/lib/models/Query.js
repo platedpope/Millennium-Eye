@@ -113,7 +113,10 @@ class Query {
 						const currType = sType.charAt(i)
 						// Try converting the search to an integer to see if it's a card or ruling ID.
 						let intSContent = parseInt(sContent, 10)
-						if (!isNaN(intSContent)) {
+						// parseInt stops at the first invalid character, so for strings that start with a number but have non-numeral digits,
+						// e.g., "9-volt", it just returns "9" which is incorrect. 
+						// Use type coercion on the string itself to parse the entirety of the string as a sanity check + parseInt to rule out whitespace and other issues.
+						if (!isNaN(sContent) && !isNaN(intSContent)) {
 							// Special case: there is a card named "7"...
 							if (currType !== 'q' && sContent !== '7') {
 								sContent = intSContent

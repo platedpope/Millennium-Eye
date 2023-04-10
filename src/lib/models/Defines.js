@@ -115,16 +115,16 @@ module.exports = {
 		'Konami DB Logo': 'https://cdn.discordapp.com/attachments/549781799484522518/627857980389589002/yugioh.png',
 	},
 	EmbedColors: {
-		'Effect': '0xFF8B53',
-		'Fusion': '0xA086B7',
-		'Xyz': '0x111111',
-		'Synchro': '0xFEFEFE',
-		'Ritual': '0x9DB5CC',
-		'Link': '0x00008B',
-		'Normal': '0xFDE68A',
-		'spell': '0x1D9E74',
-		'trap': '0xBC5A84',
-		'None': '0x000000'
+		'Effect': 0xFF8B53,
+		'Fusion': 0xA086B7,
+		'Xyz': 0x111111,
+		'Synchro': 0xFEFEFE,
+		'Ritual': 0x9DB5CC,
+		'Link': 0x00008B,
+		'Normal': 0xFDE68A,
+		'spell': 0x1D9E74,
+		'trap': 0xBC5A84,
+		'None': 0x000000
 	},
 	BanlistStatus: {
 		'-1': 'Unreleased',

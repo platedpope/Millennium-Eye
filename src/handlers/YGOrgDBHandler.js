@@ -661,7 +661,7 @@ function searchNameToIdIndex(search, locales, returnMatches = 1, returnNames = f
 		matches.clear()
 		sortedResult.forEach(r => matches.set(r[0], r[1]))
 	}
-
+	
 	return matches
 }
 

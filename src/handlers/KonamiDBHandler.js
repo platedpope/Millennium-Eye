@@ -158,7 +158,8 @@ async function updateKonamiDb() {
 		})
 	}).catch(err => logError(err, 'Failed to update Konami database.'))
 
-	const updateNeuron = new PythonShell(`${process.cwd()}/data/neuron_crawler.py`, { pythonOptions: '-u', args: [ NEURON_DB_PATH, KONAMI_DB_PATH ] })
+	/*
+	const updateNeuron = new PythonShell(`${process.cwd()}/data/neuron_crawler.py`, { pythonOptions: '-u', args: [ NEURON_DB_PATH, KONAMI_DB_PATH, `${process.cwd()}/data/card_images/alts` ] })
 	updateNeuron.on('message', msg => console.log(msg))
 
 	await new Promise((resolve, reject) => {
@@ -170,6 +171,7 @@ async function updateKonamiDb() {
 			resolve()
 		})
 	}).catch(err => logError(err, 'Failed to update Neuron data.'))
+	*/
 }
 
 module.exports = {

@@ -264,18 +264,20 @@ async function cacheSetProductData(dataHandlerCallback) {
 					prodToModify.set = cachedProductData.sets[p.groupId]
 					prodToModify.cacheTime = modDate
 					// Rarity and print code are in the extended fields.
-					for (const eField of p.extendedData) {
-						// There are quite a few extended fields, stop iterating once we've found what we need.
-						if (prodToModify.printCode && prodToModify.rarity) break
-						// Print code is stored as "Number".
-						if (eField.name === 'Number') {
-							prodToModify.printCode = eField.value
+					if (p.extendedData) {
+						for (const eField of p.extendedData) {
+							// There are quite a few extended fields, stop iterating once we've found what we need.
+							if (prodToModify.printCode && prodToModify.rarity) break
+							// Print code is stored as "Number".
+							if (eField.name === 'Number') {
+								prodToModify.printCode = eField.value
+							}
+							else if (eField.name === 'Rarity') {
+								prodToModify.rarity = eField.value
+							}
 						}
-						else if (eField.name === 'Rarity') {
-							prodToModify.rarity = eField.value
-						}
+						updatedProducts.push(prodToModify)
 					}
-					updatedProducts.push(prodToModify)
 				}
 			}
 	

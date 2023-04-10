@@ -162,6 +162,7 @@ function clearSearchCache() {
 	for (let i = 0; i < searchTerms.length; i++) {
 		const termLastAccess = searchCache[searchTerms[i]].lastAccess
 		if ((Date.now() - termLastAccess) > CACHE_TIMEOUT) {
+			searchTerms[i] = undefined
 			delete searchCache[searchTerms[i]]
 			clearedItems++
 		}
