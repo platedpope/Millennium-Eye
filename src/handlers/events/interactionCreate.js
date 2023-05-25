@@ -12,12 +12,22 @@ module.exports = new Event({
 	 * @param {Discord.Interaction} interaction 
 	 */
 	execute: async (bot, interaction) => {
-		if (interaction.isCommand()) {
-			if (!bot.isReady) {
+		// Early bail conditions, regardless of interaction type.
+		if (!bot.isReady) {
+			if (interaction.isCommand()) {
 				await interaction.reply( { content: 'The bot was recently booted and is not ready yet. Try again in a bit...', ephemeral: true } )
-				return
 			}
+			return
+		}
+		// If the channel is null, that means the bot doesn't have permissions to view it.
+		else if (interaction.channel === null) {
+			if (interaction.isCommand()) {
+				await interaction.reply('The bot does not have permissions to view this channel and cannot respond properly.')
+			}
+			return
+		}
 
+		if (interaction.isCommand()) {
 			const command = bot.commands.get(interaction.commandName)
 			if (!command) return await interaction.followUp({ content: 'This command no longer exists.' }) && bot.commands.delete(interaction.commandName)
 
@@ -46,7 +56,8 @@ module.exports = new Event({
 			
 			try { await command.autocomplete(interaction, bot) }
 			catch (err) {
-				logError(err, 'Autocomplete interaction failed.', interaction)
+				// This log is incredibly spammy since autocomplete events fire every few hundred ms.
+				// logError(err, 'Autocomplete interaction failed.', interaction)
 			}
 		}
 	}

@@ -141,6 +141,11 @@ function searchKonamiDb(searches, qry, dataHandlerCallback) {
  * Runs the Python scripts to update our local cached Konami database.
  */
 async function updateKonamiDb() {
+	/*
+	const testVersion = new PythonShell(`${process.cwd()}/data/test_version.py`, { pythonOptions: '-u'})
+	testVersion.on('message', msg => console.log(msg))
+	*/
+	
 	const updateKonami = new PythonShell(`${process.cwd()}/data/carddata.py`, { pythonOptions: '-u', args: KONAMI_DB_PATH })
 	updateKonami.on('message', msg => console.log(msg))
 
@@ -157,6 +162,23 @@ async function updateKonamiDb() {
 			resolve()
 		})
 	}).catch(err => logError(err, 'Failed to update Konami database.'))
+
+	const updateErrata = new PythonShell(`${process.cwd()}/data/errata.py`, { pythonOptions: '-u', args: KONAMI_DB_PATH })
+	updateErrata.on('message', msg => console.log(msg))
+
+	await new Promise((resolve, reject) => {
+		updateErrata.end(err => {
+			if (err) reject(err)
+
+			logger.info('Updated database errata.')
+
+			logger.info('Regenerating Konami DB FTS index...')
+			konamiDb.prepare('INSERT INTO cards_idx(cards_idx) VALUES (\'rebuild\')').run()
+			logger.info('Done regenerating FTS index.')
+
+			resolve()
+		})
+	}).catch(err => logError(err, 'Failed to update errata.'))
 
 	/*
 	const updateNeuron = new PythonShell(`${process.cwd()}/data/neuron_crawler.py`, { pythonOptions: '-u', args: [ NEURON_DB_PATH, KONAMI_DB_PATH, `${process.cwd()}/data/card_images/alts` ] })

@@ -114,7 +114,7 @@ async function processQuery(qry) {
 			await stepSearch(searchesToEval, qry, stepHandlerCallback)
 		}
 		catch (err) {
-			logError(err, `Process query step ${stepSearch.name} encountered an error.`)
+			await logError(err, `Process query step ${stepSearch.name} encountered an error.`)
 		}
 
 		// Double check the cache again, since performing this search step might have resulted in us
@@ -240,7 +240,7 @@ async function queryRespond(bot, origMessage, replyContent, qry, replyOptions) {
 		}
 	}
 	catch (err) {
-		logError(err)
+		await logError(err)
 	}
 
 	// Cache the reply if one was sent.

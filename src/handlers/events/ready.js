@@ -84,10 +84,10 @@ module.exports = new Event({
 		// Search term cache clear: once every hour.
 		// (This doesn't actually clear the cache, it just checks for stale entries and evicts those).
 		setInterval(clearSearchCache, 60 * 60 * 1000)
+		// Konami database update: once per day.
+		await updateKonamiDb()
 		if (!config.testMode) {
-			// Konami database update: once per day.
-			// await updateKonamiDb()
-			// setInterval(updateKonamiDb, 24 * 60 * 60 * 1000)
+			setInterval(updateKonamiDb, 24 * 60 * 60 * 1000)
 			// TCGPlayer set product data update: once per day.
 			await cacheSetProductData(addTcgplayerDataToDb)
 			setInterval(cacheSetProductData, 24 * 60 * 60 * 1000, addTcgplayerDataToDb)
@@ -100,13 +100,15 @@ module.exports = new Event({
 		// YGOrg locale property metadata. Set this up on launch, but it's static, don't need to update periodically.
 		await cachePropertyMetadata()
 
-		// Set bot presence every 5 minutes because sometimes it falls off for some reason.
-		setInterval(() => {
+		const setBotPresence = () => {
 			bot.user.setPresence({ 
 				activities: [{ name: 'for /help!', type: ActivityType.Watching }],
 				status: PresenceUpdateStatus.Online
 			})
-		}, 5 * 60 * 1000)
+		}
+		setBotPresence()
+		// Set bot presence every 5 minutes because sometimes it falls off for some reason.
+		setInterval(setBotPresence, 5 * 60 * 1000)
 
 		logger.info('Bot has finished initialization!')
 		bot.isReady = true
