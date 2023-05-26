@@ -17,7 +17,6 @@ module.exports = new Event({
 		logger.info(`Joined server ${guild.name}!`)
 
 		// Set up default query syntax.
-		const defRegex = setupQueryRegex(config.defaultOpen, config.defaultClose)
-		bot.guildQueries.put([guild.id, 'default'], defRegex)
+		bot.setGuildQuery(guild, config.defaultOpen, config.defaultClose, 'default')
 	}
 })

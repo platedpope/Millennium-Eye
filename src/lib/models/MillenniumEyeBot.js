@@ -105,8 +105,7 @@ class MillenniumEyeBot extends Client {
 	 * @param {String} locale The locale associated with the query syntax.
 	 */
 	setGuildQuery(guild, open, close, locale) {
-		let readdDefault = false
-		const fullLocale = Locales[locale]
+		const fullLocale = Locales[locale] ?? 'default'
 		// Check to make sure no other different-locale syntax is using those symbols.
 		// Overwriting the same locale with a different syntax is fine.
 		const currQueries = this.guildSettings.get([guild.id, 'queries'])
@@ -127,30 +126,12 @@ class MillenniumEyeBot extends Client {
 							`This syntax is already being used for **${conflictedLocale}** queries. No changes were made.`
 						)
 				}
-				// We're overwriting the old symbols with new ones.
-				// Check to see if the old ones were the "default", because if so we need to re-add the default after these change.
-				else if (qLocale === locale) {
-					if (currQueries[qLocale]['open'] === config.defaultOpen &&
-						currQueries[qLocale]['close'] === config.defaultClose)
-					{
-						readdDefault = true
-						break
-					}
-				}
 			}
 		}
 
 		const queryRegex = setupQueryRegex(open, close)
 		this.guildSettings.put([guild.id, 'queries', locale], { 'open': open, 'close': close })
 		this.guildQueries.put([guild.id, locale], queryRegex)
-		// If this syntax was the same as default syntax, then remove the previous default.
-		if (open === config.defaultOpen && config.defaultClose) {
-			this.guildQueries.remove([guild.id, 'default'])
-		}
-		// Alternatively, if the default was gone but this addition warrants readding it, then do so.
-		else if (readdDefault) {
-			this.guildQueries.put([guild.id, 'default'], setupQueryRegex(config.defaultOpen, config.defaultClose))
-		}
 	}
 
 	/**

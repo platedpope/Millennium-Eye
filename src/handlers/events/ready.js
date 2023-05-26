@@ -62,30 +62,30 @@ module.exports = new Event({
 			logError(err, 'Failed to refresh application commands.')
 		}
 
-		// Set up all our caches and periodics updates.
-		
-		// Add the default regex to every server, if it doesn't already have a language with the default syntax.
-		const defRegex = setupQueryRegex(config.defaultOpen, config.defaultClose)
+		// Initialize default query syntax in every server.
 		bot.guilds.cache.forEach(g => {
-			let needsDefault = true
-			const guildQuerySyntax = bot.guildSettings.get([g.id, 'queries'])
+			const guildQuerySyntax = bot.getGuildQueries(g)
 			if (guildQuerySyntax) {
-				for (const [locale, symbols] of Object.entries(guildQuerySyntax))
-					if (symbols.open === config.defaultOpen && symbols.close === config.defaultClose) {
-						needsDefault = false
-						break
+				if (!('default' in guildQuerySyntax)) {
+					try {
+						bot.setGuildQuery(g, config.defaultOpen, config.defaultClose, 'default')
 					}
+					catch (err) {
+						// This might fail if the server already has a specific language using the default open/close syntax.
+						// If so, nothing to be done, just assume that was an intentional change on their part.
+						logger.debug(`Server ${g.name} overwrote the default syntax, skipping adding a default to their guild settings.`)
+					}
+				}
 			}
-
-			if (needsDefault) 
-				bot.guildQueries.put([g.id, 'default'], defRegex)
 		})
+
+		// Set up all our caches and periodics updates.
 		
 		// Search term cache clear: once every hour.
 		// (This doesn't actually clear the cache, it just checks for stale entries and evicts those).
 		setInterval(clearSearchCache, 60 * 60 * 1000)
 		// Konami database update: once per day.
-		await updateKonamiDb()
+		// await updateKonamiDb()
 		if (!config.testMode) {
 			setInterval(updateKonamiDb, 24 * 60 * 60 * 1000)
 			// TCGPlayer set product data update: once per day.

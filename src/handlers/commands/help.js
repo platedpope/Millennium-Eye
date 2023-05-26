@@ -37,11 +37,10 @@ module.exports = new Command({
 		if (feature === 'syntax') {
 			embedData.setTitle('Millennium Eye Help: Syntax')
 
-			const defaultSyntax = { open: config.defaultOpen, close: config.defaultClose }
-			const guildSyntaxes = bot.getGuildQueries(interaction.guild)
+			const guildSyntaxes = bot.guildSettings.get([interaction.guildId, 'queries'])
 			// If the default syntax is still available, use it. Otherwise, find the first one we can use.
 			if ('default' in guildSyntaxes)
-				var syntax = defaultSyntax
+				var syntax = guildSyntaxes['default']
 			else
 				for (const locale in guildSyntaxes) {
 					syntax = bot.guildSettings.get([interaction.guildId, 'queries', locale])

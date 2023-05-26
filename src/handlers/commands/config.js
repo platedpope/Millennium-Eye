@@ -5,8 +5,13 @@ const { generateError } = require('lib/utils/logging')
 const Command = require('lib/models/Command')
 const { CommandTypes, Locales, LocaleEmojis } = require('lib/models/Defines')
 
-// convert available locales to an array of choices that can be parsed by slash commands
 const localeChoices = []
+// Allow changing the default syntax.
+localeChoices.push({
+	'name': 'Default',
+	'value': 'default'
+})
+// Convert available locales to an array of choices that can be parsed by slash commands.
 for (const code in Locales) {
 	localeChoices.push({
 		'name': Locales[code],
@@ -272,27 +277,42 @@ module.exports = new Command({
 				const qOpen = interaction.options.getString('open', true)
 				const qClose = interaction.options.getString('close', true)
 				const qLocale = interaction.options.getString('locale', true)
-				const fullLocale = Locales[qLocale]
-				
+				let resp = ''
+
+				if (qLocale === 'default') {
+					resp = `The default query syntax for this server is now set to **${qOpen}** and **${qClose}**. ` + 
+						   'I will interpret parts of messages between these symbols as being in the language of the channel the message is sent in.'
+				}
+				else {
+					const fullLocale = Locales[qLocale]
+
+					resp = `I will now recognize parts of messages between **${qOpen}** and **${qClose}** as **${fullLocale}** queries!`
+				}
+
 				bot.setGuildQuery(interaction.guild, qOpen, qClose, qLocale)
-				let resp = `I will now recognize parts of messages between **${qOpen}** and **${qClose}** as **${fullLocale}** queries!`
-				// If this overwrote the default query syntax, let them know.
-				if (qOpen === config.defaultOpen && qClose === config.defaultClose)
-					resp += '\n\n**Note**: This syntax is the same as the one the bot defaults to when it has nothing else to go on. ' +
-							`With this change, the bot will only ever treat this syntax as evaluating ${fullLocale} queries. ` +
-							'To make use of the default again, you will have to change this locale\'s syntax to something else.'
 
 				await interaction.reply({ content: resp, ephemeral: true })
 			}
 			else if (sc === 'remove') {
 				const rLocale = interaction.options.getString('locale', true)
-				const fullLocale = Locales[rLocale]
+				const fullLocale = Locales[rLocale] ?? 'default'
 
 				const removed = bot.removeGuildQuery(interaction.guild, rLocale)
-				if (removed) 
-					await interaction.reply({ content: `I will no longer recognize parts of messages between **${removed.open}** and **${removed.close}** as ${fullLocale} queries.`, ephemeral: true })
-				else
+				if (removed === undefined) {
 					await interaction.reply({ content: `Could not find any existing query syntax associated with ${fullLocale} queries, no changes were made.`, ephemeral: true })
+				}
+				else {
+					if (rLocale === 'default') {
+						await interaction.reply({ 
+							content: `Removed **${removed.open}** and **${removed.close}** as the default query syntax for this server. ` +
+									 'Note that without a default query syntax set, the bot may not respond to messages unless they use a specific language query syntax.',
+							ephemeral: true
+						})
+					}
+					else {
+						await interaction.reply({ content: `I will no longer recognize parts of messages between **${removed.open}** and **${removed.close}** as ${fullLocale} queries.`, ephemeral: true })
+					}
+				}
 			}
 		}
 		else if (sc === 'settings') {
@@ -362,12 +382,15 @@ module.exports = new Command({
 					// Gather query syntaxes.
 					let queryString = ''
 					if (interaction.guild) {
-						const guildQueries = bot.getGuildQueries(interaction.guild)
+						const guildQueries = bot.guildSettings.get([interaction.guild.id, 'queries'])
 						// Display the default, if available, first.
-						if ('default' in guildQueries)
-							queryString += `Default (obeys channel/server locale): \`${config.defaultOpen}query contents${config.defaultClose}\`\n` 
-						for (const locale in bot.getGuildQueries(interaction.guild)) {
+						if ('default' in guildQueries) {
+							let syntax = bot.guildSettings.get([interaction.guild.id, 'queries', 'default'])
+							queryString += `Default: \`${syntax.open}query contents${syntax.close}\`\n`
+						}
+						for (const locale in guildQueries) {
 							if (locale === 'default') continue
+
 							let syntax = bot.guildSettings.get([interaction.guild.id, 'queries', locale])
 							queryString += `${LocaleEmojis[locale]} ${Locales[locale]}: \`${syntax.open}query contents${syntax.close}\`\n`
 						}
