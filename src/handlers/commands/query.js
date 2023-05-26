@@ -1,6 +1,7 @@
 const Command = require('lib/models/Command')
 const { CommandTypes } = require('lib/models/Defines')
 const Query = require('lib/models/Query')
+const Search = require('lib/models/Search')
 const { processQuery, updateUserTimeout, queryRespond } = require('handlers/QueryHandler')
 const config = require('config')
 const { searchNameToIdIndex } = require('handlers/YGOrgDBHandler')
@@ -24,14 +25,9 @@ module.exports = new Command({
 	execute: async (interaction, bot) => {
 		const qry = new Query(interaction, bot)
 
-		// If this resulted in no searches, then wrap some default query syntax around the message content to treat it as one big search.
+		// If this resulted in no searches, bootstrap a search with the text as a whole term.
 		if (!qry.searches.length) {
-			let syntax = bot.guildSettings.get([interaction.guildId, 'queries', qry.locale]) ?? 
-						// Just use default if no syntax exists for this locale.
-						 { open: config.defaultOpen, close: config.defaultClose }
-
-			const adjContent = `${syntax.open}${interaction.options.getString('content')}${syntax.close}`
-			qry.evaluateMessage(adjContent) 
+			qry.addSearch(interaction.options.getString('content'), qry.rulings ? 'r' : 'i', qry.locale)
 		}
 
 		if (qry.searches.length !== 0) {

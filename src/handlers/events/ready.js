@@ -77,6 +77,9 @@ module.exports = new Event({
 					}
 				}
 			}
+			else {
+				bot.setGuildQuery(g, config.defaultOpen, config.defaultClose, 'default')
+			}
 		})
 
 		// Set up all our caches and periodics updates.
@@ -87,7 +90,7 @@ module.exports = new Event({
 		// Konami database update: once per day.
 		// await updateKonamiDb()
 		if (!config.testMode) {
-			setInterval(updateKonamiDb, 24 * 60 * 60 * 1000)
+			// setInterval(updateKonamiDb, 24 * 60 * 60 * 1000)
 			// TCGPlayer set product data update: once per day.
 			await cacheSetProductData(addTcgplayerDataToDb)
 			setInterval(cacheSetProductData, 24 * 60 * 60 * 1000, addTcgplayerDataToDb)

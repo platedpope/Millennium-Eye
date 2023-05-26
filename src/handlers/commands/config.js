@@ -383,17 +383,20 @@ module.exports = new Command({
 					let queryString = ''
 					if (interaction.guild) {
 						const guildQueries = bot.guildSettings.get([interaction.guild.id, 'queries'])
-						// Display the default, if available, first.
-						if ('default' in guildQueries) {
-							let syntax = bot.guildSettings.get([interaction.guild.id, 'queries', 'default'])
-							queryString += `Default: \`${syntax.open}query contents${syntax.close}\`\n`
+						if (guildQueries) {
+							// Display the default, if available, first.
+							if ('default' in guildQueries) {
+								let syntax = bot.guildSettings.get([interaction.guild.id, 'queries', 'default'])
+								queryString += `Default: \`${syntax.open}query contents${syntax.close}\`\n`
+							}
+							for (const locale in guildQueries) {
+								if (locale === 'default') continue
+	
+								let syntax = bot.guildSettings.get([interaction.guild.id, 'queries', locale])
+								queryString += `${LocaleEmojis[locale]} ${Locales[locale]}: \`${syntax.open}query contents${syntax.close}\`\n`
+							}
 						}
-						for (const locale in guildQueries) {
-							if (locale === 'default') continue
-
-							let syntax = bot.guildSettings.get([interaction.guild.id, 'queries', locale])
-							queryString += `${LocaleEmojis[locale]} ${Locales[locale]}: \`${syntax.open}query contents${syntax.close}\`\n`
-						}
+						
 					}
 					// Just print out the default outside of servers.
 					else queryString += `Default (obeys channel/server locale): \`${config.defaultOpen}query contents${config.defaultClose}\`\n`
