@@ -128,6 +128,8 @@ async function processQuery(qry) {
 				s.data = cachedData.data
 				logger.debug(`Search step ${stepSearch.name} mapped to cached result ${s.data} after original search(es) [${[...s.originals].join(', ')}] produced search term ${s.term}.`)
 				cachedData.lastAccess = Date.now()
+
+				// The addition of the new search term(s) to the cache that didn't originally map to this data is done in the loop below.
 			}
 		}
 
@@ -141,6 +143,7 @@ async function processQuery(qry) {
 					data: s.data,
 					lastAccess: Date.now()
 				}
+
 				for (const ot of s.originals)
 					if (!(ot in searchCache))
 						searchCache[ot] = cacheData
@@ -158,12 +161,13 @@ async function processQuery(qry) {
 function clearSearchCache() {
 	let clearedItems = 0
 
-	const searchTerms = Object.keys(searchCache)
-	for (let i = 0; i < searchTerms.length; i++) {
-		const termLastAccess = searchCache[searchTerms[i]].lastAccess
+	const allSearches = Object.keys(searchCache)
+	for (const term of allSearches) {
+		const termLastAccess = searchCache[term].lastAccess
+		const timeSinceLastAccess = Date.now() - termLastAccess
 		if ((Date.now() - termLastAccess) > CACHE_TIMEOUT) {
-			searchTerms[i] = undefined
-			delete searchCache[searchTerms[i]]
+			logger.debug(`Evicting stale term ${term}, last accessed ${timeSinceLastAccess/1000} sec ago compared to cache timeout of ${CACHE_TIMEOUT/1000} sec.`)
+			delete searchCache[term]
 			clearedItems++
 		}
 	}

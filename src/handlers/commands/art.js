@@ -88,7 +88,7 @@ module.exports = new Command({
 		await processQuery(qry)
 		
 		const artSearch = qry.searches[0]
-		if (!artSearch.data) {
+		if (!artSearch || !artSearch.data) {
 			await queryRespond(bot, interaction, 'Could not find any art data with the given search.', qry, { ephemeral: true })
 			return
 		}

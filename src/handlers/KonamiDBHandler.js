@@ -141,11 +141,6 @@ function searchKonamiDb(searches, qry, dataHandlerCallback) {
  * Runs the Python scripts to update our local cached Konami database.
  */
 async function updateKonamiDb() {
-	/*
-	const testVersion = new PythonShell(`${process.cwd()}/data/test_version.py`, { pythonOptions: '-u'})
-	testVersion.on('message', msg => console.log(msg))
-	*/
-	
 	const updateKonami = new PythonShell(`${process.cwd()}/data/carddata.py`, { pythonOptions: '-u', args: KONAMI_DB_PATH })
 	updateKonami.on('message', msg => console.log(msg))
 
