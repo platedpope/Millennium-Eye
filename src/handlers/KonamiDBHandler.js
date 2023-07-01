@@ -15,7 +15,7 @@ const konamiDb = new Database(KONAMI_DB_PATH)
  * @param {Query} qry The query that contains all the relevant searches.
  * @param {Function} dataHandlerCallback The callback for handling the data produced by this search.
  */
-function searchKonamiDb(searches, qry, dataHandlerCallback) {
+async function searchKonamiDb(searches, qry, dataHandlerCallback) {
 	// Keep track of the searches that we've resolved during this trip through the database.
 	const resolvedSearches = []
 
@@ -62,7 +62,7 @@ function searchKonamiDb(searches, qry, dataHandlerCallback) {
 		}
 	}
 
-	dataHandlerCallback(resolvedSearches)
+	await dataHandlerCallback(resolvedSearches)
 }
 
 /**
@@ -129,12 +129,6 @@ function searchKonamiDb(searches, qry, dataHandlerCallback) {
 		if (r.cg === 'tcg') card.tcgList = r.copies
 		else if (r.cg === 'ocg') card.ocgList = r.copies
 	}
-
-	// Gather art data if necessary.
-	const getArtData = 'SELECT artId, artwork FROM card_artwork WHERE cardId = ?'
-	const artRows = konamiDb.prepare(getArtData).all(card.dbId)
-	for (const r of artRows) 
-		card.addImageData(r.artId, r.artwork)
 }
 
 /**

@@ -818,7 +818,6 @@ class Card {
 	 * it will save the image. If it's from Neuron, it will also crop the image to include just the art.
 	 * @param {Number} id The ID of the image.
 	 * @param img The raw image data or URL.
-	 * @param {Boolean} fromNeuron Whether this image comes from Neuron.
 	 * @param {Boolean} url Whether this image is a URL rather than raw data.
 	 */
 	addImageData(id, img, url = false) {

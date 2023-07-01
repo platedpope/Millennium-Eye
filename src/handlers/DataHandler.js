@@ -16,15 +16,28 @@ const { populateCardFromYugipediaApi } = require('./YugipediaHandler')
  * usable Search data (in this case, a Card object).
  * @param {Array<Search>} resolvedSearches Searches that were resolved during this run of the bot database. 
  */
-function convertKonamiDataToSearchData(resolvedSearches) {
+async function convertKonamiDataToSearchData(resolvedSearches) {
+	const cardsWithoutArt = []
+
 	for (const s of resolvedSearches) {
 		if (!(s.data instanceof Card)) s.data = new Card()
 		populateCardFromKonamiData(s.rawData, s.data)
 		s.rawData = undefined
 
+		// Find art data, which can be in one of two places:
+		// - 1. cached (saved) on disk
+		// - 2. YGOrg artwork repo
+		let artPath = `${process.cwd()}/data/card_images`
+
+		// Neuron art first, which includes all alternate artworks.
+		let numAlts = 1
+		let neuronArtPath = artPath + `alts/${s.data.dbId}_${numAlts}.png`
+		while (fs.existsSync(neuronArtPath)) {
+			s.data.imageData.set(id, neuronArtPath)
+		}
+
 		// Also add Master Duel high-res artwork if possible.
 		// Master Duel has "common" and "tcg" art, where "tcg" is art that's censored in the TCG.
-		let artPath = `${process.cwd()}/data/card_images`
 		const commonArtPath = artPath + `/common/${s.data.dbId}.png`
 		const tcgArtPath = artPath + `/tcg/${s.data.dbId}.png`
 		let hasMasterDuelArtwork = false
@@ -36,6 +49,11 @@ function convertKonamiDataToSearchData(resolvedSearches) {
 			artPath = tcgArtPath
 			hasMasterDuelArtwork = true
 		}
+		// No Master Duel art yet? Kick to the artwork repo for the lower res Neuron art.
+		else if (!s.data.imageData.size) {
+			cardsWithoutArt.push(s)
+		}
+
 		if (hasMasterDuelArtwork) {
 			// If this card only has one art from Neuron (i.e., no alts), then just get rid of it.
 			// The Master Duel high res version will be a dupe, but much better.
@@ -45,6 +63,10 @@ function convertKonamiDataToSearchData(resolvedSearches) {
 			s.data.imageData.set('md', artPath)
 		}
 	}
+
+	// Lastly, gather from artwork repo for any cards without art.
+	if (cardsWithoutArt.length)
+		await searchArtworkRepo(cardsWithoutArt)
 }
 
 /**

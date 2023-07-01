@@ -354,7 +354,7 @@ async function searchArtworkRepo(artSearches) {
 				// Artworks were queried in order of ID, but are zero-indexed.
 				// Therefore, our index in the array +1 is the art ID.
 				const artId = i + 1
-				await origSearch.data.addImageData(artId, resp.value.data)
+				origSearch.data.addImageData(artId, resp.value.data)
 			}
 		}
 	}
