@@ -14,7 +14,7 @@ module.exports = {
 	CACHE_TIMEOUT: 1000 * 60 * 60 * 6,				// 6 hours.
 	SEARCH_TIMEOUT_TRIGGER: 15,
 	TCGPLAYER_API_VERSION: 'v1.39.0',
-	TCPLAYER_LOGO: 'https://cdn.discordapp.com/attachments/558000214087172101/964575710566051860/unknown.png',
+	TCGPLAYER_LOGO: 'https://cdn.discordapp.com/attachments/1016081566541303899/1124542759240466574/resized_tcgplayer.png',
 	BOT_DB_PATH: `${process.cwd()}/data/bot.db`,
 	KONAMI_DB_PATH: `${process.cwd()}/data/carddata.db`,
 	NEURON_DB_PATH: `${process.cwd()}/data/neuron_name_rainbow`,

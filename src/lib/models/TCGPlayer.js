@@ -2,7 +2,7 @@ const { EmbedBuilder } = require('discord.js')
 const Table = require('ascii-table')
 const table = require('better-sqlite3/lib/methods/table')
 
-const { TCPLAYER_LOGO, TCGPLAYER_SET_SEARCH, TCGPLAYER_PRICE_TIMEOUT } = require('./Defines')
+const { TCGPLAYER_LOGO, TCGPLAYER_SET_SEARCH, TCGPLAYER_PRICE_TIMEOUT } = require('./Defines')
 const { logger } = require('lib/utils/logging')
 
 /**
@@ -220,7 +220,7 @@ class TCGPlayerSet {
 		// Still display the typical "author line" (name, property, link, etc.)
 		const embedName = this.fullName + ` (${this.setCode})`
 		finalEmbed.setAuthor({ name: embedName })
-		finalEmbed.setFooter({ text: 'This bot uses TCGPlayer price data, but is not endorsed or certified by TCGPlayer.', iconURL: TCPLAYER_LOGO })
+		finalEmbed.setFooter({ text: 'This bot uses TCGPlayer price data, but is not endorsed or certified by TCGPlayer.', iconURL: TCGPLAYER_LOGO })
 		finalEmbed.setTitle('View on TCGPlayer')
 		const tcgplayerUrlName = this.fullName.replace(/\s/g, '-').toLowerCase()
 		finalEmbed.setURL(`${TCGPLAYER_SET_SEARCH}${tcgplayerUrlName}?setName=${tcgplayerUrlName}`)
