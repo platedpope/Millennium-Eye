@@ -51,7 +51,8 @@ module.exports = new Event({
 			}
 			if ('embeds' in embedData) {
 				replyOptions.embeds = embedData.embeds.slice(0, 5)
-				omitResults = true
+				if (embedData.embeds.length > 5)
+					omitResults = true
 			}
 			if ('attachments' in embedData)
 				replyOptions.files = embedData.attachments.slice(0, 5)
