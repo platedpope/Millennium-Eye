@@ -35,20 +35,29 @@ module.exports = new Event({
 				return
 			}
 			
-			await message.channel.sendTyping()
+			try { await message.channel.sendTyping() }
+			catch (err) {
+				// Probably didn't have permissions. Just ignore this.
+			}
+
 		
 			await processQuery(qry)
 			
 			const embedData = await qry.getDataEmbeds()
+			let omitResults = false
 			// Build message data.
 			const replyOptions = { 
 				allowedMentions: { repliedUser: false }
 			}
-			if ('embeds' in embedData)
-				replyOptions.embeds = embedData.embeds
+			if ('embeds' in embedData) {
+				replyOptions.embeds = embedData.embeds.slice(0, 5)
+				omitResults = true
+			}
 			if ('attachments' in embedData)
-				replyOptions.files = embedData.attachments
-			const report = Query.generateSearchResolutionReport(qry.searches)
+				replyOptions.files = embedData.attachments.slice(0, 5)
+			let report = Query.generateSearchResolutionReport(qry.searches)
+			if (omitResults)
+				report += '\n**Note:** Some results were omitted because the bot will only send 5 card data embeds at a time.'
 	
 			await queryRespond(bot, message, report, qry, replyOptions)
 		}

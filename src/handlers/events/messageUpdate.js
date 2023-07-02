@@ -59,8 +59,12 @@ module.exports = new Event({
 
 			const editReply = cachedReply && cachedReply.replies.length === 1
 			// If we won't be editing a reply, turn on "typing".
-			if (!editReply)
-				await newMessage.channel.sendTyping()
+			if (!editReply) {
+				try { await newMessage.channel.sendTyping() }
+				catch (err) {
+					// Probably didn't have permissions. Just ignore this.
+				}
+			}
 		
 			await processQuery(newQry)
 

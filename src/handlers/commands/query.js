@@ -46,14 +46,18 @@ module.exports = new Command({
 			await processQuery(qry)
 			
 			const embedData = await qry.getDataEmbeds()
-
+			let omitResults = false
 			// Build message data.
 			const replyOptions = {}
-			if ('embeds' in embedData)
-				replyOptions.embeds = embedData.embeds
+			if ('embeds' in embedData) {
+				replyOptions.embeds = embedData.embeds.slice(0, 5)
+				omitResults = true
+			}
 			if ('attachments' in embedData)
-				replyOptions.files = embedData.attachments
-			const report = Query.generateSearchResolutionReport(qry.searches)
+				replyOptions.files = embedData.attachments.slice(0 , 5)
+			let report = Query.generateSearchResolutionReport(qry.searches)
+			if (omitResults)
+				report += '\n**Note:** Some results were omitted because the bot can only send 10 card data embeds at a time.'
 
 			await queryRespond(bot, interaction, report, qry, replyOptions)
 		}

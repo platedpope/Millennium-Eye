@@ -44,10 +44,15 @@ module.exports = new Event({
 				}
 
 				const iResponse = 'channelResponse' in err && err.channelResponse ? err.channelResponse : 'The bot encountered an unexpected error when running that command.'
-				if (!interaction.replied && !interaction.deferred)
-					await interaction.reply(iResponse)
-				else
-					await interaction.editReply(iResponse)
+				try {
+					if (!interaction.replied && !interaction.deferred)
+						await interaction.reply(iResponse)
+					else
+						await interaction.editReply(iResponse)
+				}
+				catch (err) {
+					// Sometimes this produces an "unknown interaction" error. No idea why.
+				}
 			}
 		}
 		else if (interaction.isAutocomplete()) {
