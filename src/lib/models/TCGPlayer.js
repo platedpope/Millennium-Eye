@@ -54,6 +54,7 @@ class TCGPlayerProduct {
 			let trimmedRarity = this.rarity !== 'Rare' ? this.rarity.replace(/\s*Rare$/, '') : this.rarity
 			// Also trim down DT and prismatic rarities, they're friggin' long otherwise.
 			trimmedRarity = trimmedRarity.replace(/Duel Terminal Technology/, 'DT')
+				.replace(/Duel Terminal/, 'DT')
 				.replace(/Prismatic/, 'Pris.')
 
 			const productData = { 

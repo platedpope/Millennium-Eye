@@ -246,23 +246,28 @@ class Query {
 			if (!s.data) continue
 			for (const [searchLocale, searchTypes] of s.localeToTypesMap) {
 				for (const t of searchTypes) {
-					let newData = await s.data.generateEmbed({
-						'type': t,
-						'locale': searchLocale,
-						'official': this.official,
-						'rulings': this.rulings,
-						'random': false
-					})
+					try {
+						let newData = await s.data.generateEmbed({
+							'type': t,
+							'locale': searchLocale,
+							'official': this.official,
+							'rulings': this.rulings,
+							'random': false
+						})
 					
-					if (newData && Object.keys(newData).length) {
-						if ('embed' in newData) {
-							if (!('embeds' in embedData)) embedData.embeds = []
-							embedData.embeds.push(newData.embed)
+						if (newData && Object.keys(newData).length) {
+							if ('embed' in newData) {
+								if (!('embeds' in embedData)) embedData.embeds = []
+								embedData.embeds.push(newData.embed)
+							}
+							if ('attachment' in newData) {
+								if (!('attachments' in embedData)) embedData.attachments = []
+								embedData.attachments.push(newData.attachment)
+							}
 						}
-						if ('attachment' in newData) {
-							if (!('attachments' in embedData)) embedData.attachments = []
-							embedData.attachments.push(newData.attachment)
-						}
+					}
+					catch (err) {
+						logError('Encountered error building data embeds for data:', s.data, err)
 					}
 				}
 			}

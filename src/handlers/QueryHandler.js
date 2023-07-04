@@ -135,20 +135,22 @@ async function processQuery(qry) {
 
 		// Cache the successes and log them out.
 		for (const s of searchesToEval)
-			// Don't cache Q&A searches, they already go into the YGOrg database which is effectively a Q&A-specific cache.
-			if (s.isDataFullyResolved() && !s.hasType('q')) {
-				logger.info(`Search step ${stepSearch.name} finished resolving original search(es) [${[...s.originals].join(', ')}] to ${s.data}. Updating cache.`)
+			if (s.isDataFullyResolved()) {
+				logger.info(`Search step ${stepSearch.name} finished resolving original search(es) [${[...s.originals].join(', ')}] to ${s.data}.`)
 
-				const cacheData = {
-					data: s.data,
-					lastAccess: Date.now()
+				// Don't cache Q&A searches, they already go into the YGOrg database which is effectively a Q&A-specific cache.
+				if (!s.hasType('q')) {
+					const cacheData = {
+						data: s.data,
+						lastAccess: Date.now()
+					}
+	
+					for (const ot of s.originals)
+						if (!(ot in searchCache))
+							searchCache[ot] = cacheData
+					if (!(s.term in searchCache))
+						searchCache[s.term] = cacheData
 				}
-
-				for (const ot of s.originals)
-					if (!(ot in searchCache))
-						searchCache[ot] = cacheData
-				if (!(s.term in searchCache))
-					searchCache[s.term] = cacheData
 			}
 	}
 }
