@@ -82,13 +82,13 @@ class Ruling {
 		finalEmbed.setAuthor({ name: replacedTitle, iconURL: konamiDbLink })
 		for (let i = 0; i < replacedQuestion.length; i++) {
 			finalEmbed.addFields({
-				name: i === 0 ? '__Question__' : 'Question (cont.)',
+				name: i === 0 ? '__Question__' : '__Question (cont.)__',
 				value: replacedQuestion[i], inline: false
 			})
 		}
 		for (let i = 0; i < replacedAnswer.length; i++) {
 			finalEmbed.addFields({
-				name: i == 0 ? '__Answer__' : '__cont.__',
+				name: i == 0 ? '__Answer__' : '__Answer (cont.)__',
 				value: replacedAnswer[i], inline: false
 			})
 		}
