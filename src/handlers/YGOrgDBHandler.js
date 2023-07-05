@@ -283,7 +283,7 @@ async function searchArtworkRepo(artSearches) {
 			// Force a re-cache of the artwork manifest once per day.
 			logger.info('Cached new artwork manifest, resetting in 24 hrs.')
 			setTimeout(() => {
-				artworkManifest = {}
+				artworkManifest = null
 				logger.info('Evicted cached artwork manifest, will re-cache the next time it is necessary.')
 			}, 24 * 60 * 60 * 1000)
 		}

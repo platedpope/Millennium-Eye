@@ -31,9 +31,12 @@ async function convertKonamiDataToSearchData(resolvedSearches) {
 
 		// Neuron art first, which includes all alternate artworks.
 		let numAlts = 1
-		let neuronArtPath = artPath + `alts/${s.data.dbId}_${numAlts}.png`
+		let neuronArtPath = artPath + `/alts/${s.data.dbId}_${numAlts}.png`
 		while (fs.existsSync(neuronArtPath)) {
-			s.data.imageData.set(id, neuronArtPath)
+			s.data.imageData.set(numAlts, neuronArtPath)
+
+			numAlts += 1
+			neuronArtPath = artPath + `/alts/${s.data.dbId}_${numAlts}.png`
 		}
 
 		// Also add Master Duel high-res artwork if possible.
