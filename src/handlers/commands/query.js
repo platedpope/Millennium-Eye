@@ -24,7 +24,6 @@ module.exports = new Command({
 		]
 	},
 	execute: async (interaction, bot) => {
-		await logError(interaction)
 		const qry = new Query(interaction, bot)
 
 		// If this resulted in no searches, bootstrap a search with the text as a whole term.
