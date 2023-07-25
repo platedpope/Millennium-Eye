@@ -118,7 +118,7 @@ class Query {
 						// Use type coercion on the string itself to parse the entirety of the string as a sanity check + parseInt to rule out whitespace and other issues.
 						if (!isNaN(sContent) && !isNaN(intSContent)) {
 							// Special case: there is a card named "7"...
-							if (currType !== 'q' && sContent !== '7') {
+							if (currType === 'q' || sContent !== '7') {
 								sContent = intSContent
 							}
 						}

@@ -1,5 +1,3 @@
-const heapdump = require('heapdump')
-
 const config = require('config')
 const { logger, logError } = require ('lib/utils/logging')
 const { MillenniumEyeBot } = require('lib/models/MillenniumEyeBot')

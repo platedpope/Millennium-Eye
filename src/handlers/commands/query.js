@@ -5,6 +5,7 @@ const Search = require('lib/models/Search')
 const { processQuery, updateUserTimeout, queryRespond } = require('handlers/QueryHandler')
 const config = require('config')
 const { searchNameToIdIndex } = require('handlers/YGOrgDBHandler')
+const { logError } = require('lib/utils/logging')
 
 module.exports = new Command({
 	name: 'query',
@@ -23,11 +24,19 @@ module.exports = new Command({
 		]
 	},
 	execute: async (interaction, bot) => {
+		await logError(interaction)
 		const qry = new Query(interaction, bot)
 
 		// If this resulted in no searches, bootstrap a search with the text as a whole term.
 		if (!qry.searches.length) {
-			qry.addSearch(interaction.options.getString('content'), qry.rulings ? 'r' : 'i', qry.locale)
+			// Make sure we convert database IDs (e.g., that we get from an autocomplete) to integers.
+			let qContent = interaction.options.getString('content')
+			let intQContent = Number(qContent)
+			// Special case: there is a card named "7"...
+			if (!isNaN(intQContent) && !(qContent === '7')) {
+				qContent = intQContent
+			}
+			qry.addSearch(qContent, qry.rulings ? 'r' : 'i', qry.locale)
 		}
 
 		if (qry.searches.length !== 0) {
