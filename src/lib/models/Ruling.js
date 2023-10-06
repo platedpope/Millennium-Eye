@@ -58,11 +58,6 @@ class Ruling {
 		let replacedAnswer = await replaceIdsWithNames(this.answer.get(locale), locale)
 		if (random)
 			replacedAnswer = `||${replacedAnswer}||`
-		// Add translation info to the answer field.
-		let dateView = `**Translated**: ${this.date.get(locale)} | **View**: ${LocaleEmojis.ja} [ja](${konamiDbLink})`
-		if (locale !== 'ja')
-			dateView += ` **·** ${LocaleEmojis[locale]} [${locale}](${ygorgDbLink})`
-		replacedAnswer = `${replacedAnswer}\n\n${dateView}`
 
 		// Some QAs have the same title and question. In those cases, just make the title the ID.
 		if (replacedTitle === replacedQuestion)
@@ -76,6 +71,18 @@ class Ruling {
 		// Maximum field length is 1024 characters. Break up questions and answers before they're too long.
 		replacedQuestion = breakUpDiscordMessage(replacedQuestion, 1024, '\n')
 		replacedAnswer = breakUpDiscordMessage(replacedAnswer, 1024, '\n')
+		// Add translation info to the end of the answer field.
+		let dateView = `**Translated**: ${this.date.get(locale)} | **View**: ${LocaleEmojis.ja} [ja](${konamiDbLink})`
+		if (locale !== 'ja')
+			dateView += ` **·** ${LocaleEmojis[locale]} [${locale}](${ygorgDbLink})`
+		const answerWithDates = replacedAnswer[replacedAnswer.length - 1] + `\n\n${dateView}`
+		if (answerWithDates.length < 1024) {
+			replacedAnswer[replacedAnswer.length - 1] = answerWithDates
+		}
+		else {
+			// If the last answer field + dates is too long, just make the dates their own field.
+			replacedAnswer.push(dateView)
+		}
 
 		const finalEmbed = new EmbedBuilder()
 
