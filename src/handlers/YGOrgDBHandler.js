@@ -133,13 +133,27 @@ async function searchYgorgDb(searches, qry, dataHandlerCallback) {
 	for (const currSearch of searches) {
 		let isQaSearch = currSearch.hasType('q')
 		let isFaqSearch = currSearch.hasType('f')
-		if (!isQaSearch && !isFaqSearch) {
-			// Only FAQ and QA searches have relevant data to be found in here.
-			// Anything else is going to need API work.
-			// Only push to the API if we have an ID to work with, though.
+		if (!isQaSearch) {
+			// Non-QA searches need database IDs, but often come in as card names.
+			// If the search term isn't a number, assume it's a name and convert it to an ID.
 			if (Number.isInteger(currSearch.term))
 				cardApiSearches.push(currSearch)
-			continue
+			else {
+				const localesToSearch = ['en']
+				for (const locale of currSearch.localeToTypesMap.keys())
+					if (!localesToSearch.includes(locale)) localesToSearch.push(locale)
+				
+				const matches = searchNameToIdIndex(currSearch.term, localesToSearch)
+				if (matches.size) {
+					const bestMatchId = matches.keys().next().value
+					const matchScore = matches.get(bestMatchId)
+					if (matchScore < 0.5) break	// Ignore scores this low, they mean we weren't really sure, this was just the least bad.
+
+					// Update the search term if we have an ID match to use.
+					currSearch.term = bestMatchId
+					cardApiSearches.push(currSearch)
+				}
+			}
 		}
 		
 		if (isQaSearch) {
@@ -176,10 +190,6 @@ async function searchYgorgDb(searches, qry, dataHandlerCallback) {
 				if (!currSearch.isDataFullyResolved() && Number.isInteger(currSearch.term))
 					cardApiSearches.push(currSearch)
 			}
-			else
-				// If there's nothing in the DB, go to the API, but only if we have an ID we're working with.
-				if (Number.isInteger(currSearch.term))
-					cardApiSearches.push(currSearch)
 		}
 	}
 
@@ -439,7 +449,7 @@ function populatedRulingFromYgorgApi(apiData, ruling) {
 			if (!card.cardType) card.cardType = localeCardData.cardType
 			// Parse monster-specific stats.
 			if (card.cardType === 'monster') {
-				if (!card.attribute && 'attribute' in localeCardData) card.property = localeCardData.attribute
+				if (!card.attribute && 'attribute' in localeCardData) card.attribute = localeCardData.attribute
 				if (!card.levelRank && !card.linkMarkers.length) {
 					if ('level' in localeCardData) card.levelRank = localeCardData.level
 					else if ('rank' in localeCardData) card.levelRank = localeCardData.rank

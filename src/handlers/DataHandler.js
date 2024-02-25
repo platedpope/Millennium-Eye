@@ -4,31 +4,42 @@ const Card = require('lib/models/Card')
 const Query = require('lib/models/Query')
 const Ruling = require('lib/models/Ruling')
 const Search = require('lib/models/Search')
-const { addTcgplayerDataToDb, searchTcgplayerData } = require('./BotDBHandler')
-const { searchKonamiDb, populateCardFromKonamiData } = require('./KonamiDBHandler')
-const { searchTcgplayer } = require('./TCGPlayerHandler')
+const { addTcgplayerDataToDb } = require('./BotDBHandler')
 const { addToYgorgDb, searchArtworkRepo, populateCardFromYgorgApi, populateRulingFromYgorgDb, populatedRulingFromYgorgApi } = require('./YGOrgDBHandler')
 const { populateCardFromYugipediaApi } = require('./YugipediaHandler')
 
 
 /**
- * This is the callback data handler for turning data from the konami database into
- * usable Search data (in this case, a Card object).
- * @param {Array<Search>} resolvedSearches Searches that were resolved during this run of the bot database. 
+ * This is the callback data handler for turning data from the YGOrg database
+ * into usable Search data (in this case, either a Card object or a Ruling object).
+ * @param {Query} qry The query containing these searches.
+ * @param {Object} qaSearches A map containing QA searches that were resolved through either the DB or API.
+ * @param {Array<Search>} cardSearches A map containing card searches that were resolved through the API.
  */
-async function convertKonamiDataToSearchData(resolvedSearches) {
-	const cardsWithoutArt = []
+async function convertYgorgDataToSearchData(qry, qaSearches, cardSearches = []) {
+	// Process the QAs.
+	for (const s of qaSearches.db) {
+		s.data = new Ruling()
+		populateRulingFromYgorgDb(s.rawData, s.data)
+		s.rawData = undefined
+	}
+	for (const s of qaSearches.api) {
+		s.data = new Ruling()
+		populatedRulingFromYgorgApi(s.rawData, s.data)
+		s.rawData = undefined
+	}
 
-	for (const s of resolvedSearches) {
+	// Process the cards we got from the API.
+	let artPath = `${process.cwd()}/data/card_images`
+	const cardsWithoutArt = []
+	for (const s of cardSearches) {
 		if (!(s.data instanceof Card)) s.data = new Card()
-		populateCardFromKonamiData(s.rawData, s.data)
+		populateCardFromYgorgApi(s.rawData, s.data)
 		s.rawData = undefined
 
 		// Find art data, which can be in one of two places:
 		// - 1. cached (saved) on disk
 		// - 2. YGOrg artwork repo
-		let artPath = `${process.cwd()}/data/card_images`
-
 		// Neuron art first, which includes all alternate artworks.
 		let numAlts = 1
 		let neuronArtPath = artPath + `/alts/${s.data.dbId}_${numAlts}.png`
@@ -65,41 +76,6 @@ async function convertKonamiDataToSearchData(resolvedSearches) {
 			}
 			s.data.imageData.set('md', artPath)
 		}
-	}
-
-	// Lastly, gather from artwork repo for any cards without art.
-	if (cardsWithoutArt.length)
-		await searchArtworkRepo(cardsWithoutArt)
-}
-
-/**
- * This is the callback data handler for turning data from the YGOrg database
- * into usable Search data (in this case, either a Card object or a Ruling object).
- * @param {Query} qry The query containing these searches.
- * @param {Object} qaSearches A map containing QA searches that were resolved through either the DB or API.
- * @param {Array<Search>} cardSearches A map containing card searches that were resolved through the API.
- */
-async function convertYgorgDataToSearchData(qry, qaSearches, cardSearches = []) {
-	// Process the QAs.
-	for (const s of qaSearches.db) {
-		s.data = new Ruling()
-		populateRulingFromYgorgDb(s.rawData, s.data)
-		s.rawData = undefined
-	}
-	for (const s of qaSearches.api) {
-		s.data = new Ruling()
-		populatedRulingFromYgorgApi(s.rawData, s.data)
-		s.rawData = undefined
-	}
-	// Process the cards we got from the API.
-	const cardsWithoutArt = []
-	for (const s of cardSearches) {
-		if (!(s.data instanceof Card)) s.data = new Card()
-		populateCardFromYgorgApi(s.rawData, s.data)
-		s.rawData = undefined
-		// If this card has no art yet, gonna need to use the artwork repo to resolve it.
-		if (!s.data.imageData.size) 
-			cardsWithoutArt.push(s)
 	}
 	// Resolve any that still don't have art.
 	if (cardsWithoutArt.length)
@@ -171,6 +147,6 @@ function cacheTcgplayerPriceData(searches) {
 }
 
 module.exports = {
-	convertKonamiDataToSearchData, convertYgorgDataToSearchData, 
+	convertYgorgDataToSearchData, 
 	convertYugipediaDataToSearchData, cacheTcgplayerPriceData
 }

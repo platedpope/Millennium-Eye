@@ -5,10 +5,9 @@ const Query = require('lib/models/Query')
 const { MillenniumEyeBot } = require('lib/models/MillenniumEyeBot')
 const { SEARCH_TIMEOUT_TRIGGER, CACHE_TIMEOUT } = require('lib/models/Defines')
 const { logger, logError } = require('lib/utils/logging')
-const { searchKonamiDb } = require('./KonamiDBHandler')
 const { searchYgorgDb } = require('./YGOrgDBHandler')
 const { searchYugipedia } = require('./YugipediaHandler')
-const { convertKonamiDataToSearchData, convertYgorgDataToSearchData, convertYugipediaDataToSearchData, cacheTcgplayerPriceData } = require('./DataHandler')
+const { convertYgorgDataToSearchData, convertYugipediaDataToSearchData, cacheTcgplayerPriceData } = require('./DataHandler')
 const { searchTcgplayer } = require('./TCGPlayerHandler')
 
 /**
@@ -42,24 +41,18 @@ const processSteps = [
 		'evaluatesTypes': new Set(['$'])
 	},
 	{
-		'searchFunction': searchKonamiDb,
-		'dataHandler': convertKonamiDataToSearchData,
-		'useForOfficial': true,
-		'evaluatesTypes': new Set(['i', 'r', 'a', 'd', '$', 'f']),
+		'searchFunction': searchYgorgDb,
+		'dataHandler': convertYgorgDataToSearchData,
+		'useForOfficial': false,
+		'evaluatesTypes': new Set(['i', 'r', 'a', 'd', 'f', 'q'])
 	},
 	// And another TCGPlayer search step because otherwise card price searches before a card's data is cached result in empty data.
-	// Going TCGPlayer -> Konami -> TCGPlayer allows the search logic to first find set price searches, then card data, then price data for that card.
+	// Going TCGPlayer -> YGOrg -> TCGPlayer allows the search logic to first find set price searches, then card data, then price data for that card.
 	{
 		'searchFunction': searchTcgplayer,
 		'dataHandler': cacheTcgplayerPriceData,
 		'useForOfficial': true,
 		'evaluatesTypes': new Set(['$'])
-	},
-	{
-		'searchFunction': searchYgorgDb,
-		'dataHandler': convertYgorgDataToSearchData,
-		'useForOfficial': false,
-		'evaluatesTypes': new Set(['i', 'r', 'a', 'd', 'f', 'q'])
 	},
 	{
 		'searchFunction': searchYugipedia,
