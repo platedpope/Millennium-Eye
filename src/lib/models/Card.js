@@ -734,6 +734,7 @@ class Card {
 		}
 		const tcgString = 'TCG'
 		const ocgString = 'OCG'
+		const mdString = 'MD'
 
 		if (this.tcgList !== null && this.tcgList !== undefined)
 			banlistStatus[BanlistStatus[this.tcgList]].push(tcgString)
@@ -752,6 +753,14 @@ class Card {
 				banlistStatus.Unlimited.push(ocgString)
 			else
 				banlistStatus.Unreleased.push(ocgString)
+		}
+		if (this.mdList !== null && this.mdList !== undefined)
+			banlistStatus[BanlistStatus[this.mdList]].push(mdString)
+		else {
+			if (!this.dbId)
+				banlistStatus.Unreleased.push(mdString)
+			else
+				banlistStatus.Unlimited.push(mdString)
 		}
 
 		return banlistStatus

@@ -6,7 +6,7 @@ This is the official repository for the **Millennium Eye** (or **Eyebot**, for s
 
 ## Usage
 
-Cards can be searched by putting their name or database ID between `[]`, as in `[card name]`. The bot also supports Slash Commands, of which the `/query` offers the same functionality and follows the same syntax.
+Cards can be searched by putting their name or database ID between `[]`, as in `[card name]`. The bot also supports Slash Commands, of which the `/query` command offers the same functionality and follows the same syntax.
 
 There are certain modifiers you can put before or after the closing braces that change the results returned by the query. Some examples (not comprehensive):
 - `d[card name]` will return the card's print data
@@ -28,23 +28,26 @@ Yu-Gi-Oh is a game that is played worldwide, and is governed (broadly speaking) 
 - the TCG (Trading Card Game) is effectively everything else, and as such covers North and South America, Europe, and Oceania, among other things.
 
 The bot is focused on supporting regions in the TCG first and foremost, and is written by and catered toward English-speaking users. That said, it supports and stores card data for all locales that are available on the [Card Database](https://www.db.yugioh-card.com/yugiohdb/), which are:
-- English
-- Spanish
-- French
-- German
-- Portuguese
-- Italian
-- Japanese
-- Korean
+- English (en)
+- Spanish (es)
+- French (fr)
+- German (de)
+- Portuguese (pt)
+- Italian (it)
+- Japanese (ja/jp)
+- Korean 
 
 ## Data Sources
 The bot gathers the data it displays to users from several different sources. In order from most to least commonly used:
-#### [Official Card Database](https://www.db.yugioh-card.com/yugiohdb/) 
-This is a repository of card data that is maintained by Konami (the publishers of Yu-Gi-Oh!) themselves. In simple terms, this data is scraped and stored in a local database and forms the backbone of all available card data, including non-English locales.
 #### [YGOrganization Database](https://db.ygorganization.com/)
 This is a fanmade and fan-run (i.e., unofficial) database that offers all the data from (1) and more. Notably, the OCG version of the Official Card Database contains a section for card FAQs and Q&As that only exists in Japanese and has yet to be ported (officially) to English or any other locale. The bot leverages the YGOrganization database's unofficial translations of many of these FAQs and Q&As, as well as other data that is typically OCG-exclusive.
 
 The bot also makes use of this database's [artwork repository](https://artworks.ygorganization.com/) to source HD, unwatermarked card arts.
+#### [Official Card Database](https://www.db.yugioh-card.com/yugiohdb/) 
+This is a repository of card data that is maintained by Konami (the publishers of Yu-Gi-Oh!) themselves. The bot maintains a local copy of relevant parts of this database for various purposes. Usage of this has been gradually phased out over several bot updates, and currently its primary role is as a reference for the current state of the Forbidden & Limited Lists across the TCG, OCG, and Master Duel.
+
+#### [Master Duel](https://www.konami.com/yugioh/masterduel/asia/en/)
+As the currently most well-known and up-to-date Yu-Gi-Oh! video game, Master Duel is the flagship digital form of the Yu-Gi-Oh! CCG across both the globe. The bot tracks the status of the Master Duel Forbidden & Limited List (via the [MasterDuelMeta](https://www.masterduelmeta.com/) API) for display in its card embed footers alongside the TCG and OCG statuses. Also, full-resolution HD card arts are sourced from the game files for display when available. 
 #### [TCGPlayer](https://www.tcgplayer.com/)
 This is the the primary Yu-Gi-Oh! retailer in North America, and the source of all the bot's pricing data. This bot is **not** affilliated with or endorsed by TCGPlayer in any way, and only makes use of its API to display price data. There are currently no plans to gather data from other retailers ([Cardmarket](https://www.cardmarket.com/en) being the most prominent outside of North America).  
 #### [Yugipedia](https://yugipedia.com/wiki/Yugipedia)

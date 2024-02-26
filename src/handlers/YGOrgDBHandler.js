@@ -148,10 +148,6 @@ async function searchYgorgDb(searches, qry, dataHandlerCallback) {
 					if (matchScore >= 0.5) {
 						// Update the search term if we have an ID match to use.
 						currSearch.term = bestMatchId
-						if (!isFaqSearch) {
-							// If this isn't a QA or FAQ search, then we definitely need the API.
-							cardApiSearches.push(currSearch)
-						}
 					}
 				}
 			}
@@ -190,6 +186,9 @@ async function searchYgorgDb(searches, qry, dataHandlerCallback) {
 				if (!currSearch.isDataFullyResolved() && Number.isInteger(currSearch.term))
 					cardApiSearches.push(currSearch)
 			}
+		}
+		else {
+			cardApiSearches.push(currSearch)
 		}
 	}
 

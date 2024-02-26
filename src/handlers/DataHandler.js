@@ -120,6 +120,8 @@ function convertYugipediaDataToSearchData(searches, qry) {
 			populateCardFromYugipediaApi(bestPage, s.data)
 			s.rawData = undefined
 
+			getBanlistStatus(s.data)
+
 			// Did we get a better search term out of this?
 			if (s.data.dbId)
 				var betterTerm = s.data.dbId
@@ -134,9 +136,10 @@ function convertYugipediaDataToSearchData(searches, qry) {
 		}
 	}
 
-	// If these have a DB ID, fill in some data like prints and banlist from the Konami DB.
+	/* If these have a DB ID, fill in some data like prints and banlist from the Konami DB.
 	const konamiSearches = resolvedSearches.filter(s => s.data.dbId)
-	searchKonamiDb(konamiSearches, qry, convertKonamiDataToSearchData)
+	getBanlistStatus(konamiSearches, qry, convertKonamiDataToSearchData)
+	*/
 }
 
 function cacheTcgplayerPriceData(searches) {

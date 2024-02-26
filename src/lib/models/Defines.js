@@ -51,6 +51,7 @@ module.exports = {
 	TCGPLAYER_API: 'https://api.tcgplayer.com',
 	TCGPLAYER_PRODUCT_SEARCH: 'https://www.tcgplayer.com/search/yugioh/product?Language=English&q=',
 	TCGPLAYER_SET_SEARCH: 'https://tcgplayer.com/search/yugioh/',
+	MASTER_DUEL_API: 'https://www.masterduelmeta.com/api/v1',
 	// Bot data type definitions for easy reference.
 	QueryTypes: {
 		'i': 'info',

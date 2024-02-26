@@ -32,7 +32,8 @@ const logger = createLogger({
 async function logError(error, desc, ...more) {
 	const { meInstance } = require('lib/models/MillenniumEyeBot')
 	// log to console and file first, they don't have any length restrictions to check
-	let logString = `${desc}\n${inspect(error)}`
+	const errorString = (error !== null) ? `\n${inspect(error)}` : ''
+	let logString = `${desc}${errorString}`
 	if (more.length) {
 		logString += '\nAdditional information:\n'
 		for (const v of more) 
