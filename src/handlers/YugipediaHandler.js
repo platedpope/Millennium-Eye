@@ -202,10 +202,10 @@ async function searchYugipedia(searches, qry, dataHandlerCallback) {
 			// Level, Rank, Link Markers
 			if (!card.levelRank || !card.linkMarkers.length) {
 				let lookup = findYugipediaProperty('level', revData, true)
-				if (lookup) card.levelRank = lookup
+				if (lookup !== null) card.levelRank = lookup
 				else {
 					lookup = findYugipediaProperty('rank', revData, true)
-					if (lookup) card.levelRank = lookup
+					if (lookup !== null) card.levelRank = lookup
 					else {
 						lookup = findYugipediaProperty('link_arrows', revData)
 						if (lookup) {

@@ -44,8 +44,7 @@ async function updateKonamiDb() {
 		})
 	}).catch(err => logError(err, 'Failed to update Konami banlist data.'))
 
-	// Update Master Duel banlist details.
-	// There's no easy way to do this with the API as-is, we need to parse through the whole card list.
+	// Update Master Duel banlist details by parsing through the whole card list.
 	// First get the number of cards so we know how many paged requests to send.
 	try {
 		var req = await axios.get(`${MASTER_DUEL_API}/cards?collectionCount=true`, {
@@ -66,8 +65,7 @@ async function updateKonamiDb() {
 		logger.info(`Gathering Master Duel banlist data from ${totalCards} cards...`)
 		for (let pageNum = 1; pageNum <= numPages; pageNum++) {
 			try {
-				logger.info(`Querying page ${pageNum}/${numPages}...`)
-				let req = await axios.get(`${MASTER_DUEL_API}/cards?limit=${PAGE_LIMIT}&page=${pageNum}`, {
+				req = await axios.get(`${MASTER_DUEL_API}/cards?limit=${PAGE_LIMIT}&page=${pageNum}`, {
 					'timeout': API_TIMEOUT * 1000
 				})
 				if (req.data) {
@@ -104,9 +102,9 @@ async function updateKonamiDb() {
 							logError(null, `Master Duel Meta API return for card ${data.gameId} has unknown banStatus ${data['banStatus']}.`)
 					}
 				}
-				// The release and nameRelease fields in Master Duel API are both absent or null for cards that aren't released in Master Duel.
-				if (!('release' in data) || ('release' in data && data['release'] === null)) {
-					if (!('nameRelease' in data || ('nameRelease' in data && data['nameRelease'] === null))) {
+				// The nameRelease and release fields in Master Duel API are both absent or null for cards that aren't released in Master Duel.
+				if (!('nameRelease' in data || ('nameRelease' in data && data['nameRelease'] === null))) {
+					if (!('release' in data) || ('release' in data && data['release'] === null)) {
 						// Track unreleased MD cards as -1 in our banlist data.
 						affectedCards.push([data.gameId, -1])
 					}
@@ -114,16 +112,19 @@ async function updateKonamiDb() {
 			}
 		}
 
-		// Clear all MD data before inserting new.
-		konamiDb.prepare('DELETE FROM banlist WHERE cg = ?').run('md')
+		const removeMdBanStatus = konamiDb.prepare('DELETE FROM banlist WHERE cg = ?')
 		const insertMdBanStatus = konamiDb.prepare(`
 			INSERT OR REPLACE INTO banlist(cg, cardId, copies)
 			VALUES(?, ?, ?)
 		`)
-		let insertMany = konamiDb.transaction(cards => {
+		let updateMdBanStatus = konamiDb.transaction(cards => {
+			// Clear all MD data before inserting new.
+			removeMdBanStatus.run('md')
 			for (const c of cards) insertMdBanStatus.run(['md', ...c])
 		})
-		insertMany(affectedCards)
+		updateMdBanStatus(affectedCards)
+
+		logger.info('Done gathering Master Duel banlist info.')
 	}
 }
 

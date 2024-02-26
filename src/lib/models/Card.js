@@ -130,11 +130,12 @@ class Card {
 		const { searchPropertyToLocaleIndex } = require('handlers/YGOrgDBHandler')
 
 		// Generate stat description.
+		let stats = ''
 		// Level/Rank
 		if (this.levelRank !== null) {
-			const lrString = this.levelRank >= 1 ? `${this.levelRank}` : '?'
+			const lrString = (this.levelRank >= 1) ? `${this.levelRank}` : '?'
 			if (this.types.includes('Xyz'))
-				var stats = `${EmbedIcons['Rank']} **${searchPropertyToLocaleIndex('Rank', locale)}**: ${lrString}`
+				stats = `${EmbedIcons['Rank']} **${searchPropertyToLocaleIndex('Rank', locale)}**: ${lrString}`
 			else
 				stats = `${EmbedIcons['Level']} **${searchPropertyToLocaleIndex('Level', locale)}**: ${lrString}`
 		}
