@@ -100,7 +100,7 @@ function searchTcgplayerData(searches) {
 		}
 		else if (searchData instanceof Card) {
 			// If we have a Card, then we need to try and fill out its products.
-			const productQry = botDb.prepare(`SELECT * FROM tcgplayerProducts WHERE dbId = ? OR fullName = ?`)
+			const productQry = botDb.prepare(`SELECT * FROM tcgplayerProducts WHERE dbId = ? OR fullName = ? COLLATE NOCASE`)
 			const priceQry = botDb.prepare('SELECT * FROM tcgplayerProductPrices WHERE tcgplayerProductId = ?')
 			const productRows = productQry.all(searchData.dbId, searchData.name.get('en'))
 			for (const r of productRows) {

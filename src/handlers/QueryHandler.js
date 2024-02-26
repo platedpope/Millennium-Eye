@@ -44,7 +44,7 @@ const processSteps = [
 		'searchFunction': searchYgorgDb,
 		'dataHandler': convertYgorgDataToSearchData,
 		'useForOfficial': false,
-		'evaluatesTypes': new Set(['i', 'r', 'a', 'd', 'f', 'q'])
+		'evaluatesTypes': new Set(['i', 'r', 'a', 'd', 'f', 'q', '$'])
 	},
 	// And another TCGPlayer search step because otherwise card price searches before a card's data is cached result in empty data.
 	// Going TCGPlayer -> YGOrg -> TCGPlayer allows the search logic to first find set price searches, then card data, then price data for that card.

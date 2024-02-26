@@ -86,6 +86,7 @@ module.exports = new Event({
 		// (This doesn't actually clear the cache, it just checks for stale entries and evicts those).
 		setInterval(clearSearchCache, 1000 * 60 * 60)
 		await updateKonamiDb()
+		await cacheSetProductData(addTcgplayerDataToDb)
 		if (!config.testMode) {
 			// Konami database update: once per day.
 			setInterval(updateKonamiDb, 24 * 60 * 60 * 1000)
