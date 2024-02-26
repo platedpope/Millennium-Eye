@@ -5,7 +5,8 @@ const { CommandTypes } = require('lib/models/Defines')
 const Query = require('lib/models/Query')
 const Search = require('lib/models/Search')
 const { queryRespond, processQuery } = require('handlers/QueryHandler')
-const { searchNameToIdIndex, searchIdToNameIndex } = require('handlers/YGOrgDBHandler')
+const { generateError } = require('lib/utils/logging')
+const { searchNameToIdIndex } = require('handlers/YGOrgDBHandler')
 
 /**
  * Helper function to generate the select menu for which art to display.
@@ -176,14 +177,16 @@ module.exports = new Command({
 		const search = focus.value.toLowerCase()
 		const locale = bot.getCurrentChannelSetting(interaction.channel, 'locale')
 
-		const matches = searchNameToIdIndex(search, [locale], 25)
+		const matches = searchNameToIdIndex(search, [locale], 25, true)
 
 		const options = []
-		matches.forEach((score, id) => {
-			// Map the resulting IDs back to case-sensitive names for presentation's sake.
-			const caseName = searchIdToNameIndex(id, locale)
+		matches.forEach((score, m) => {
+			// Matches return in the form "Name|ID". We need both, name is what we display while ID is what the choice maps to.
+			const parseMatch = m.split('|')
+			const name = parseMatch[0]
+			const id = parseMatch[1]
 
-			options.push({ name: caseName, value: id })
+			options.push({ name: name, value: id })
 		})
 
 		await interaction.respond(options)
