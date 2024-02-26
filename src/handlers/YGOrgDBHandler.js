@@ -136,9 +136,7 @@ async function searchYgorgDb(searches, qry, dataHandlerCallback) {
 		if (!isQaSearch) {
 			// Non-QA searches need database IDs, but often come in as card names.
 			// If the search term isn't a number, assume it's a name and convert it to an ID.
-			if (Number.isInteger(currSearch.term))
-				cardApiSearches.push(currSearch)
-			else {
+			if (!(Number.isInteger(currSearch.term))) {
 				const localesToSearch = ['en']
 				for (const locale of currSearch.localeToTypesMap.keys())
 					if (!localesToSearch.includes(locale)) localesToSearch.push(locale)
@@ -147,11 +145,14 @@ async function searchYgorgDb(searches, qry, dataHandlerCallback) {
 				if (matches.size) {
 					const bestMatchId = matches.keys().next().value
 					const matchScore = matches.get(bestMatchId)
-					if (matchScore < 0.5) break	// Ignore scores this low, they mean we weren't really sure, this was just the least bad.
-
-					// Update the search term if we have an ID match to use.
-					currSearch.term = bestMatchId
-					cardApiSearches.push(currSearch)
+					if (matchScore >= 0.5) {
+						// Update the search term if we have an ID match to use.
+						currSearch.term = bestMatchId
+						if (!isFaqSearch) {
+							// If this isn't a QA or FAQ search, then we definitely need the API.
+							cardApiSearches.push(currSearch)
+						}
+					}
 				}
 			}
 		}
@@ -170,7 +171,6 @@ async function searchYgorgDb(searches, qry, dataHandlerCallback) {
 			const dbRows = ygorgDb.prepare('SELECT * FROM faqData WHERE cardId = ?').all(currSearch.term)
 			if (dbRows.length) {
 				if (currSearch.data === undefined) 
-					// How the hell did we get this far with unresolved card data? This shouldn't happen.
 					cardApiSearches.push(currSearch)
 				else {
 					const faqMap = currSearch.data.faqData

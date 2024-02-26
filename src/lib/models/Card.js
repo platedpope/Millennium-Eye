@@ -43,6 +43,7 @@ class Card {
 		// Ancillary data about the card.
 		this.tcgList = null				// Status on the TCG F/L list (-1 = unreleased, 0 = forbidden, 1 = limited, 2 = semi-limited, anything else = unlimited)
 		this.ocgList = null				// Status on the OCG F/L list (same values as above).
+		this.mdList = null				// Status on Master Duel F/L list (same values as above).
 		this.notInCg = null				// True if the card isn't from the TCG or OCG; from anime/manga/game instead.
 		/** @type {Map<String,Map<String, String>>} */
 		this.printData = new Map()		// Data about when this card was printed and in which sets. Each key is a locale, with value a further map of print code -> print date.

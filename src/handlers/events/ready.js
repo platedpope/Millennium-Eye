@@ -8,6 +8,7 @@ const { cacheNameToIdIndex, cacheManifestRevision, cachePropertyMetadata } = req
 const { cacheSetProductData } = require('handlers/TCGPlayerHandler')
 const { ActivityType, PresenceUpdateStatus, Events } = require('discord.js')
 const { setupQueryRegex } = require('lib/utils/regex')
+const { updateKonamiDb } = require('handlers/KonamiDBHandler')
 
 module.exports = new Event({
 	event: Events.ClientReady, 
@@ -84,7 +85,10 @@ module.exports = new Event({
 		// Search term cache clear: once every hour.
 		// (This doesn't actually clear the cache, it just checks for stale entries and evicts those).
 		setInterval(clearSearchCache, 1000 * 60 * 60)
+		await updateKonamiDb()
 		if (!config.testMode) {
+			// Konami database update: once per day.
+			setInterval(updateKonamiDb, 24 * 60 * 60 * 1000)
 			// TCGPlayer set product data update: once per day.
 			await cacheSetProductData(addTcgplayerDataToDb)
 			setInterval(cacheSetProductData, 24 * 60 * 60 * 1000, addTcgplayerDataToDb)

@@ -7,7 +7,7 @@ const Search = require('lib/models/Search')
 const { addTcgplayerDataToDb } = require('./BotDBHandler')
 const { addToYgorgDb, searchArtworkRepo, populateCardFromYgorgApi, populateRulingFromYgorgDb, populatedRulingFromYgorgApi } = require('./YGOrgDBHandler')
 const { populateCardFromYugipediaApi } = require('./YugipediaHandler')
-
+const { getBanlistStatus } = require('./KonamiDBHandler')
 
 /**
  * This is the callback data handler for turning data from the YGOrg database
@@ -17,7 +17,7 @@ const { populateCardFromYugipediaApi } = require('./YugipediaHandler')
  * @param {Array<Search>} cardSearches A map containing card searches that were resolved through the API.
  */
 async function convertYgorgDataToSearchData(qry, qaSearches, cardSearches = []) {
-	// Process the QAs.
+	// Process any QAs.
 	for (const s of qaSearches.db) {
 		s.data = new Ruling()
 		populateRulingFromYgorgDb(s.rawData, s.data)
@@ -36,6 +36,8 @@ async function convertYgorgDataToSearchData(qry, qaSearches, cardSearches = []) 
 		if (!(s.data instanceof Card)) s.data = new Card()
 		populateCardFromYgorgApi(s.rawData, s.data)
 		s.rawData = undefined
+
+		getBanlistStatus(s.data)		
 
 		// Find art data, which can be in one of two places:
 		// - 1. cached (saved) on disk
