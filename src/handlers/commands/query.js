@@ -4,7 +4,7 @@ const Query = require('lib/models/Query')
 const Search = require('lib/models/Search')
 const { processQuery, updateUserTimeout, queryRespond } = require('handlers/QueryHandler')
 const config = require('config')
-const { searchNameToIdIndex } = require('handlers/YGOrgDBHandler')
+const { searchNameToIdIndex, searchIdToNameIndex } = require('handlers/YGOrgDBHandler')
 const { logError } = require('lib/utils/logging')
 
 module.exports = new Command({
@@ -76,16 +76,14 @@ module.exports = new Command({
 		const search = focus.value.toLowerCase()
 		const locale = bot.getCurrentChannelSetting(interaction.channel, 'locale')
 
-		const matches = searchNameToIdIndex(search, [locale], 25, true)
+		const matches = searchNameToIdIndex(search, [locale], 25)
 
 		const options = []
-		matches.forEach((score, m) => {
-			// Matches return in the form "Name|ID". We need both, name is what we display while ID is what the choice maps to.
-			const parseMatch = m.split('|')
-			const name = parseMatch[0]
-			const id = parseMatch[1]
+		matches.forEach((score, id) => {
+			// Map the resulting IDs back to case-sensitive names for presentation's sake.
+			const caseName = searchIdToNameIndex(id, locale)
 
-			options.push({ name: name, value: id })
+			options.push({ name: caseName, value: id })
 		})
 
 		await interaction.respond(options)

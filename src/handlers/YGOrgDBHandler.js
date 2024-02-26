@@ -12,6 +12,7 @@ const ygorgDb = new Database(YGORG_DB_PATH)
 let cachedRevision = undefined
 let artworkManifest = null
 const nameToIdIndex = {}
+const idToNameIndex = {}
 // The property array is the raw data returned by the YGOrg API and is used for its own API.
 // The propertyToLocaleIndex is that data converted into a map for easy type lookups for the bot's purposes.
 // Both are used at various places in the bot logic, so both are cached.
@@ -90,7 +91,10 @@ async function processManifest(newRevision) {
 			// Invalidate any cached indices we care about.
 			if (idxChanges && idxChanges.name) {
 				logger.info(`Evicted locales ${Object.keys(idxChanges).join(', ')} from name index.`)
-				for (l in idxChanges.name) delete nameToIdIndex[l]
+				for (l in idxChanges.name) {
+					delete nameToIdIndex[l]
+					delete idToNameIndex[l]
+				}
 			}
 		}
 
@@ -618,10 +622,13 @@ async function cacheNameToIdIndex(locales = Object.keys(Locales)) {
 		}
 
 		nameToIdIndex[indexLocale] = {}
-		// Make all the names lowercase for case-insensitive lookups.
-		for (const n of Object.keys(index.value.data)) {
-			const lcName = n.toLowerCase()
-			nameToIdIndex[indexLocale][lcName] = index.value.data[n]
+		idToNameIndex[indexLocale] = {}
+		for (const [name, id] of Object.entries(index.value.data)) {
+			// Make all the names in the nameToIdIndex lowercase for case-insensitive lookups.
+			const lcName = name.toLowerCase()
+			nameToIdIndex[indexLocale][lcName] = id
+
+			idToNameIndex[indexLocale][id] = name
 		}
 		successfulRequests.push(indexLocale)
 	}
@@ -635,10 +642,9 @@ async function cacheNameToIdIndex(locales = Object.keys(Locales)) {
  * @param {String} search The value to search for. 
  * @param {Array<String>} locales The array of locales to search for.
  * @param {Number} returnMatches The number of matches to return, sorted in descending order (better matches first).
- * @param {Boolean} returnNames Whether to return the names of what was matched in addition to IDs.
  * @returns {Map<Number, Number>} Relevant matches mapped to their score.
  */
-function searchNameToIdIndex(search, locales, returnMatches = 1, returnNames = false) {
+function searchNameToIdIndex(search, locales, returnMatches = 1) {
 	// First make sure we've got everything cached.
 	cacheNameToIdIndex(locales)
 	// Note: in rare scenarios this can cache something but evict another (if a manifest revision demands it),
@@ -650,7 +656,7 @@ function searchNameToIdIndex(search, locales, returnMatches = 1, returnNames = f
 		if (!(l in nameToIdIndex)) continue
 
 		const searchFilter = new CardDataFilter(nameToIdIndex[l], search, 'CARD_NAME')
-		const localeMatches = searchFilter.filterIndex(returnMatches, returnNames)
+		const localeMatches = searchFilter.filterIndex(returnMatches)
 		localeMatches.forEach((score, id) => {
 			if (score > 0)
 				matches.set(id, Math.max(score, matches.get(id) || 0))
@@ -672,6 +678,19 @@ function searchNameToIdIndex(search, locales, returnMatches = 1, returnNames = f
 	}
 	
 	return matches
+}
+
+function searchIdToNameIndex(search, locale) {
+	// First make sure we've got everything cached.
+	cacheNameToIdIndex([locale])
+	// Note: in rare scenarios this can cache something but evict another (if a manifest revision demands it),
+	// leaving us with nothing for a given locale. This will cause this function to find no matches for the given search's locale index,
+	// which is unfortunate, but the logic will fail gracefully and I'm hoping it's rare enough that it won't be a practical issue.
+	const matches = new Map()
+
+	if (!(locale in idToNameIndex)) return
+
+	return idToNameIndex[locale][search]
 }
 
 /**
@@ -780,7 +799,7 @@ function searchPropertyArray(index, locale) {
 }
 
 module.exports = {
-	cacheManifestRevision, searchYgorgDb, searchArtworkRepo, addToYgorgDb, 
+	cacheManifestRevision, searchYgorgDb, searchArtworkRepo, addToYgorgDb, searchIdToNameIndex,
 	populateCardFromYgorgApi, populateRulingFromYgorgDb, populatedRulingFromYgorgApi, cacheNameToIdIndex, 
 	searchNameToIdIndex, cachePropertyMetadata, searchPropertyToLocaleIndex, searchPropertyArray
 }

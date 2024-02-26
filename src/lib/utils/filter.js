@@ -24,10 +24,9 @@ class CardDataFilter {
 	/**
 	 * Filter on the index to find best-scoring matches.
 	 * @param {Number} returnMatches The number of best-scoring matches to return.
-	 * @param {Boolean} returnNames Whether to return the names of what was matched in addition to IDs.
 	 * @return {Map<Number,Number>} A map of matched IDs to the score of that match. 
 	 */
-	filterIndex(returnMatches = 1, returnNames = false) {
+	filterIndex(returnMatches = 1) {
 		const requestedMatches = new Map()
 		if (!this.ref) return requestedMatches
 
@@ -40,8 +39,7 @@ class CardDataFilter {
 					// Ignore negative IDs, they're used for Skills on YGOrg DB.
 					if (id > 0) {
 						// If using names, return "Name|ID" as the key so we can track both name + ID.
-						const scoreKey = returnNames ? `${k}|${id}` : id
-						filteredResult[scoreKey] = Math.max(score, filteredResult[scoreKey] || 0)
+						filteredResult[id] = Math.max(score, filteredResult[id] || 0)
 					}
 		}
 

@@ -60,9 +60,7 @@ function findYugipediaProperty(prop, data, toInt = false) {
  */
  async function replaceIdsWithNames(text, locale, bold = true) {
 	// This is in here to avoid a circular dependency. Not ideal, but easy.
-	const Query = require('lib/models/Query')
-	const Search = require('lib/models/Search')
-	const { processQuery } = require('handlers/QueryHandler')
+	const { searchIdToNameIndex } = require('handlers/YGOrgDBHandler')
 
 	const idMatches = [...text.matchAll(/<<\s*(\d+)\s*>>/g)]
 	if (idMatches.length) {
@@ -76,22 +74,12 @@ function findYugipediaProperty(prop, data, toInt = false) {
 		for (const id of idSet)
 			ids.push(id)
 
-		// Bootstrap a query from the IDs that need resolution.
-		const searches = []
 		for (const id of ids) {
-			searches.push(new Search(id, 'i', locale))
-		}
-		const qry = new Query(searches)
-		
-		await processQuery(qry)
-		for (const id of ids) {
-			const cardSearch = qry.searches.find(s => s.data && s.data.dbId === id)
-			if (cardSearch) {
-				const card = cardSearch.data
-				if (bold) text = text.replace(new RegExp(`<<\s*${id}\s*>>`, 'g'), `**${card.name.get(locale)}**`)
-				else text = text.replace(new RegExp(`<<\s*${id}\s*>>`, 'g'), card.name.get(locale))
+			const cardName = searchIdToNameIndex(id, locale)
+			if (cardName) {
+				if (bold) text = text.replace(new RegExp(`<<\s*${id}\s*>>`, 'g'), `**${cardName}**`)
+				else text = text.replace(new RegExp(`<<\s*${id}\s*>>`, 'g'), cardName)
 			}
-			// This shouldn't happen, but if this fails then we couldn't map the ID to a card.
 		}
 	}
 
