@@ -1,6 +1,5 @@
-const axios = require('axios')
-const rateLimit = require('axios-rate-limit')
 const { performance } = require('perf_hooks')
+const RateLimiter = require('limiter').RateLimiter
 
 const config = require('config')
 const { getCachedProductData, searchTcgplayerData } = require('./BotDBHandler')
@@ -8,24 +7,43 @@ const { TCGPLAYER_API, API_TIMEOUT, TCGPLAYER_API_VERSION } = require('lib/model
 const { TCGPlayerSet, TCGPlayerProduct, TCGPlayerPrice } = require('lib/models/TCGPlayer')
 const { logError, logger } = require('lib/utils/logging')
 
-const requestHeaders = {
+// TCGPlayer API limits to 300 requests/min, i.e., 6 per sec.
+// Try not to piss them off. :)
+const limiter = new RateLimiter({
+	tokensPerInterval: 6,
+	interval: 'second'
+})
+
+/**
+ * Wraps fetch with the above rate limiter.
+ * @param {string|URL|Request} url 
+ * @param {RequestInit} options 
+ * @returns {Promise<Response>} 
+ */
+async function limitedFetch(url, options) {
+	await limiter.removeTokens()
+
+	// Default add headers and a timeout to all of our fetches.
+	if (!options) options = {}
+	if (!options.headers) {
+		options.headers = _requestHeaders
+	}
+	if (!options.signal) {
+		options.signal = AbortSignal.timeout(API_TIMEOUT)
+	}
+
+	return fetch(url, options)
+}
+
+const _requestHeaders = {
 	'accept': 'application/json',
 	'User-Agent': config.appName,
 	// Will have Authorization field filled in with the bearer token once we have it.
 }
-// TCGPlayer API limits to 300 requests/min, i.e., 6 per second.
-// Try not to piss them off. :)
-const apiCall = rateLimit(axios.create({
-	baseURL: `${TCGPLAYER_API}/`,
-	timeout: API_TIMEOUT * 1000
-}), {
-	maxRequests: 6,
-	perMilliseconds: 1000
-})
 // Cached bearer token expiration to make sure we refresh it when we need to. 
-let bearerTokenExpire = undefined
+let _bearerTokenExpire = undefined
 // Cached TCGPlayer Yu-Gi-Oh category ID so we query the correct category.
-let ygoCategoryId = undefined
+let _ygoCategoryId = undefined
 
 /**
  * @async
@@ -33,49 +51,42 @@ let ygoCategoryId = undefined
  * is greater than the number of results a single API response can give.
  * This function exists to handle requests that could potentially result in paged data
  * by repeatedly sending requests at increasing offsets until all necessary data is gathered.
- * @param {Object} apiRequestOptions The axios request options to use for the query.
+ * @param {URL} url The destination of the request.
+ * @param {Object} apiRequestOptions The (fetch) request options to use for the query.
  * @param {Number} limitPerPage The maximum number of results per response. Defaults to 100, which is the TCGPlayer maximum.
  * @returns {Promise<Array>} All gathered responses.
  */
-async function handlePagedRequest(apiRequestOptions, limitPerPage = 100) {
+async function handlePagedRequest(url, options, limitPerPage = 100) {
 	const results = []
 	let totalResultItems = 0
 	// Offset is increased as we get responses to move through the "pages".
 	// When offset equals the total number of results we got, then our paged requests is complete.
 	let offset = 0
+	// Copy off the URL so we can play with parameters without breaking the reference URL.
+	const urlWithParams = new URL(url)
 
 	// Set our limit parameter.
-	apiRequestOptions.params.limit = limitPerPage
+	urlWithParams.searchParams.append('limit', limitPerPage)
 
-	const handleResponse = respData => {
-		if (!totalResultItems) totalResultItems = respData.totalItems
+	const handlePageResponse = async resp => {
+		const jsonResponse = await resp.json()
 
-		results.push(...respData.results)
-		offset += respData.results.length
+		if (!totalResultItems) totalResultItems = jsonResponse.totalItems
+
+		results.push(...jsonResponse.results)
+		offset += jsonResponse.results.length
 	}
-	const handleError = err => {
-		if (err.response) {
-			const errData = err.response.data
-			// Suppress "no products found" errors. Sometimes there just aren't any, not an error.
-			const noProductsFoundError = errData.errors && errData.errors.length && errData.errors[0] === 'No products were found.'
-			if (!noProductsFoundError)
-				logError(errData, 'Received failed paged result:', apiRequestOptions)
-		}
-		else if (err.request) {
-			logError(err.message, 'Request for paged result failed:', apiRequestOptions)
-		}
-		else {
-			logError(err.message, 'Paged API encountered undefined error:', apiRequestOptions)
-		}
+	const handlePageError = async err => {
+		logError(err, 'Encountered error when handling paged request.')
 	}
 
 	// Need to send the first request so we know what the total we have to deal with is.
 	try {
-		let response = await apiCall(apiRequestOptions)
-		handleResponse(response.data)
+		let response = await limitedFetch(urlWithParams, options)
+		await handlePageResponse(response)
 	}
 	catch (err) {
-		handleError(err)
+		await handlePageError(err)
 	}
 
 	// While we've gathered less data than is available in total, keep requesting.
@@ -83,14 +94,14 @@ async function handlePagedRequest(apiRequestOptions, limitPerPage = 100) {
 	let maxRequests = Math.ceil(totalResultItems / limitPerPage)
 	let numRequests = 1		// We already sent one to kick this off.
 	while (offset < totalResultItems && numRequests <= maxRequests) {
-		apiRequestOptions.params.offset = offset
+		urlWithParams.searchParams.set('offset', offset)
 		try {
 			numRequests++
-			let response = await apiCall(apiRequestOptions)
-			handleResponse(response.data)
+			let response = await limitedFetch(urlWithParams, options)
+			await handlePageResponse(response)
 		}
 		catch(err) {
-			handleError(err)
+			await handlePageError(err)
 		}
 	}
 	
@@ -104,39 +115,43 @@ async function handlePagedRequest(apiRequestOptions, limitPerPage = 100) {
  */
 async function cacheBearerToken() {
 	// If we have one cached and it's not expired, no need to do anything.
-	let goodBearerToken = requestHeaders.Authorization && bearerTokenExpire > new Date()
+	let goodBearerToken = _requestHeaders.Authorization && _bearerTokenExpire > new Date()
 
-	const handleResponse = respData => {
-		if (respData.userName !== config.tcgPublicKey)
-			// This token isn't for us, don't know why we got it but don't use it.
-			throw new Error('Received bearer token for another application, ignoring.')
-		
-		if (respData.access_token) {
-			requestHeaders.Authorization = `${respData.token_type} ${respData.access_token}`
-			bearerTokenExpire = new Date(respData['.expires'])
-			logger.info(`Cached new bearer token for TCGPlayer API.`)
-			goodBearerToken = true
-		}
-		else throw new Error('Did not receive bearer token from TCGPlayer API.')
-	}
-
-	if (!goodBearerToken)
+	if (!goodBearerToken) {
+		const tokenUrl = new URL('token', TCGPLAYER_API)
 		try {
-			const response = 
-				await apiCall.post('token', 
-				`grant_type=client_credentials&client_id=${config.tcgPublicKey}&client_secret=${config.tcgPrivateKey}`,
-				{
-					headers: {
+			const resp = 
+				await limitedFetch(tokenUrl, {
+					method: 'post',
+					headers: new Headers({
 						'Content-Type': 'x-www-form-urlencoded',
 						'User-Agent': config.appName
-					}
+					}),
+					body: new URLSearchParams({
+						'grant_type': 'client_credentials',
+						'client_id': config.tcgPublicKey,
+						'client_secret': config.tcgPrivateKey
+					}),
 				})
-			handleResponse(response.data)
+			
+			const jsonResponse = await resp.json()
+			if (jsonResponse.userName !== config.tcgPublicKey) {
+				// This token isn't for us, don't know why we got it but don't use it.
+				throw new Error('Received bearer token for another application, ignoring.')
+			}
+
+			if (jsonResponse.access_token) {
+				_requestHeaders.Authorization = `${jsonResponse.token_type} ${jsonResponse.access_token}`
+				_bearerTokenExpire = new Date(jsonResponse['.expires'])
+				goodBearerToken = true
+				logger.info('Cached new bearer token for TCGPlayer API.')
+			}
+			else throw new Error('Did not receive bearer token from TCGPlayer API.')
 		}
 		catch(err) {
-			const errObj = err.response ? err.response.data : err.message
-			logError(errObj, 'Failed to get bearer token for TCGPlayer API.')
+			logError(err.message, 'Failed to get bearer token for TCGPlayer API.')
 		}
+	}
 	
 	return Promise.resolve(goodBearerToken)
 }
@@ -151,35 +166,30 @@ async function cacheYgoCategory() {
 	// Nothing to do without a good bearer token to send requests with.
 	if (!(await cacheBearerToken())) return false
 	// If we have one cached, no need to do anything.
-	let goodYgoCategory = ygoCategoryId !== undefined
+	let goodYgoCategory = _ygoCategoryId !== undefined
 
-	const handleResponse = respData => {
-		if (respData && respData.success === true) {
-			for (const category of respData.results)
-				if (category.name === 'YuGiOh') {
-					ygoCategoryId = category.categoryId
-					logger.info(`Found and cached TCGPlayer category ID for Yu-Gi-Oh as ${ygoCategoryId}.`)
+	if (!goodYgoCategory) {
+		const catUrl = new URL(`${TCGPLAYER_API_VERSION}/catalog/categories`, TCGPLAYER_API)
+		catUrl.searchParams.set('sortOrder', 'categoryId')
+		try {
+			const resp = await limitedFetch(catUrl)
+			const jsonResponse = await resp.json()
+			for (const cat of jsonResponse.results) {
+				if (cat.name === 'YuGiOh') {
+					_ygoCategoryId = cat.categoryId
 					goodYgoCategory = true
+					logger.info(`Found and cached TCGPlayer category ID for Yu-Gi-Oh as ${_ygoCategoryId}.`)
 					break
 				}
-			if (ygoCategoryId === undefined)
+			}
+			if (_ygoCategoryId === undefined) {
 				throw new Error('Could not find TCGPlayer category ID for Yu-Gi-Oh.')
-		}
-		else throw new Error(`Category catalog request for TCGPlayer API failed: ${JSON.stringify(respData, null, 4)}`)
-	}
-
-	if (!goodYgoCategory)
-		try {
-			const response = await apiCall.get(`${TCGPLAYER_API_VERSION}/catalog/categories`, {
-				headers: requestHeaders,
-				params: { sortOrder: 'categoryId' }
-			})
-			handleResponse(response.data)
+			}
 		}
 		catch(err) {
-			const errObj = err.response ? err.response.data : err.message
-			logError(errObj, 'Failed to cache TCGPlayer category ID for Yu-Gi-Oh.')
+			logError(err.message, 'Failed to cache TCGPlayer category ID for Yu-Gi-Oh.')
 		}
+	}
 	
 	return Promise.resolve(goodYgoCategory)
 }
@@ -190,6 +200,7 @@ async function cacheSetProductData(dataHandlerCallback) {
 
 	// Querying the TCGPlayer set catalog can produce paged values,
 	// meaning we need to send multiple requests. Keep track of our final array of data here.
+	/*
 	const apiRequestOptions = {
 		method: 'GET',
 		url: `${TCGPLAYER_API_VERSION}/catalog/groups`,
@@ -198,8 +209,11 @@ async function cacheSetProductData(dataHandlerCallback) {
 			categoryId: ygoCategoryId
 		}
 	}
-	const setResults = await handlePagedRequest(apiRequestOptions)
+	*/
 
+	const setUrl = new URL(`${TCGPLAYER_API_VERSION}/catalog/groups`, TCGPLAYER_API)
+	setUrl.searchParams.set('categoryId', _ygoCategoryId)
+	const setResults = await handlePagedRequest(setUrl)
 	// Something must have gone wrong.
 	if (!setResults.length) {
 		logError('Tried to cache set info, but didn\'t find any sets to cache.')
@@ -300,6 +314,7 @@ async function cacheSetProductData(dataHandlerCallback) {
 			let batchRequests = []
 			for (const set of setBatch) {
 				// Set data and price requests are paged, need to set up options beforehand.
+				/*
 				const setDataRequestOptions = {
 					method: 'get',
 					url: `${TCGPLAYER_API_VERSION}/catalog/products`,
@@ -309,8 +324,11 @@ async function cacheSetProductData(dataHandlerCallback) {
 						getExtendedFields: true
 					}
 				}
-				const req = handlePagedRequest(setDataRequestOptions)
-				batchRequests.push(req)
+				*/
+				const prodUrl = new URL(`${TCGPLAYER_API_VERSION}/catalog/products`, TCGPLAYER_API)
+				prodUrl.searchParams.set('groupId', set.setId)
+				prodUrl.searchParams.set('getExtendedFields', true)
+				batchRequests.push(handlePagedRequest(prodUrl))
 			}
 
 			const startTime = performance.now()
@@ -350,8 +368,11 @@ async function getProductPriceData(products) {
 	// Turn all the product IDs into a comma-separated string for the API request.
 	const prodIds = Object.keys(prodMap).join(',')
 
-	const handlePriceResponse = respData => {
-		for (const r of respData.results) {
+	try {
+		const priceUrl = new URL(`${TCGPLAYER_API_VERSION}/pricing/product/${prodIds}`, TCGPLAYER_API)
+		const resp = await limitedFetch(priceUrl)
+		const jsonResponse = await resp.json()
+		for (const r of jsonResponse.results) {
 			// Skip the results that have null price data due the type of print being non-existent (e.g., no 1st Edition prints).
 			if (!r.lowPrice || !r.midPrice || !r.highPrice || !r.marketPrice) continue
 
@@ -369,16 +390,8 @@ async function getProductPriceData(products) {
 			origProduct.priceData.push(pd)
 		}
 	}
-
-	try {
-		const resp = await apiCall.get(`${TCGPLAYER_API_VERSION}/pricing/product/${prodIds}`, {
-			headers: requestHeaders
-		})
-		handlePriceResponse(resp.data)
-	}
 	catch(err) {
-		const errObj = err.response ? err.response.data : err.message
-		logError(errObj, 'TCGPlayer price API query failed.', products)
+		logError(err.message, 'TCGPlayer price API query failed.', products)
 	}
 }
 
@@ -396,8 +409,27 @@ async function getProductPriceData(products) {
 		for (const p of s.products)
 			prodMap[p.productId] = p
 
-	const handlePriceResponse = respData => {
-		for (const r of respData.results) {
+	let apiRequests = []
+	for (const s of sets) {
+		const priceUrl = new URL(`${TCGPLAYER_API_VERSION}/pricing/group/${s.setId}`, TCGPLAYER_API)
+		apiRequests.push(
+			limitedFetch(priceUrl)
+				.then(async r => await r.json())
+		)
+	}
+
+	apiRequests = await Promise.allSettled(apiRequests)
+	for (let i = 0; i < apiRequests.length; i++) {
+		const resp = apiRequests[i]
+		if (resp.status === 'rejected') {
+			logError(resp.reason.message, `TCGPlayer set price API query for set ${origSet} failed.`)
+			continue
+		}
+		// These promises return in the same order we sent the requests in.
+		// Map this response to its corresponding set that way.
+		const origSet = sets[i]
+
+		for (const r of resp.value.results) {
 			// Skip the results that have null price data due the type of print being non-existent (e.g., no 1st Edition prints).
 			if (!r.lowPrice || !r.midPrice || !r.highPrice || !r.marketPrice) continue
 
@@ -414,30 +446,6 @@ async function getProductPriceData(products) {
 			
 			origProduct.priceData.push(pd)
 		}
-	}
-
-	let apiRequests = []
-	for (const s of sets) {
-		const resp = apiCall.get(`${TCGPLAYER_API_VERSION}/pricing/group/${s.setId}`, {
-			headers: requestHeaders
-		})
-		apiRequests.push(resp)
-	}
-
-	apiRequests = await Promise.allSettled(apiRequests)
-	for (let i = 0; i < apiRequests.length; i++) {
-		const resp = apiRequests[i]
-		// These promises return in the same order we sent the requests in.
-		// Map this response to its corresponding set that way.
-		const origSet = sets[i]
-
-		if (resp.status === 'rejected') {
-			logError(resp.reason.message, `TCGPlayer set price API query for set ${origSet} failed.`)
-			continue
-		}
-
-		if (resp.value.data) 
-			handlePriceResponse(resp.value.data)
 	}
 }
 

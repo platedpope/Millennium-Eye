@@ -5,7 +5,7 @@ const Card = require('lib/models/Card')
 const { PythonShell } = require('python-shell')
 const { logger, logError } = require('lib/utils/logging')
 
-const konamiDb = new Database(KONAMI_DB_PATH)
+const _konamiDb = new Database(KONAMI_DB_PATH)
 
 /**
  * Gathers the banlist status of a card.
@@ -16,7 +16,7 @@ function getBanlistStatus(card) {
 	if (card.dbId === null) return
 
 	const getBanlistStatusQuery = 'SELECT cg, copies FROM banlist WHERE cardId = ?'
-	const banlistRows = konamiDb.prepare(getBanlistStatusQuery).all(card.dbId)
+	const banlistRows = _konamiDb.prepare(getBanlistStatusQuery).all(card.dbId)
 	for (const r of banlistRows) {
 		if (r.cg === 'tcg') card.tcgList = r.copies
 		else if (r.cg === 'ocg') card.ocgList = r.copies
@@ -60,16 +60,21 @@ async function updateKonamiDb() {
 		let cardData = []
 
 		logger.info(`Gathering Master Duel banlist data from ${totalCards} cards...`)
+		const cardDataRequests = []
 		for (let pageNum = 1; pageNum <= numPages; pageNum++) {
-			try {
-				req = await fetch(`${MASTER_DUEL_API}/cards?limit=${PAGE_LIMIT}&page=${pageNum}`, { signal: AbortSignal.timeout(API_TIMEOUT) })
-				const jsonResponse = await req.json()
-				cardData = [ ...cardData, ...Object.values(jsonResponse)]
-			}
-			catch(err) {
-				logError(err, `Master Duel Meta API query encountered error on page ${pageNum}.`)
-			}
+			cardDataRequests.push(
+				fetch(`${MASTER_DUEL_API}/cards?limit=${PAGE_LIMIT}&page=${pageNum}`, { signal: AbortSignal.timeout(API_TIMEOUT) })
+					.then(async r => {
+						const jsonResponse = await r.json()
+						cardData.push(...Object.values(jsonResponse))
+					})
+					.catch(err => {
+						logError(err.message, `Master Duel Meta API query encountered error on page ${pageNum}.`)
+					})
+				)
 		}
+
+		await Promise.allSettled(cardDataRequests)
 
 		const foundCards = Object.keys(cardData).length
 		if (foundCards !== totalCards) {
@@ -106,12 +111,12 @@ async function updateKonamiDb() {
 			}
 		}
 
-		const removeMdBanStatus = konamiDb.prepare('DELETE FROM banlist WHERE cg = ?')
-		const insertMdBanStatus = konamiDb.prepare(`
+		const removeMdBanStatus = _konamiDb.prepare('DELETE FROM banlist WHERE cg = ?')
+		const insertMdBanStatus = _konamiDb.prepare(`
 			INSERT OR REPLACE INTO banlist(cg, cardId, copies)
 			VALUES(?, ?, ?)
 		`)
-		let updateMdBanStatus = konamiDb.transaction(cards => {
+		let updateMdBanStatus = _konamiDb.transaction(cards => {
 			// Clear all MD data before inserting new.
 			removeMdBanStatus.run('md')
 			for (const c of cards) insertMdBanStatus.run(['md', ...c])

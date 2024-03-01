@@ -55,7 +55,8 @@ async function checkForDataManifestUpdate() {
 	if (resp) {
 		const currManifestRevision = resp.headers.get('x-cache-revision')
 		if (lastManifestRevision < currManifestRevision) {
-			const manifest = await resp.json()
+			const jsonResponse = await resp.json()
+			const manifest = jsonResponse.data
 			
 			if (!manifest) {
 				logError(undefined, 'Received manifest with no data, exiting.')
@@ -98,9 +99,9 @@ async function checkForDataManifestUpdate() {
 						logError(err.message, `Encountered error when querying YGOrg DB for ruling ID ${qid}.`)
 					})
 			}
-			if (manifest.idx && 'card' in manifest.idx) {
-				const cardIdxChanges = manifest.idx.card
-				for (const loc in cardIdxChanges.name) {
+			const hasNameIdxChanges = 'idx' in manifest && 'card' in manifest.idx && 'name' in manifest.idx.card
+			if (hasNameIdxChanges) {
+				for (const loc in manifest.idx.card.name) {
 					// Evict cached data first.
 					delete _apiResponseCache.nameToIdIndex[loc]
 					deleteIdxData.run(loc)
@@ -117,23 +118,23 @@ async function checkForDataManifestUpdate() {
 				}
 			}
 
-				_apiResponseCache['lastManifestRevision'] = currManifestRevision
-				_ygorgDb.prepare('DELETE FROM manifestData').run()
-				_ygorgDb.prepare('INSERT OR REPLACE INTO manifestData(lastManifestRevision) VALUES(?)').run(currManifestRevision)
-				logger.info(`Cached new YGOrg manifest revision ${currManifestRevision}.`)
-				if (manifest.card) {
-					const evictCards = Object.keys(manifest.card).length
-					logger.info(`- Card data: ${evictCards} evicted`)
-				}
-				if (manifest.qa) {
-					const evictQas = Object.keys(manifest.qa).length
-					logger.info(`- QA data: ${evictQas} evicted`)
-				}
-				if (manifest.idx && 'card' in manifest.idx && 'name' in manifest.idx.card) {
-					const updatedLocales = Object.keys(manifest.idx.card.name)
-					const evictIdx = updatedLocales.length
-					logger.info(`- Index data: ${evictIdx} locale(s) evicted (${updatedLocales.join(', ')})`)
-				}
+			_apiResponseCache['lastManifestRevision'] = currManifestRevision
+			_ygorgDb.prepare('DELETE FROM manifestData').run()
+			_ygorgDb.prepare('INSERT OR REPLACE INTO manifestData(lastManifestRevision) VALUES(?)').run(currManifestRevision)
+			logger.info(`Cached new YGOrg manifest revision ${currManifestRevision}.`)
+			if ('card' in manifest) {
+				const evictCards = Object.keys(manifest.card).length
+				logger.info(`- Card data: ${evictCards} evicted`)
+			}
+			if ('qa' in manifest) {
+				const evictQas = Object.keys(manifest.qa).length
+				logger.info(`- QA data: ${evictQas} evicted`)
+			}
+			if (hasNameIdxChanges) {
+				const updatedLocales = Object.keys(manifest.idx.card.name)
+				const evictIdx = updatedLocales.length
+				logger.info(`- Index data: ${evictIdx} locale(s) evicted (${updatedLocales.join(', ')})`)
+			}
 		}
 	}
 }
@@ -348,17 +349,17 @@ async function searchArtworkRepo(artSearches) {
 	}
 
 	// Wait for all our requests to settle.
-	for (const idx in repoResponses)
+	for (const idx in repoResponses) {
 		if (repoResponses[idx].length) {
 			const reqs = repoResponses[idx]
 			repoResponses[idx] = await Promise.allSettled(reqs)
 		}
+	}
 	// Process the data we received.
 	for (const [idx, resps] of Object.entries(repoResponses)) {
 		const origSearch = artSearches[idx]
 		for (let i = 0; i < resps.length; i++) {
 			const resp = resps[i]
-
 			if (resp.status === 'rejected') {
 				continue
 			}
