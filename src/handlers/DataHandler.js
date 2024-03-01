@@ -5,7 +5,7 @@ const Query = require('lib/models/Query')
 const Ruling = require('lib/models/Ruling')
 const Search = require('lib/models/Search')
 const { addTcgplayerDataToDb } = require('./BotDBHandler')
-const { addToYgorgDb, searchArtworkRepo, populateCardFromYgorgApi, populateRulingFromYgorgDb, populatedRulingFromYgorgApi } = require('./YGOrgDBHandler')
+const { addToYgorgDb, searchArtworkRepo, populateCardFromYgorgApi, populateRulingFromYgorgApi } = require('./YGOrgDBHandler')
 const { populateCardFromYugipediaApi } = require('./YugipediaHandler')
 const { getBanlistStatus } = require('./KonamiDBHandler')
 
@@ -13,30 +13,24 @@ const { getBanlistStatus } = require('./KonamiDBHandler')
  * This is the callback data handler for turning data from the YGOrg database
  * into usable Search data (in this case, either a Card object or a Ruling object).
  * @param {Query} qry The query containing these searches.
- * @param {Object} qaSearches A map containing QA searches that were resolved through either the DB or API.
+ * @param {Array<Search>} qaSearches A map containing QA searches that were resolved through either the DB or API.
  * @param {Array<Search>} cardSearches A map containing card searches that were resolved through the API.
  */
 async function convertYgorgDataToSearchData(qry, qaSearches, cardSearches = []) {
 	// Process any QAs.
-	for (const s of qaSearches.db) {
+	for (const s of qaSearches) {
 		s.data = new Ruling()
-		populateRulingFromYgorgDb(s.rawData, s.data)
-		s.rawData = undefined
-	}
-	for (const s of qaSearches.api) {
-		s.data = new Ruling()
-		populatedRulingFromYgorgApi(s.rawData, s.data)
-		s.rawData = undefined
+		populateRulingFromYgorgApi(s.rawData, s.data)
 	}
 
-	// Process the cards we got from the API.
+	// Process any card data.
 	let artPath = `${process.cwd()}/data/card_images`
 	const cardsWithoutArt = []
 	for (const s of cardSearches) {
 		if (!(s.data instanceof Card)) s.data = new Card()
 		populateCardFromYgorgApi(s.rawData, s.data)
-		s.rawData = undefined
 
+		// Update banlist status, which isn't provided by YGOrg DB.
 		getBanlistStatus(s.data)		
 
 		// Find art data, which can be in one of two places:
@@ -84,7 +78,14 @@ async function convertYgorgDataToSearchData(qry, qaSearches, cardSearches = []) 
 		await searchArtworkRepo(cardSearches)
 
 	// Add anything from the API to the YGOrg DB as necessary.
-	addToYgorgDb(qaSearches.api, cardSearches)
+	addToYgorgDb(qaSearches, cardSearches)
+	// Null out all the raw data now that we've put it in the DB.
+	for (const qas of qaSearches) {
+		qas.rawData = undefined
+	}
+	for (const cs of cardSearches) {
+		cs.rawData = undefined
+	}
 }
 
 /**
@@ -130,9 +131,13 @@ function convertYugipediaDataToSearchData(searches, qry) {
 			else
 				betterTerm = s.data.name.get('en')
 
-			const mergedSearch = qry.updateSearchTerm(s.term, betterTerm)
-			if (!mergedSearch)
-				resolvedSearches.push(s)
+			console.log(query)
+			console.log(betterTerm)
+			if (betterTerm) {
+				const mergedSearch = qry.updateSearchTerm(s.term, betterTerm)
+				if (!mergedSearch)
+					resolvedSearches.push(s)
+			}
 		}
 	}
 

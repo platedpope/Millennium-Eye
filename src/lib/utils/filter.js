@@ -68,7 +68,7 @@ class CardDataFilter {
 	 */
 	fuzzyTokenFilter(val) {
 		// Tokenize the value we're comparing to.
-		const hayWords = val.match(CardDataFilter.tokenRegex)
+		const hayWords = val.toLowerCase().match(CardDataFilter.tokenRegex)
 		const nWords = Math.max(hayWords.length, this.ref.length)
 
 		let costMatrix = [...Array(this.ref.length)].map(() => Array(nWords).fill(CardDataFilter.MAX_DISTANCE))

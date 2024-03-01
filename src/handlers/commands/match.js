@@ -88,7 +88,7 @@ module.exports = new Command({
 		const resolvedMatchSearches = []
 
 		if (matchType === 'name') {
-			const matches = searchNameToIdIndex(term, [locale], maxMatches)
+			const matches = await searchNameToIdIndex(term, [locale], maxMatches)
 			const matchSearches = []
 			// Bootstrap searches from these matches.
 			for (const [id, score] of matches)

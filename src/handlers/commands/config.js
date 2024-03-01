@@ -347,7 +347,6 @@ module.exports = new Command({
 					msgOptions.content = `**Channel Configuration for <#${channelTarget.id}>:**`
 				}
 				else if (/^channel_select/.test(i.customId)) {
-					console.log(i.values)
 					channelTarget = await interaction.guild.channels.fetch(i.values[0])
 					msgOptions.content = `**Channel Configuration for <#${channelTarget.id}>:**`
 				}

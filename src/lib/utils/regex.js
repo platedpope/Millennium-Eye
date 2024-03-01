@@ -77,10 +77,7 @@ function findYugipediaProperty(prop, data, toInt = false) {
 			ids.push(id)
 
 		// Bootstrap a query from the IDs that need resolution.
-		const searches = []
-		for (const id of ids) {
-			searches.push(new Search(id, 'i', locale))
-		}
+		const searches = ids.map(id => new Search(id, 'i', locale))
 		const qry = new Query(searches)
 		
 		await processQuery(qry)

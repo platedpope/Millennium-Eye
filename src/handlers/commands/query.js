@@ -76,7 +76,7 @@ module.exports = new Command({
 		const search = focus.value.toLowerCase()
 		const locale = bot.getCurrentChannelSetting(interaction.channel, 'locale')
 
-		const matches = searchNameToIdIndex(search, [locale], 25, true)
+		const matches = await searchNameToIdIndex(search, [locale], 25, true)
 
 		const options = []
 		matches.forEach((score, m) => {
