@@ -127,7 +127,10 @@ async function processQuery(qry) {
 		}
 
 		// Cache the successes and log them out.
-		for (const s of searchesToEval)
+		for (const s of searchesToEval) {
+			// Don't cache Yugipedia searches.
+			if (stepSearch.name === 'searchYugipedia') continue
+
 			if (s.isDataFullyResolved()) {
 				logger.info(`Search step ${stepSearch.name} finished resolving original search(es) [${[...s.originals].join(', ')}] to ${s.data}.`)
 
@@ -145,6 +148,7 @@ async function processQuery(qry) {
 						searchCache[s.term] = cacheData
 				}
 			}
+		}
 	}
 }
 

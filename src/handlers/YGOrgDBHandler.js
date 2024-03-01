@@ -1,6 +1,4 @@
-const axios = require('axios')
 const Database = require('better-sqlite3')
-const rateLimit = require('axios-rate-limit')
 
 const { logError, logger } = require('lib/utils/logging')
 const { CardDataFilter } = require('lib/utils/filter')
@@ -9,10 +7,6 @@ const Query = require('lib/models/Query')
 const { Locales, YGORG_NAME_ID_INDEX, YGORG_PROPERTY_METADATA, YGORG_DB_PATH, YGORG_MANIFEST, YGORG_QA_DATA_API, API_TIMEOUT, YGORG_CARD_DATA_API, YGORG_ARTWORK_API } = require('lib/models/Defines')
 const Card = require('lib/models/Card')
 
-const apiReq = axios.create({
-	timeout: API_TIMEOUT * 1000
-})
-
 /**
  * @typedef YgorgResponseCache
  * @property {Number} lastManifestRevision		The last seen manifest revision.
@@ -20,6 +14,7 @@ const apiReq = axios.create({
  * @property {Object} qaData									All cached API responses from the qa API endpoint.
  * @property {Object} nameToIdIndex						A search index mapping names to IDs.
  * @property {Object} propertyArray						The raw property data returned by the YGOrg API that's used in its own API.
+ * @property {Object} artworkManifest					The cached artwork manifest from the YGOrg artwork endpoint.
 */
 
 const _ygorgDb = new Database(YGORG_DB_PATH)
@@ -29,11 +24,10 @@ const _apiResponseCache = {
 	cardData: {},
 	qaData: {},
 	nameToIdIndex: {},
-	propertyArray: []
+	propertyArray: [],
+	artworkManifest: null
 }
 
-// Manifest from the YGOrg artwork API, if needed.
-let _artworkManifest = null
 // The propertyToLocaleIndex is the propertyArray API data converted into a map for easy type lookups for the bot's purposes.
 const _propertyToLocaleIndex = {}
 
@@ -51,7 +45,7 @@ async function checkForDataManifestUpdate() {
 	const lastManifestRevision = _apiResponseCache['lastManifestRevision']
 	logger.info(`Starting check for new manifest; last revision seen was ${lastManifestRevision}.`)
 	try {
-		var resp = await apiReq.get(`${YGORG_MANIFEST}/${lastManifestRevision}`)
+		var resp = await fetch(`${YGORG_MANIFEST}/${lastManifestRevision}`, { signal: AbortSignal.timeout(API_TIMEOUT) })
 	}
 	catch (err) {
 		logError(err.message, 'Failed processing YGOrg DB manifest.')
@@ -59,9 +53,9 @@ async function checkForDataManifestUpdate() {
 	}
 
 	if (resp) {
-		const currManifestRevision = resp.headers['x-cache-revision']
+		const currManifestRevision = resp.headers.get('x-cache-revision')
 		if (lastManifestRevision < currManifestRevision) {
-			const manifest = resp.data.data
+			const manifest = await resp.json()
 			
 			if (!manifest) {
 				logError(undefined, 'Received manifest with no data, exiting.')
@@ -79,10 +73,11 @@ async function checkForDataManifestUpdate() {
 				delete _apiResponseCache.cardData[cid]
 				deleteCardData.run(cid)
 
-				_apiResponseCache.cardData[cid] = apiReq.get(`${YGORG_CARD_DATA_API}/${cid}`)
-					.then(r => {
-						_ygorgDb.prepare('INSERT OR REPLACE INTO cardData(id, jsonResponse) VALUES(?, ?)').run(cid, JSON.stringify(r.data))
-						return r.data
+				_apiResponseCache.cardData[cid] = fetch(`${YGORG_CARD_DATA_API}/${cid}`, { signal: AbortSignal.timeout(API_TIMEOUT) })
+					.then(async r => {
+						const jsonResponse = await r.json()
+						_ygorgDb.prepare('INSERT OR REPLACE INTO cardData(id, jsonResponse) VALUES(?, ?)').run(cid, JSON.stringify(jsonResponse))
+						return jsonResponse
 					})
 					.catch(err => {
 						logError(err.message, `Encountered error when querying YGOrg DB for card ID ${cid}.`)
@@ -93,10 +88,11 @@ async function checkForDataManifestUpdate() {
 				delete _apiResponseCache.qaData[qid]
 				deleteQaData.run(qid)
 
-				_apiResponseCache.qaData[qid] = apiReq.get(`${YGORG_QA_DATA_API}/${qid}`)
-					.then(r => { 
-						_ygorgDb.prepare('INSERT OR REPLACE INTO qaData(id, jsonResponse) VALUES(?, ?)').run(qid, JSON.stringify(r.data))
-						return r.data
+				_apiResponseCache.qaData[qid] = fetch(`${YGORG_QA_DATA_API}/${qid}`, { signal: AbortSignal.timeout(API_TIMEOUT) })
+					.then(async r => { 
+						const jsonResponse = await r.json()
+						_ygorgDb.prepare('INSERT OR REPLACE INTO qaData(id, jsonResponse) VALUES(?, ?)').run(qid, JSON.stringify(jsonResponse))
+						return jsonResponse
 					})
 					.catch(err => {
 						logError(err.message, `Encountered error when querying YGOrg DB for ruling ID ${qid}.`)
@@ -109,10 +105,11 @@ async function checkForDataManifestUpdate() {
 					delete _apiResponseCache.nameToIdIndex[loc]
 					deleteIdxData.run(loc)
 
-					_apiResponseCache.nameToIdIndex[loc] = apiReq.get(`${YGORG_NAME_ID_INDEX}/${loc}`)
-						.then(r => {
-							_ygorgDb.prepare('INSERT OR REPLACE INTO nameToIdIndex(locale, jsonResponse) VALUES(?, ?)').run(loc, JSON.stringify(r.data))
-							return r.data
+					_apiResponseCache.nameToIdIndex[loc] = fetch(`${YGORG_NAME_ID_INDEX}/${loc}`, { signal: AbortSignal.timeout(API_TIMEOUT) })
+						.then(async r => {
+							const jsonResponse = await r.json()
+							_ygorgDb.prepare('INSERT OR REPLACE INTO nameToIdIndex(locale, jsonResponse) VALUES(?, ?)').run(loc, JSON.stringify(jsonResponse))
+							return jsonResponse
 						})
 						.catch(err => {
 							logError(err.message, `Encountered error when querying YGOrg DB for name->ID index for locale ${loc}.`)
@@ -254,15 +251,15 @@ async function searchYgorgDb(searches, qry, dataHandlerCallback) {
 	for (const s of uncachedSearches) {
 		const id = s.term
 		if (s.hasType('q')) {
-			requests.push(apiReq.get(`${YGORG_QA_DATA_API}/${id}`)
-				.then(r => r.data)
+			requests.push(fetch(`${YGORG_QA_DATA_API}/${id}`, { signal : AbortSignal.timeout(API_TIMEOUT) })
+				.then(async r => await r.json())
 				.catch(err => {
 					logError(err.message, `YGOrg API query for QA ID ${id} failed.`)
 			}))
 		}
 		else {
-			requests.push(apiReq.get(`${YGORG_CARD_DATA_API}/${id}`)
-				.then(r => r.data)
+			requests.push(fetch(`${YGORG_CARD_DATA_API}/${id}`, { signal: AbortSignal.timeout(API_TIMEOUT) })
+				.then(async r => await r.json())
 				.catch(err => {
 					logError(err.message, `YGOrg API query for card ID ${id} failed.`)
 				}))
@@ -299,29 +296,29 @@ async function searchYgorgDb(searches, qry, dataHandlerCallback) {
  */
 async function searchArtworkRepo(artSearches) {
 	// First get the manifest. Used the cached one if we've got it.
-	if (!_artworkManifest) {
+	if (!_apiResponseCache.artworkManifest) {
 		try {
-			var resp = await apiReq.get(`${YGORG_ARTWORK_API}/manifest.json`)
-
-			_artworkManifest = resp.data
+			const resp = await fetch(`${YGORG_ARTWORK_API}/manifest.json`, { signal: AbortSignal.timeout(API_TIMEOUT) })
+			_apiResponseCache.artworkManifest = await resp.json()
 			logger.info('Cached new artwork repo manifest, resetting in 24 hrs.')
 			setTimeout(() => {
-				_artworkManifest = null
+				_apiResponseCache.artworkManifest = null
 				logger.info('Evicted cached artwork repo manifest, will re-cache the next time it is necessary.')
 			}, 24 * 60 * 60 * 1000)
 		}
 		catch (err) {
-			logError(err.message, 'Failed processing artwork repo manifest.')
+			logError(err.message, 'Failed processing artwork repo manifest, exiting.')
+			return
 		}
 	}
 
-	if (!_artworkManifest || !('cards' in _artworkManifest)) {
+	if (!_apiResponseCache.artworkManifest || !('cards' in _apiResponseCache.artworkManifest)) {
 		// Manifest query didn't work? No art then, I guess.
 		logError(undefined, 'Attempted search in artwork repo with no manifest?')
 		return
 	}
 
-	const manifestCardData = _artworkManifest.cards
+	const manifestCardData = _apiResponseCache.artworkManifest
 
 	// Map index of the search in artSearches to an array of all art repo requests for that search.
 	const repoResponses = {}
@@ -339,12 +336,10 @@ async function searchArtworkRepo(artSearches) {
 				// Send requests for each art.
 				const bestArtRepoLoc = cardArtData[artId].bestArt
 				const bestArtFullUrl = new URL(bestArtRepoLoc, YGORG_ARTWORK_API)
-				const req = apiReq.get(bestArtFullUrl.toString(), {
-					'responseType': 'arraybuffer'
-				})
-					.then(r => r.data)
+				const req = fetch(bestArtFullUrl.toString(), { signal: AbortSignal.timeout(API_TIMEOUT) })
+					.then(async r => await r.arrayBuffer())
 					.catch(err => {
-						logError(err.message, `Art repo query for card ${card}, art ID ${artId}.`)
+						logError(err.message, `Failed art repo query for card ${card}, art ID ${artId}.`)
 					})
 
 				repoResponses[i].push(req)
@@ -368,11 +363,11 @@ async function searchArtworkRepo(artSearches) {
 				continue
 			}
 
-			if (resp.value.data) {
+			if (resp.value) {
 				// Artworks were queried in order of ID, but are zero-indexed.
 				// Therefore, our index in the array +1 is the art ID.
 				const artId = i + 1
-				origSearch.data.addImageData(artId, resp.value.data)
+				origSearch.data.addImageData(artId, resp.value)
 			}
 		}
 	}
@@ -568,11 +563,12 @@ async function cacheNameToIdIndex(locales = Object.keys(Locales)) {
 	if (!localesToRequest.length) return
 
 	for (const l of localesNotCached) {
-		_apiResponseCache.nameToIdIndex[l] = apiReq.get(`${YGORG_NAME_ID_INDEX}/${l}`)
-			.then(r => {
+		_apiResponseCache.nameToIdIndex[l] = fetch(`${YGORG_NAME_ID_INDEX}/${l}`, { signal: AbortSignal.timeout(API_TIMEOUT) })
+			.then(async r => {
 				logger.info(`Resolved name->ID index for locale ${l}.`)
-				_ygorgDb.prepare('INSERT OR REPLACE INTO nameToIdIndex(locale, jsonResponse) VALUES(?, ?)').run(indexLocale, JSON.stringify(r.data))
-				return r.data
+				const jsonResponse = await r.json()
+				_ygorgDb.prepare('INSERT OR REPLACE INTO nameToIdIndex(locale, jsonResponse) VALUES(?, ?)').run(indexLocale, JSON.stringify(jsonResponse))
+				return jsonResponse
 			})
 			.catch(err => {
 				logError(err.message, `YGOrg API query for name -> ID index for locale ${l} failed.`)
@@ -632,7 +628,7 @@ async function searchNameToIdIndex(search, locales, returnMatches = 1, returnNam
  */
 async function cachePropertyMetadata() {
 	try {
-		var resp = await apiReq.get(YGORG_PROPERTY_METADATA)
+		var resp = await fetch(YGORG_PROPERTY_METADATA, { signal: AbortSignal.timeout(API_TIMEOUT) })
 	}
 	catch (err) {
 		logError(err.message, 'YGOrg API query to initialize property metadata failed.')
@@ -640,9 +636,10 @@ async function cachePropertyMetadata() {
 	}
 
 	if (resp) {
-		_apiResponseCache.propertyArray = resp.data
+		const jsonResponse = await resp.json()
+		_apiResponseCache.propertyArray = jsonResponse
 		// Also rejig this by pulling out the EN values to make them keys in a map for easy future lookups.
-		for (const prop of resp.data) {
+		for (const prop of jsonResponse) {
 			if (!prop) continue
 			else if (!('en' in prop)) continue
 

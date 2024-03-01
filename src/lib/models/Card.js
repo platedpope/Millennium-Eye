@@ -612,59 +612,56 @@ class Card {
 			else
 				id = this.imageData.keys().next().value
 		}
-			
 		
-		const imageData = this.imageData.get(id)
-		if (!imageData)
+		let artPath = this.imageData.get(id)
+		if (!artPath)
 			return
-
-		let attach = null
-
-		if (imageData.includes('http')) {
-			// It's some URL rather than raw data.
-			if (thumbnail)
-				embed.setThumbnail(imageData)
+		else if (!(typeof artPath === 'string')) {
+			// The image data is still a raw binary buffer that needs to be saved to disk.
+			artPath = `${process.cwd()}/data/card_images/alts/`
+			if (this.dbId)
+				artPath += `${this.dbId}_${id}.png`
+			else if (this.passcode)
+				artPath += `${this.passcode}_${id}.png`
 			else
-				embed.setImage(imageData)
+				artPath += `${sanitize(this.name.get('en'))}_${id}.png`
+
+			let artCropDims = { 'top': 69, 'left': 32, 'width': 193, 'height': 191 }
+			// Pendulums have squished arts, so the crop needs to be different.
+			if (this.pendScale !== null || this.types.includes('Pendulum')) {
+				// Not only that, but OCG Pendulums have different art dimensions than TCG Pendulums.
+				// OCG has a larger Pendulum Effect text box, so the art isn't as tall.
+				if (!this.printData.has('en') || !this.name.has('en'))
+					artCropDims = { 'top': 67, 'left': 18, 'width': 220, 'height': 165 }
+				else 
+					artCropDims = { 'top': 67, 'left': 18, 'width': 220, 'height': 177 }
+			}
+			
+			const rawData = this.imageData.get(id)
+			// This is really ugly, but I realized too late this was asynchronous and it's lead to some scenarios
+			// where the card embed is generated before the image is saved...
+			// This is a bad hack to force it to be synchronous.
+			let sync = true
+			sharp(rawData).extract(artCropDims).toFile(artPath, err => {
+				if (err) logError(err, 'Failed to save card cropped image.')
+				sync = false
+			})
+			while (sync) deasync.sleep(100)
+
+			// Update the image data too so we don't have to lug around a bunch of raw data.
+			this.imageData.set(id, artPath)
+		}
+		
+		let attach = null
+		if (artPath.includes('http')) {
+			// The image data is some URL rather than raw data.
+			if (thumbnail)
+				embed.setThumbnail(artPath)
+			else
+				embed.setImage(artPath)
 		}
 		else {
-			let artPath = imageData
-			// Our "image data" is still raw data that needs to be saved to disk.
-			if (!imageData.includes('data/card_images')) {
-				artPath = `${process.cwd()}/data/card_images/alts/`
-				if (this.dbId)
-					artPath += `${this.dbId}_${id}.png`
-				else if (this.passcode)
-					artPath += `${this.passcode}_${id}.png`
-				else
-					artPath += `${sanitize(this.name.get('en'))}_${id}.png`
-
-				// Still raw data that needs to be saved to disk.
-				let artCropDims = { 'top': 69, 'left': 32, 'width': 193, 'height': 191 }
-				// Pendulums have squished arts, so the crop needs to be different.
-				if (this.pendScale !== null || this.types.includes('Pendulum')) {
-					// Not only that, but OCG Pendulums have different art dimensions than TCG Pendulums.
-					// OCG has a larger Pendulum Effect text box, so the art isn't as tall.
-					if (!this.printData.has('en') || !this.name.has('en'))
-						artCropDims = { 'top': 67, 'left': 18, 'width': 220, 'height': 165 }
-					else 
-						artCropDims = { 'top': 67, 'left': 18, 'width': 220, 'height': 177 }
-				}
-				
-				// This is really ugly, but I realized too late this was asynchronous and it's lead to some scenarios
-				// where the card embed is generated before the image is saved...
-				// This is a bad hack to force it to be synchronous.
-				let sync = true
-				sharp(imageData).extract(artCropDims).toFile(artPath, err => {
-					if (err) logError(err, 'Failed to save card cropped image.')
-					sync = false
-				})
-				while (sync) deasync.sleep(100)
-
-				// Update the image data too so we don't have to lug around a bunch of raw data.
-				this.imageData.set(id, artPath)
-			}
-
+			// Image data is a path on disk.
 			attach = artPath
 			const imageName = path.basename(artPath)
 			if (thumbnail)

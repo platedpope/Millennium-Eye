@@ -7,7 +7,7 @@ module.exports = {
 	YGORG_DB_CARD_REGEX: /https?:\/\/db\.ygorganization\.com\/card#(\d+)/g,
 	IGNORE_LINKS_REGEX: /(?:https?|www\.)/g,
 	// Constant values.
-	API_TIMEOUT: 3,									// 3 seconds.
+	API_TIMEOUT: 1000 * 3,									// 3 seconds.
 	MESSAGE_TIMEOUT: 15,							// 15 seconds.
 	USER_TIMEOUT: 60,								// 1 minute.
 	TCGPLAYER_PRICE_TIMEOUT: 1000 * 60 * 60 * 8,	// 8 hours.

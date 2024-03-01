@@ -1,5 +1,3 @@
-const axios = require('axios')
-
 const { YUGIPEDIA_API, YUGIPEDIA_API_PARAMS, API_TIMEOUT, Locales, LinkMarkersIndexMap } = require('lib/models/Defines')
 const { logError, logger } = require('lib/utils/logging')
 const { findYugipediaProperty } = require('lib/utils/regex')
@@ -18,15 +16,12 @@ async function searchYugipedia(searches, qry, dataHandlerCallback) {
 	// Nothing to check beforehand, if we got this far just send requests right away.
 	let apiReqs = []
 	for (const s of searches) {
-		YUGIPEDIA_API_PARAMS.gsrsearch = s.term 
-		const req = axios.get(YUGIPEDIA_API, {
-			'timeout': API_TIMEOUT * 1000,
-			'params': YUGIPEDIA_API_PARAMS
-		}).then(r => {
-			return r
-		}).catch(err => {
-			throw new Error(`Yugipedia API query for term ${s.term} failed.`)
-		})
+		YUGIPEDIA_API_PARAMS.gsrsearch = s.term
+		const req = fetch(`${YUGIPEDIA_API}?` + new URLSearchParams(YUGIPEDIA_API_PARAMS), { signal: AbortSignal.timeout(API_TIMEOUT) })
+			.then(async r => await r.json())
+			.catch(err => {
+				throw new Error(err.message, `Yugipedia API query for term ${s.term} failed.`)
+			})
 
 		apiReqs.push(req)
 	}
@@ -38,16 +33,14 @@ async function searchYugipedia(searches, qry, dataHandlerCallback) {
 
 	for (let i = 0; i < apiReqs.length; i++) {
 		const apiResponse = apiReqs[i]
+		if (apiResponse.status === 'rejected') {
+			continue
+		}
 		// These promises return in the same order we sent the requests.
 		// Map this response to its corresponding search that way.
 		const apiSearch = searches[i]
 
-		if (apiResponse.status === 'rejected') {
-			logError(apiResponse.reason.message, `Yugipedia API query for term ${apiSearch.term} failed.`)
-			continue
-		}
-
-		const responseData = apiResponse.value.data
+		const responseData = apiResponse.value
 		if (responseData && Object.keys(responseData).length) 
 			if ('query' in responseData) {
 				const qryData = responseData.query

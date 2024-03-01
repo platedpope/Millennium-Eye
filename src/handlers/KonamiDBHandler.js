@@ -1,5 +1,4 @@
 const Database = require('better-sqlite3')
-const axios = require('axios')
 
 const { KONAMI_DB_PATH, MASTER_DUEL_API, API_TIMEOUT } = require('lib/models/Defines')
 const Card = require('lib/models/Card')
@@ -47,16 +46,14 @@ async function updateKonamiDb() {
 	// Update Master Duel banlist details by parsing through the whole card list.
 	// First get the number of cards so we know how many paged requests to send.
 	try {
-		var req = await axios.get(`${MASTER_DUEL_API}/cards?collectionCount=true`, {
-			'timeout': API_TIMEOUT * 1000
-		})
+		var req = await fetch(`${MASTER_DUEL_API}/cards?collectionCount=true`, { signal: AbortSignal.timeout(API_TIMEOUT) })
 	} 
 	catch(err) {
 		logError(err, `Master Duel Meta API query for collection count returned error.`)
 		return
 	}
-	const totalCards = req.data
-	
+
+	const totalCards = await req.json()
 	if (totalCards) {
 		const PAGE_LIMIT = 3000
 		const numPages = Math.ceil(totalCards / PAGE_LIMIT)
@@ -65,12 +62,9 @@ async function updateKonamiDb() {
 		logger.info(`Gathering Master Duel banlist data from ${totalCards} cards...`)
 		for (let pageNum = 1; pageNum <= numPages; pageNum++) {
 			try {
-				req = await axios.get(`${MASTER_DUEL_API}/cards?limit=${PAGE_LIMIT}&page=${pageNum}`, {
-					'timeout': API_TIMEOUT * 1000
-				})
-				if (req.data) {
-					cardData = [ ...cardData, ...Object.values(req.data)]
-				}
+				req = await fetch(`${MASTER_DUEL_API}/cards?limit=${PAGE_LIMIT}&page=${pageNum}`, { signal: AbortSignal.timeout(API_TIMEOUT) })
+				const jsonResponse = await req.json()
+				cardData = [ ...cardData, ...Object.values(jsonResponse)]
 			}
 			catch(err) {
 				logError(err, `Master Duel Meta API query encountered error on page ${pageNum}.`)

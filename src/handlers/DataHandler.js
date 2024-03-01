@@ -50,32 +50,31 @@ async function convertYgorgDataToSearchData(qry, qaSearches, cardSearches = []) 
 		// Master Duel has "common" and "tcg" art, where "tcg" is art that's censored in the TCG.
 		const commonArtPath = artPath + `/common/${s.data.dbId}.png`
 		const tcgArtPath = artPath + `/tcg/${s.data.dbId}.png`
-		let hasMasterDuelArtwork = false
+		let mdArtPath = ''
 		if (fs.existsSync(commonArtPath)) {
-			artPath = commonArtPath
-			hasMasterDuelArtwork = true
+			mdArtPath = commonArtPath
 		}
 		else if (fs.existsSync(tcgArtPath)) {
-			artPath = tcgArtPath
-			hasMasterDuelArtwork = true
+			mdArtPath = tcgArtPath
 		}
 		// No Master Duel art yet? Kick to the artwork repo for the lower res Neuron art.
 		else if (!s.data.imageData.size) {
 			cardsWithoutArt.push(s)
 		}
 
-		if (hasMasterDuelArtwork) {
+		if (mdArtPath) {
 			// If this card only has one art from Neuron (i.e., no alts), then just get rid of it.
 			// The Master Duel high res version will be a dupe, but much better.
 			if (s.data.imageData.size === 1) {
 				s.data.imageData.clear()
 			}
-			s.data.imageData.set('md', artPath)
+			s.data.imageData.set('md', mdArtPath)
 		}
 	}
 	// Resolve any that still don't have art.
-	if (cardsWithoutArt.length)
+	if (cardsWithoutArt.length) {
 		await searchArtworkRepo(cardSearches)
+	}
 
 	// Add anything from the API to the YGOrg DB as necessary.
 	addToYgorgDb(qaSearches, cardSearches)
@@ -131,8 +130,6 @@ function convertYugipediaDataToSearchData(searches, qry) {
 			else
 				betterTerm = s.data.name.get('en')
 
-			console.log(query)
-			console.log(betterTerm)
 			if (betterTerm) {
 				const mergedSearch = qry.updateSearchTerm(s.term, betterTerm)
 				if (!mergedSearch)
