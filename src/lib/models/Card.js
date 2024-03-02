@@ -47,7 +47,8 @@ class Card {
 		this.notInCg = null				// True if the card isn't from the TCG or OCG; from anime/manga/game instead.
 		/** @type {Map<String,Map<String, String>>} */
 		this.printData = new Map()		// Data about when this card was printed and in which sets. Each key is a locale, with value a further map of print code -> print date.
-		this.imageData = new Map()		// Image(s) associated with the card. Each key is an ID, with value a link to that image (either local file or on the web).
+		/** @type {Map<string,Map<string, string>>} */
+		this.imageData = new Map()		// Image(s) associated with the card. Key is source (tcg, ocg, md) -> map of art ID to art path
 		/** @type {Array<TCGPlayerProduct>} */
 		this.products = []				// The TCGPlayer product data associated with this card, which contain price info.
 		/** @type {Map<String,Array<FAQBlock>} */
@@ -124,7 +125,8 @@ class Card {
 
 		finalEmbed.setAuthor({ name: cardName, iconURL: colorIcon[1], url: titleUrl })
 		finalEmbed.setColor(colorIcon[0])
-		const imageAttach = this.setEmbedImage(finalEmbed)
+		const censorArt = locale !== 'ja' && locale !== 'ko'
+		const imageAttach = this.setEmbedImage(finalEmbed, censorArt ? 'md' : 'ocg', 1)
 
 		// In here to avoid a circular dependency. Not pretty, but oh well.
 		const { searchPropertyToLocaleIndex } = require('handlers/YGOrgDBHandler')
@@ -225,11 +227,12 @@ class Card {
 	/**
 	 * Generates an embed containing an upsized card art (of the given ID).
 	 * @param {String} locale The locale to use for the card name.
-	 * @param {Boolean} official Whether to only include official Konami information. 
+	 * @param {Boolean} official Whether to only include official Konami information.
+	 * @param {String} source The source of the art to display.
 	 * @param {Number} artId The ID of the art to display.
 	 * @returns The generated EmbedBuilder and its image attachment (if any).
 	 */
-	generateArtEmbed(locale, official, artId = undefined) {
+	generateArtEmbed(locale, official, source, artId) {
 		const embedData = {}
 		
 		// We shouldn't be here with no art data, but do a final sanity check to make sure we leave if so.
@@ -246,7 +249,12 @@ class Card {
 		finalEmbed.setAuthor({ name: cardName, iconURL: colorIcon[1], url: titleUrl })
 		finalEmbed.setColor(colorIcon[0])
 		// Set the image.
-		const imageAttach = this.setEmbedImage(finalEmbed, artId, false)
+		if (!source && !artId) {
+			const censorArt = locale !== 'ja' && locale !== 'ko'
+			source = censorArt ? 'md' : 'ocg'
+			artId = 1
+		}
+		const imageAttach = this.setEmbedImage(finalEmbed, source, artId, false)
 
 		embedData.embed = finalEmbed
 		if (imageAttach) {
@@ -599,33 +607,33 @@ class Card {
 	 * Sets the given embed's image to this image ID and returns
 	 * the corresponding attachment (if any) that is necessary to attach with the message.
 	 * @param {EmbedBuilder} embed The embed to set the image for.
+	 * @param {string} source The source of the image (tcg, ocg, md).
 	 * @param {Number} id The ID of the image.
 	 * @param {Boolean} thumbnail Whether to set the thumbnail rather than the actual image. Defaults to true.
 	 * @returns The URL for the attachment, if any (null if no attachment).
 	 */
-	setEmbedImage(embed, id, thumbnail = true) {
-		// If we weren't given an explicit ID, use the Master Duel high-res artwork if we can,
-		// otherwise just use the first one that's free.
-		if (!id && this.imageData.size) {
-			if (this.imageData.has('md'))
-				id = 'md'
-			else
-				id = this.imageData.keys().next().value
+	setEmbedImage(embed, source, id, thumbnail = true) {
+		let srcArts = this.imageData.get(source)
+		if (!srcArts) {
+			// If we don't have this default, then go through our potential sources until we find one that works.
+			// Order of priority: md -> tcg -> ocg -> url
+			let srcIdx = 0
+			const testSources = ['md', 'tcg', 'ocg', 'url']
+			do {
+				source = testSources[srcIdx]
+				srcArts = this.imageData.get(source)
+				srcIdx++
+			} while (!srcArts && srcIdx < testSources.length)
+			
+			// If we got here and still don't have any source arts, then we've got nothing.
+			if (!srcArts) return
 		}
-		
-		let artPath = this.imageData.get(id)
-		if (!artPath)
-			return
-		else if (!(typeof artPath === 'string')) {
-			// The image data is still a raw binary buffer that needs to be saved to disk.
-			artPath = `${process.cwd()}/data/card_images/alts/`
-			if (this.dbId)
-				artPath += `${this.dbId}_${id}.png`
-			else if (this.passcode)
-				artPath += `${this.passcode}_${id}.png`
-			else
-				artPath += `${sanitize(this.name.get('en'))}_${id}.png`
 
+		let artPath = srcArts.get(`${id}`)
+		// Nothing to do if this ID doesn't map to anything.
+		if (!artPath) return
+
+		const saveImageData = (data, path) => {
 			let artCropDims = { 'top': 69, 'left': 32, 'width': 193, 'height': 191 }
 			// Pendulums have squished arts, so the crop needs to be different.
 			if (this.pendScale !== null || this.types.includes('Pendulum')) {
@@ -636,38 +644,58 @@ class Card {
 				else 
 					artCropDims = { 'top': 67, 'left': 18, 'width': 220, 'height': 177 }
 			}
-			
-			const rawData = this.imageData.get(id)
+
 			// This is really ugly, but I realized too late this was asynchronous and it's lead to some scenarios
 			// where the card embed is generated before the image is saved...
 			// This is a bad hack to force it to be synchronous.
 			let sync = true
-			sharp(rawData).extract(artCropDims).toFile(artPath, err => {
+			sharp(data).extract(artCropDims).toFile(path, err => {
 				if (err) logError(err, 'Failed to save card cropped image.')
 				sync = false
 			})
 			while (sync) deasync.sleep(100)
-
-			// Update the image data too so we don't have to lug around a bunch of raw data.
-			this.imageData.set(id, artPath)
 		}
-		
+
 		let attach = null
-		if (artPath.includes('http')) {
-			// The image data is some URL rather than raw data.
-			if (thumbnail)
-				embed.setThumbnail(artPath)
-			else
-				embed.setImage(artPath)
+		if (typeof artPath === 'string') {
+			// If the source was a URL, there's nothing to do, just use it.
+			if (source === 'url') {
+				thumbnail ? embed.setThumbnail(artPath) : embed.setImage(artPath)
+			}
+			// If it's from Master Duel or is already a cropped Neuron art, there's nothing to do, just use it (as an attachment).
+			else if (source === 'md' || artPath.includes('cropped_neuron')) {
+				attach = artPath
+			}
+			// This is a raw Neuron image but it isn't cropped yet. Load it so we can crop it.
+			else if (artPath.includes('en_neuron') || artPath.includes('jp_neuron')) {
+				const fileData = fs.readFileSync(artPath)
+				const artType = artPath.includes('en_neuron') ? '_tcg' : '_ocg'
+				const croppedPath = `${process.cwd()}/data/card_images/cropped_neuron/${this.dbId}${artType}_${id}.png`
+
+				saveImageData(fileData, croppedPath)
+				attach = croppedPath
+			}
 		}
 		else {
-			// Image data is a path on disk.
-			attach = artPath
-			const imageName = path.basename(artPath)
-			if (thumbnail)
-				embed.setThumbnail(`attachment://${imageName}`)
+			// The image data is still a raw binary buffer that needs to be saved to disk.
+			let croppedPath = `${process.cwd()}/data/card_images/cropped_neuron/`
+			const artType = source === 'ocg' ? '_ocg' : '_tcg'
+			if (this.dbId)
+				croppedPath += `${this.dbId}${artType}_${id}.png`
+			else if (this.passcode)
+				croppedPath += `${this.passcode}${artType}_${id}.png`
 			else
-				embed.setImage(`attachment://${imageName}`)
+				croppedPath += `${sanitize(this.name.get('en'))}${artType}_${id}.png`
+
+			saveImageData(artPath, croppedPath)
+			attach = croppedPath
+			// Update the image data too so we don't have to lug around a bunch of raw data.
+			srcArts.set(id, croppedPath)
+		}
+
+		if (attach) {
+			const attachPath = 'attachment://' + path.basename(attach)
+			thumbnail ? embed.setThumbnail(attachPath) : embed.setImage(attachPath)
 		}
 
 		return attach
@@ -824,31 +852,18 @@ class Card {
 	/**
 	 * Adds a given image to this card's image data. If it doesn't exist on the file system,
 	 * it will save the image. If it's from Neuron, it will also crop the image to include just the art.
-	 * @param {Number} id The ID of the image.
-	 * @param img The raw image data or URL.
-	 * @param {Boolean} url Whether this image is a URL rather than raw data.
+	 * @param {string} source The source of the image (tcg, ocg, md) 
+	 * @param {number} id The ID of the image.
+	 * @param imgData The raw image data or URL.
 	 */
-	addImageData(id, img, url = false) {
-		// If this is a URL, we don't need to save this at all, just set it.
-		if (url) {
-			this.imageData.set(id, img)
-			return
+	addImageData(source, id, imgData) {
+		let pathData = this.imageData.get(source)
+		if (!pathData) {
+			this.imageData.set(source, new Map())
+			pathData = this.imageData.get(source)
 		}
 
-		let artPath = `${process.cwd()}/data/card_images`
-		if (this.dbId)
-			artPath += `/alts/${this.dbId}_${id}.png`
-		else if (this.passcode)
-			artPath += `/alts/${this.passcode}_${id}.png`
-		else
-			artPath = `/alts/${sanitize(this.name.get('en'))}_${id}.png`
-		
-		if (fs.existsSync(artPath))
-			this.imageData.set(id, artPath)
-		else
-			// Save the raw data. Don't write the image to disk yet.
-			// The image will be saved to disk when necessary (i.e., when it's actually going to be used for an embed).
-			this.imageData.set(id, img)
+		pathData.set(id, imgData)
 	}
 
 	/**

@@ -5,7 +5,7 @@ const Query = require('lib/models/Query')
 const Ruling = require('lib/models/Ruling')
 const Search = require('lib/models/Search')
 const { addTcgplayerDataToDb } = require('./BotDBHandler')
-const { addToYgorgDb, searchArtworkRepo, populateCardFromYgorgApi, populateRulingFromYgorgApi } = require('./YGOrgDBHandler')
+const { addToYgorgDb, searchArtworkRepo, populateCardFromYgorgApi, populateRulingFromYgorgApi, getAllNeuronArts } = require('./YGOrgDBHandler')
 const { populateCardFromYugipediaApi } = require('./YugipediaHandler')
 const { getBanlistStatus } = require('./KonamiDBHandler')
 
@@ -24,8 +24,7 @@ async function convertYgorgDataToSearchData(qry, qaSearches, cardSearches = []) 
 	}
 
 	// Process any card data.
-	let artPath = `${process.cwd()}/data/card_images`
-	const cardsWithoutArt = []
+	const baseArtPath = `${process.cwd()}/data/card_images`
 	for (const s of cardSearches) {
 		if (!(s.data instanceof Card)) s.data = new Card()
 		populateCardFromYgorgApi(s.rawData, s.data)
@@ -33,48 +32,25 @@ async function convertYgorgDataToSearchData(qry, qaSearches, cardSearches = []) 
 		// Update banlist status, which isn't provided by YGOrg DB.
 		getBanlistStatus(s.data)		
 
-		// Find art data, which can be in one of two places:
-		// - 1. cached (saved) on disk
-		// - 2. YGOrg artwork repo
-		// Neuron art first, which includes all alternate artworks.
-		let numAlts = 1
-		let neuronArtPath = artPath + `/alts/${s.data.dbId}_${numAlts}.png`
-		while (fs.existsSync(neuronArtPath)) {
-			s.data.imageData.set(numAlts, neuronArtPath)
+		if (s.data.dbId) {
+			// Find all the art data, both from Neuron and Master Duel.
+			// Neuron art first, which includes all alternate artworks.
+			await getAllNeuronArts(s.data)
 
-			numAlts += 1
-			neuronArtPath = artPath + `/alts/${s.data.dbId}_${numAlts}.png`
-		}
-
-		// Also add Master Duel high-res artwork if possible.
-		// Master Duel has "common" and "tcg" art, where "tcg" is art that's censored in the TCG.
-		const commonArtPath = artPath + `/common/${s.data.dbId}.png`
-		const tcgArtPath = artPath + `/tcg/${s.data.dbId}.png`
-		let mdArtPath = ''
-		if (fs.existsSync(commonArtPath)) {
-			mdArtPath = commonArtPath
-		}
-		else if (fs.existsSync(tcgArtPath)) {
-			mdArtPath = tcgArtPath
-		}
-		// No Master Duel art yet? Kick to the artwork repo for the lower res Neuron art.
-		else if (!s.data.imageData.size) {
-			cardsWithoutArt.push(s)
-		}
-
-		if (mdArtPath) {
-			// If this card only has one art from Neuron (i.e., no alts), then just get rid of it.
-			// The Master Duel high res version will be a dupe, but much better.
-			if (s.data.imageData.size === 1) {
-				s.data.imageData.clear()
+			// Now Master Duel high-res artwork if possible.
+			// Master Duel has "common" and "tcg" art, where "tcg" is art that's censored in the TCG.
+			const commonArtPath = baseArtPath + `/common/${s.data.dbId}.png`
+			const tcgArtPath = baseArtPath + `/tcg/${s.data.dbId}.png`
+			if (fs.existsSync(commonArtPath)) {
+				s.data.addImageData('md', '1', commonArtPath)
 			}
-			s.data.imageData.set('md', mdArtPath)
+			else if (fs.existsSync(tcgArtPath)) {
+				s.data.addImageData('md', '1', tcgArtPath)
+			}
 		}
 	}
 	// Resolve any that still don't have art.
-	if (cardsWithoutArt.length) {
-		await searchArtworkRepo(cardSearches)
-	}
+	await searchArtworkRepo(cardSearches.filter(c => !c.data.imageData.size))
 
 	// Add anything from the API to the YGOrg DB as necessary.
 	addToYgorgDb(qaSearches, cardSearches)

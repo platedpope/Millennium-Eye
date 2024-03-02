@@ -7,36 +7,49 @@ const Search = require('lib/models/Search')
 const { queryRespond, processQuery } = require('handlers/QueryHandler')
 const { generateError } = require('lib/utils/logging')
 const { searchNameToIdIndex } = require('handlers/YGOrgDBHandler')
+const Card = require('lib/models/Card')
 
 /**
  * Helper function to generate the select menu for which art to display.
+ * @param {string} selectedSource The selected source.
  * @param {Number} selectedId The selected art ID.
- * @param {Number} availableArtIds The number of available art IDs.
+ * @param {Map<string, Map<string, string>>} cardImageData All available card images.
  * @returns {Array} The array of message rows.
  */
-function generateArtSelect(selectedId, availableArtIds, hasMasterDuelArt, disable = false) {
+function generateArtSelect(selectedSource, selectedId, cardImageData, disable = false) {
 	const messageRows = []
+	
+	let selectOptions = []
+	const sourceRow = new ActionRowBuilder()
+	const sourceSelect = new StringSelectMenuBuilder()
+		.setCustomId(`source_select`)
+		.setPlaceholder('Select Source')
+		.setDisabled(disable)
+	for (const s of cardImageData.keys()) {
+		let optionName = s === 'md' ? 'Master Duel (High Res)' : s.toUpperCase()  
+		selectOptions.push({
+			label: optionName,
+			value: s,
+			default: s === selectedSource
+		})
+	}
+	sourceSelect.addOptions(selectOptions)
+	sourceRow.addComponents(sourceSelect)
+	messageRows.push(sourceRow)
 
+	selectOptions = []
 	const artRow = new ActionRowBuilder()
 	const artSelect = new StringSelectMenuBuilder()
 		.setCustomId(`art_id_select`)
 		.setPlaceholder('Select Art ID')
 		.setDisabled(disable)
-	const selectOptions = []
-	if (hasMasterDuelArt)
+	const arts = cardImageData.get(selectedSource)
+	for (const id of arts.keys())
 		selectOptions.push(
 			{
-				label: 'Master Duel (High Res)',
-				value: 'md',
-				default: selectedId === 'md'
-			}
-		)
-	for (let i = 1; i <= availableArtIds; i++)
-		selectOptions.push(
-			{
-				label: `Art ${i}`,
-				value: `${i}`,
-				default: i === selectedId
+				label: `Art ${id}`,
+				value: `${id}`,
+				default: id === `${selectedId}`
 			}
 		)
 	artSelect.addOptions(selectOptions)
@@ -93,84 +106,98 @@ module.exports = new Command({
 			return
 		}
 
+		/** @type {Card} */
+		const cardData = artSearch.data
+
 		// Set up all the information beforehand.
 		let viewedArt = 1
-		const hasMasterDuelArt = artSearch.data.imageData.has('md')
-		let availableArts = artSearch.data.imageData.size
-		if (hasMasterDuelArt) {
-			viewedArt = 'md'
-			// Other arts are indexed by ID, so if we have any,
-			// subtract the MD art from the available count because it has no ID.
-			if (availableArts > 1) 
-				availableArts -= 1 
+		// Pick a default source in rder of priority: md -> tcg -> ocg
+		let srcIdx = 0
+		const testSources = ['md', 'tcg', 'ocg']
+		do {
+			var viewedSource = testSources[srcIdx]
+			srcArts = cardData.imageData.get(viewedSource)
+			srcIdx++
+		} while (!srcArts && srcIdx < testSources.length)
+		
+		// If we got here and still don't have any source arts, then we've got nothing.
+		if (!srcArts) {
+			await queryRespond(bot, interaction, 'Could not find any art data with the given search.', qry, { ephemeral: true })
+			return
 		}
 		
 		const msgOptions = {}
-		const embedData = artSearch.data.generateArtEmbed(locale, qry.official, viewedArt)
+		const embedData = cardData.generateArtEmbed(locale, qry.official, viewedSource, viewedArt)
 		if ('embed' in embedData)
 			msgOptions.embeds = [embedData.embed]
 		if ('attachment' in embedData)
 			msgOptions.files = [embedData.attachment]
-		
-		// Only give + handle an art selection menu if we've got more than one to choose from.
-		if (availableArts > 1) {
-			msgOptions.components = generateArtSelect(viewedArt, availableArts, hasMasterDuelArt)
-			msgOptions.ephemeral = true
 
-			const resp = await queryRespond(bot, interaction, '', qry, msgOptions)
+		msgOptions.components = generateArtSelect(viewedSource, viewedArt, cardData.imageData)
+		msgOptions.ephemeral = true
 
-			let postToChat = false
-			const collector = resp.createMessageComponentCollector({ time: 15000 })
+		const resp = await queryRespond(bot, interaction, '', qry, msgOptions)
 
-			collector.on('collect', async i => {
-				if (i.user.id !== interaction.user.id) {
-					i.reply({ content: 'Only the user that originally sent the command can interact with these options.', ephemeral: true })
-					return
-				}
+		let postToChat = false
+		const collector = resp.createMessageComponentCollector({ time: 15000 })
 
-				if (/^art_id_select/.test(i.customId)) {
-					viewedArt = parseInt(i.values[0], 10)
-					if (isNaN(viewedArt))
-						viewedArt = i.values[0]
-					const embedData = artSearch.data.generateArtEmbed(locale, qry.official, viewedArt)
-					if ('embed' in embedData)
-						msgOptions.embeds = [embedData.embed]
-					if ('attachment' in embedData)
-						msgOptions.files = [embedData.attachment]
-					msgOptions.components = generateArtSelect(viewedArt, availableArts, hasMasterDuelArt)
+		collector.on('collect', async i => {
+			if (i.user.id !== interaction.user.id) {
+				i.reply({ content: 'Only the user that originally sent the command can interact with these options.', ephemeral: true })
+				return
+			}
 
-					await i.update(msgOptions)
-					collector.resetTimer()
-				}
-				else if (/^confirm_art_button/.test(i.customId)) {
-					msgOptions.components = generateArtSelect(viewedArt, availableArts, hasMasterDuelArt, true)
-					i.update(msgOptions)
-					postToChat = true
-					collector.stop()
-				}
-			})
+			if (/^source_select/.test(i.customId)) {
+				viewedSource = i.values[0]
+				// Reset selected ID if source was changed so it's not an invalid number for the new source.
+				if (Number(viewedArt) > cardData.imageData.get(viewedSource).size) viewedArt = 1
 
-			collector.on('end', async () => {
-				if (postToChat) {
-					delete msgOptions.components
-					delete msgOptions.ephemeral
-					// The followUp responds to the ephemeral message, making the initial command invocation is "invisible".
-					// Add a footer identifying who invoked the command to prevent abuse.
-					msgOptions.embeds[0].setFooter({ text: `Requested by: ${interaction.user.username}#${interaction.user.discriminator}`})
-					interaction.followUp(msgOptions)
-				}
-				else {
-					msgOptions.components = generateArtSelect(viewedArt, availableArts, hasMasterDuelArt, true)
-					interaction.editReply(msgOptions)
-				}
-			})
-		}
-		else if (availableArts === 1) {
-			await queryRespond(bot, interaction, '', qry, msgOptions)
-		}
-		else {
-			await queryRespond(bot, interaction, 'Could not find any art data with the given search.', qry, { ephemeral: true })
-		}
+				const embedData = cardData.generateArtEmbed(locale, qry.official, viewedSource, viewedArt)
+				if ('embed' in embedData)
+					msgOptions.embeds = [embedData.embed]
+				if ('attachment' in embedData)
+					msgOptions.files = [embedData.attachment]
+				msgOptions.components = generateArtSelect(viewedSource, viewedArt, cardData.imageData)
+
+				await i.update(msgOptions)
+				collector.resetTimer()
+			}
+			else if (/^art_id_select/.test(i.customId)) {
+				viewedArt = parseInt(i.values[0], 10)
+				if (isNaN(viewedArt))
+					viewedArt = i.values[0]
+				const embedData = cardData.generateArtEmbed(locale, qry.official, viewedSource, viewedArt)
+				if ('embed' in embedData)
+					msgOptions.embeds = [embedData.embed]
+				if ('attachment' in embedData)
+					msgOptions.files = [embedData.attachment]
+				msgOptions.components = generateArtSelect(viewedSource, viewedArt, cardData.imageData)
+
+				await i.update(msgOptions)
+				collector.resetTimer()
+			}
+			else if (/^confirm_art_button/.test(i.customId)) {
+				msgOptions.components = generateArtSelect(viewedSource, viewedArt, cardData.imageData, true)
+				i.update(msgOptions)
+				postToChat = true
+				collector.stop()
+			}
+		})
+
+		collector.on('end', async () => {
+			if (postToChat) {
+				delete msgOptions.components
+				delete msgOptions.ephemeral
+				// The followUp responds to the ephemeral message, making the initial command invocation is "invisible".
+				// Add a footer identifying who invoked the command to prevent abuse.
+				msgOptions.embeds[0].setFooter({ text: `Requested by: ${interaction.user.username}#${interaction.user.discriminator}`})
+				interaction.followUp(msgOptions)
+			}
+			else {
+				msgOptions.components = generateArtSelect(viewedSource, viewedArt, cardData.imageData, true)
+				interaction.editReply(msgOptions)
+			}
+		})
 	},
 	autocomplete: async (interaction, bot) => {
 		const focus = interaction.options.getFocused(true)

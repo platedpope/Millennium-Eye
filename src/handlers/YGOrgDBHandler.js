@@ -1,4 +1,5 @@
 const Database = require('better-sqlite3')
+const fs = require('fs')
 
 const { logError, logger } = require('lib/utils/logging')
 const { CardDataFilter } = require('lib/utils/filter')
@@ -31,11 +32,184 @@ const _apiResponseCache = {
 // The propertyToLocaleIndex is the propertyArray API data converted into a map for easy type lookups for the bot's purposes.
 const _propertyToLocaleIndex = {}
 
+async function _loadApiResponseCache() {
+	// Load current manifest revision.
+	const dbData = _ygorgDb.prepare('SELECT * FROM manifestData').get()
+	if (dbData) {
+		_apiResponseCache['lastManifestRevision'] = dbData.lastManifestRevision
+	}
+	else {
+		return false
+	}
+
+	// Load all card and QA data.
+	const cardData = _ygorgDb.prepare('SELECT * FROM cardData').all()
+	for (r of cardData) {
+		_apiResponseCache.cardData[r.id] = JSON.parse(r.jsonResponse)
+	}
+	const qaData = _ygorgDb.prepare('SELECT * FROM qaData').all()
+	for (r of qaData) {
+		_apiResponseCache.qaData[r.id] = JSON.parse(r.jsonResponse)
+	}
+	const idxData = _ygorgDb.prepare('SELECT * FROM nameToIdIndex').all()
+	if (idxData.length) {
+		for (r of idxData) {
+			_apiResponseCache.nameToIdIndex[r.locale] = JSON.parse(r.jsonResponse)
+		}
+	}
+	else {
+		// Force-cache the name to ID index if we don't have it in the database for some reason.
+		await _cacheNameToIdIndex()
+	}
+	await _cachePropertyMetadata()
+
+	return true
+}
+
+/**
+ * Saves off the YGORG card name -> ID search index for all locales.
+ * @param {Array<String>} locale An array of locales to query the search index for.
+ */
+async function _cacheNameToIdIndex(locales = Object.keys(Locales)) {
+	let localesToRequest = [...locales]
+	// Resolve any outstanding requests we have and evict ones with bad responses so we re-request them.
+	for (const loc in _apiResponseCache.nameToIdIndex) {
+		const idxData = await Promise.resolve(_apiResponseCache.nameToIdIndex[loc])
+		if (!idxData) {
+			delete _apiResponseCache.nameToIdIndex[loc]
+			if (!localesToRequest.includes(loc)) {
+				localesToRequest.push(loc)
+			}
+		}
+	}
+	// Only request the locales that we don't have cached.
+	localesToRequest = localesToRequest.filter(l => !(l in _apiResponseCache.nameToIdIndex))
+	if (!localesToRequest.length) return
+
+	for (const l of localesNotCached) {
+		_apiResponseCache.nameToIdIndex[l] = fetch(`${YGORG_NAME_ID_INDEX}/${l}`, { signal: AbortSignal.timeout(API_TIMEOUT) })
+			.then(async r => {
+				logger.info(`Resolved name->ID index for locale ${l}.`)
+				const jsonResponse = await r.json()
+				_ygorgDb.prepare('INSERT OR REPLACE INTO nameToIdIndex(locale, jsonResponse) VALUES(?, ?)').run(indexLocale, JSON.stringify(jsonResponse))
+				return jsonResponse
+			})
+			.catch(err => {
+				logError(err.message, `YGOrg API query for name -> ID index for locale ${l} failed.`)
+			})
+	}
+
+	logger.info(`Sent new YGOrg API requests for caching name->ID index for locales ${localesToRequest.join(', ')}.`)
+}
+
+/**
+ * Saves off the YGOrg localization metadata for properties and types.
+ */
+async function _cachePropertyMetadata() {
+	try {
+		var resp = await fetch(YGORG_PROPERTY_METADATA, { signal: AbortSignal.timeout(API_TIMEOUT) })
+	}
+	catch (err) {
+		logError(err.message, 'YGOrg API query to initialize property metadata failed.')
+		return
+	}
+
+	if (resp) {
+		const jsonResponse = await resp.json()
+		_apiResponseCache.propertyArray = jsonResponse
+		// Also rejig this by pulling out the EN values to make them keys in a map for easy future lookups.
+		for (const prop of jsonResponse) {
+			if (!prop) continue
+			else if (!('en' in prop)) continue
+
+			// Pull out the EN property name and make it a key.
+			const enProp = prop['en']
+			_propertyToLocaleIndex[enProp] = {}
+			for (const locale in prop) {
+				// Make each locale a key under EN that maps to the translation of that property.
+				_propertyToLocaleIndex[enProp][locale] = prop[locale]
+			}
+		}
+
+		// Also load some hardcoded ones the bot tracks for itself (not given by YGOrg DB since it doesn't have any use for them).
+		_propertyToLocaleIndex['Level'] = {
+			'de': 'Stufe',
+			'en': 'Level',
+			'es': 'Nivel',
+			'fr': 'Niveau',
+			'it': 'Livello',
+			'ja': 'レベル',
+			'ko': '레벨',
+			'pt': 'Nível'
+		}
+		_propertyToLocaleIndex['Rank'] = {
+			'de': 'Rang',
+			'en': 'Rank',
+			'es': 'Rango',
+			'fr': 'Rang',
+			'it': 'Rango',
+			'ja': 'ランク',
+			'ko': '랭크',
+			'pt': 'Classe'
+		}
+		_propertyToLocaleIndex['Pendulum Effect'] = {
+			'de': 'Pendeleffekt',
+			'en': 'Pendulum Effect',
+			'es': 'Efecto de Péndulo',
+			'fr': 'Effet Pendule',
+			'it': 'Effetto Pendulum',
+			'ja': 'ペンデュラム効果',
+			'ko': '펜듈럼 효과',
+			'pt': 'Efeito de Pêndulo'
+		}
+		_propertyToLocaleIndex['Pendulum Scale'] = {
+			'de': 'Pendelbereich',
+			'en': 'Pendulum Scale',
+			'es': 'Escala de Péndulo',
+			'fr': 'Échelle Pendule',
+			'it': 'Valore Pendulum',
+			'ja': 'ペンデュラムスケール',
+			'ko': '펜듈럼 스케일',
+			'pt': 'Escala de Pêndulo'
+		}
+
+		logger.info('Successfully cached YGOrg DB locale property metadata.')
+	}
+}
+
+/**
+ * Caches the artwork manifest for repo searches.
+ * If a manifest is already cached, it does nothing.
+ */
+async function _cacheArtworkManifest() {
+	// First get the manifest. Used the cached one if we've got it.
+	if (!_apiResponseCache.artworkManifest) {
+		try {
+			const resp = await fetch(`${YGORG_ARTWORK_API}/manifest.json`, { signal: AbortSignal.timeout(API_TIMEOUT) })
+			const jsonResponse = await resp.json()
+			if ('cards' in jsonResponse) {
+				_apiResponseCache.artworkManifest = jsonResponse.cards
+				logger.info('Cached new artwork repo manifest, resetting in 24 hrs.')
+				setTimeout(() => {
+					_apiResponseCache.artworkManifest = null
+					logger.info('Evicted cached artwork repo manifest, will re-cache the next time it is necessary.')
+				}, 24 * 60 * 60 * 1000)
+			}
+			else {
+				logError(undefined, 'No card data in artwork repo manifest?')
+			}
+		}
+		catch (err) {
+			logError(err.message, 'Failed processing artwork repo manifest!')
+		}
+	}
+}
+
 async function checkForDataManifestUpdate() {
 	// If the API response cache hasn't been initialized yet,
 	// load it from the SQLite database.
 	if (!('lastManifestRevision' in _apiResponseCache) || _apiResponseCache.lastManifestRevision === undefined) {
-		const success = await loadApiResponseCache()
+		const success = await _loadApiResponseCache()
 		if (!success) {
 			logError('Could not load the last manifest revision, so cannot check for updates. Exiting early.')
 			return
@@ -137,40 +311,6 @@ async function checkForDataManifestUpdate() {
 			}
 		}
 	}
-}
-
-async function loadApiResponseCache() {
-	// Load current manifest revision.
-	const dbData = _ygorgDb.prepare('SELECT * FROM manifestData').get()
-	if (dbData) {
-		_apiResponseCache['lastManifestRevision'] = dbData.lastManifestRevision
-	}
-	else {
-		return false
-	}
-
-	// Load all card and QA data.
-	const cardData = _ygorgDb.prepare('SELECT * FROM cardData').all()
-	for (r of cardData) {
-		_apiResponseCache.cardData[r.id] = JSON.parse(r.jsonResponse)
-	}
-	const qaData = _ygorgDb.prepare('SELECT * FROM qaData').all()
-	for (r of qaData) {
-		_apiResponseCache.qaData[r.id] = JSON.parse(r.jsonResponse)
-	}
-	const idxData = _ygorgDb.prepare('SELECT * FROM nameToIdIndex').all()
-	if (idxData.length) {
-		for (r of idxData) {
-			_apiResponseCache.nameToIdIndex[r.locale] = JSON.parse(r.jsonResponse)
-		}
-	}
-	else {
-		// Force-cache the name to ID index if we don't have it in the database for some reason.
-		await cacheNameToIdIndex()
-	}
-	await cachePropertyMetadata()
-
-	return true
 }
 
 /**
@@ -296,28 +436,7 @@ async function searchYgorgDb(searches, qry, dataHandlerCallback) {
  * @param {Array<Search>} artSearches The searches that need card art. 
  */
 async function searchArtworkRepo(artSearches) {
-	// First get the manifest. Used the cached one if we've got it.
-	if (!_apiResponseCache.artworkManifest) {
-		try {
-			const resp = await fetch(`${YGORG_ARTWORK_API}/manifest.json`, { signal: AbortSignal.timeout(API_TIMEOUT) })
-			_apiResponseCache.artworkManifest = await resp.json()
-			logger.info('Cached new artwork repo manifest, resetting in 24 hrs.')
-			setTimeout(() => {
-				_apiResponseCache.artworkManifest = null
-				logger.info('Evicted cached artwork repo manifest, will re-cache the next time it is necessary.')
-			}, 24 * 60 * 60 * 1000)
-		}
-		catch (err) {
-			logError(err.message, 'Failed processing artwork repo manifest, exiting.')
-			return
-		}
-	}
-
-	if (!_apiResponseCache.artworkManifest || !('cards' in _apiResponseCache.artworkManifest)) {
-		// Manifest query didn't work? No art then, I guess.
-		logError(undefined, 'Attempted search in artwork repo with no manifest?')
-		return
-	}
+	await _cacheArtworkManifest()
 
 	const manifestCardData = _apiResponseCache.artworkManifest
 
@@ -333,9 +452,9 @@ async function searchArtworkRepo(artSearches) {
 
 		if (cardId in manifestCardData) {
 			const cardArtData = manifestCardData[cardId]
-			for (const artId in cardArtData) {
+			for (const [artId, artPaths] of Object.entries(cardArtData)) {
 				// Send requests for each art.
-				const bestArtRepoLoc = cardArtData[artId].bestArt
+				const bestArtRepoLoc = artPaths.bestArt
 				const bestArtFullUrl = new URL(bestArtRepoLoc, YGORG_ARTWORK_API)
 				const req = fetch(bestArtFullUrl.toString(), { signal: AbortSignal.timeout(API_TIMEOUT) })
 					.then(async r => await r.arrayBuffer())
@@ -369,6 +488,62 @@ async function searchArtworkRepo(artSearches) {
 				// Therefore, our index in the array +1 is the art ID.
 				const artId = i + 1
 				origSearch.data.addImageData(artId, resp.value)
+			}
+		}
+	}
+}
+
+/**
+ * Surveys the file system and the artwork manifest to determine where the paths
+ * to the raw image data associated with this card ID are, then sets the card's imageData accordingly.
+ * @param {Card} card The card object to populate the image data for.
+ */
+async function getAllNeuronArts(card) {
+	await _cacheArtworkManifest()
+	if (!_apiResponseCache.artworkManifest) return
+	const manifestData = _apiResponseCache.artworkManifest
+
+	const cardId = card.dbId
+	if (cardId in manifestData) {
+		const baseArtPath = `${process.cwd()}/data/card_images`
+		for (const [artId, repoPathData] of Object.entries(manifestData[cardId])) {
+			const bestRepoTcgPath = repoPathData.bestTCG
+			const bestRepoOcgPath = repoPathData.bestOCG
+
+			// First check if we have crops for the relevant arts already and use those.
+			const tcgCropPath = baseArtPath + `/cropped_neuron/${cardId}_tcg_${artId}.png`
+			const ocgCropPath = baseArtPath + `/cropped_neuron/${cardId}_ocg_${artId}.png`
+			const tcgCropExists = fs.existsSync(tcgCropPath)
+			const ocgCropExists = fs.existsSync(ocgCropPath)
+			if (tcgCropExists) {
+				card.addImageData('tcg', artId, tcgCropPath)
+			}
+			if (ocgCropExists) {
+				card.addImageData('ocg', artId, ocgCropPath)
+			}
+			// If we have cropped arts for all paths that exist in the repo, then nothing more to do here.
+			if ((!bestRepoTcgPath || (bestRepoTcgPath && tcgCropExists)) &&
+					(!bestRepoOcgPath || (bestRepoOcgPath && ocgCropExists)))
+			{
+				continue
+			}
+
+			// If we get here, we're missing an existing crop(s) so we need to look for the source image(s) from the repo.
+			// As of writing this, paths in the manifest look like:
+			// https://artworks-jp-n.ygorganization.com/2/0/41_1.png
+			// We have local copies of the repo that follow the same subdir structure,
+			// but need to replace the entire https://...com section with our base path instead.
+			if (bestRepoTcgPath) {
+				const bestLocalTcgPath = bestRepoTcgPath.replace(/\/\/.*\.com/, baseArtPath + '/en_neuron')
+				if (fs.existsSync(bestLocalTcgPath)) {
+					card.addImageData('tcg', artId, bestLocalTcgPath)
+				}
+			}
+			if (bestRepoOcgPath) {
+				const bestLocalOcgPath = bestRepoOcgPath.replace(/\/\/.*\.com/, baseArtPath + '/jp_neuron')
+				if (fs.existsSync(bestLocalOcgPath)) {
+					card.addImageData('ocg', artId, bestLocalOcgPath)
+				}
 			}
 		}
 	}
@@ -544,42 +719,6 @@ function addToYgorgDb(qaSearches, cardSearches) {
 }
 
 /**
- * Saves off the YGORG card name -> ID search index for all locales.
- * @param {Array<String>} locale An array of locales to query the search index for.
- */
-async function cacheNameToIdIndex(locales = Object.keys(Locales)) {
-	let localesToRequest = [...locales]
-	// Resolve any outstanding requests we have and evict ones with bad responses so we re-request them.
-	for (const loc in _apiResponseCache.nameToIdIndex) {
-		const idxData = await Promise.resolve(_apiResponseCache.nameToIdIndex[loc])
-		if (!idxData) {
-			delete _apiResponseCache.nameToIdIndex[loc]
-			if (!localesToRequest.includes(loc)) {
-				localesToRequest.push(loc)
-			}
-		}
-	}
-	// Only request the locales that we don't have cached.
-	localesToRequest = localesToRequest.filter(l => !(l in _apiResponseCache.nameToIdIndex))
-	if (!localesToRequest.length) return
-
-	for (const l of localesNotCached) {
-		_apiResponseCache.nameToIdIndex[l] = fetch(`${YGORG_NAME_ID_INDEX}/${l}`, { signal: AbortSignal.timeout(API_TIMEOUT) })
-			.then(async r => {
-				logger.info(`Resolved name->ID index for locale ${l}.`)
-				const jsonResponse = await r.json()
-				_ygorgDb.prepare('INSERT OR REPLACE INTO nameToIdIndex(locale, jsonResponse) VALUES(?, ?)').run(indexLocale, JSON.stringify(jsonResponse))
-				return jsonResponse
-			})
-			.catch(err => {
-				logError(err.message, `YGOrg API query for name -> ID index for locale ${l} failed.`)
-			})
-	}
-
-	logger.info(`Sent new YGOrg API requests for caching name->ID index for locales ${localesToRequest.join(', ')}.`)
-}
-
-/**
  * Searches the name to ID index for the best match among all locales.
  * @param {String} search The value to search for. 
  * @param {Array<String>} locales The array of locales to search for.
@@ -589,7 +728,7 @@ async function cacheNameToIdIndex(locales = Object.keys(Locales)) {
  */
 async function searchNameToIdIndex(search, locales, returnMatches = 1, returnNames = false) {
 	// Make sure we have the necessary locales cached before trying to search.
-	cacheNameToIdIndex(locales)
+	await _cacheNameToIdIndex(locales)
 
 	const matches = new Map()
 
@@ -622,81 +761,6 @@ async function searchNameToIdIndex(search, locales, returnMatches = 1, returnNam
 	}
 	
 	return Promise.resolve(matches)
-}
-
-/**
- * Saves off the YGOrg localization metadata for properties and types.
- */
-async function cachePropertyMetadata() {
-	try {
-		var resp = await fetch(YGORG_PROPERTY_METADATA, { signal: AbortSignal.timeout(API_TIMEOUT) })
-	}
-	catch (err) {
-		logError(err.message, 'YGOrg API query to initialize property metadata failed.')
-		return
-	}
-
-	if (resp) {
-		const jsonResponse = await resp.json()
-		_apiResponseCache.propertyArray = jsonResponse
-		// Also rejig this by pulling out the EN values to make them keys in a map for easy future lookups.
-		for (const prop of jsonResponse) {
-			if (!prop) continue
-			else if (!('en' in prop)) continue
-
-			// Pull out the EN property name and make it a key.
-			const enProp = prop['en']
-			_propertyToLocaleIndex[enProp] = {}
-			for (const locale in prop) {
-				// Make each locale a key under EN that maps to the translation of that property.
-				_propertyToLocaleIndex[enProp][locale] = prop[locale]
-			}
-		}
-
-		// Also load some hardcoded ones the bot tracks for itself (not given by YGOrg DB since it doesn't have any use for them).
-		_propertyToLocaleIndex['Level'] = {
-			'de': 'Stufe',
-			'en': 'Level',
-			'es': 'Nivel',
-			'fr': 'Niveau',
-			'it': 'Livello',
-			'ja': 'レベル',
-			'ko': '레벨',
-			'pt': 'Nível'
-		}
-		_propertyToLocaleIndex['Rank'] = {
-			'de': 'Rang',
-			'en': 'Rank',
-			'es': 'Rango',
-			'fr': 'Rang',
-			'it': 'Rango',
-			'ja': 'ランク',
-			'ko': '랭크',
-			'pt': 'Classe'
-		}
-		_propertyToLocaleIndex['Pendulum Effect'] = {
-			'de': 'Pendeleffekt',
-			'en': 'Pendulum Effect',
-			'es': 'Efecto de Péndulo',
-			'fr': 'Effet Pendule',
-			'it': 'Effetto Pendulum',
-			'ja': 'ペンデュラム効果',
-			'ko': '펜듈럼 효과',
-			'pt': 'Efeito de Pêndulo'
-		}
-		_propertyToLocaleIndex['Pendulum Scale'] = {
-			'de': 'Pendelbereich',
-			'en': 'Pendulum Scale',
-			'es': 'Escala de Péndulo',
-			'fr': 'Échelle Pendule',
-			'it': 'Valore Pendulum',
-			'ja': 'ペンデュラムスケール',
-			'ko': '펜듈럼 스케일',
-			'pt': 'Escala de Pêndulo'
-		}
-
-		logger.info('Successfully cached YGOrg DB locale property metadata.')
-	}
 }
 
 /**
@@ -736,5 +800,5 @@ function searchPropertyArray(index, locale) {
 module.exports = {
 	checkForDataManifestUpdate, searchYgorgDb, searchArtworkRepo, addToYgorgDb, 
 	populateCardFromYgorgApi, populateRulingFromYgorgApi,
-	searchNameToIdIndex, searchPropertyToLocaleIndex, searchPropertyArray
+	searchNameToIdIndex, searchPropertyToLocaleIndex, searchPropertyArray, getAllNeuronArts
 }
