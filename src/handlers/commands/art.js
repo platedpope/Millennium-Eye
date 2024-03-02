@@ -190,7 +190,7 @@ module.exports = new Command({
 				delete msgOptions.ephemeral
 				// The followUp responds to the ephemeral message, making the initial command invocation is "invisible".
 				// Add a footer identifying who invoked the command to prevent abuse.
-				msgOptions.embeds[0].setFooter({ text: `Requested by: ${interaction.user.username}#${interaction.user.discriminator}`})
+				msgOptions.embeds[0].setFooter({ text: `Requested by: ${interaction.user.username}`})
 				interaction.followUp(msgOptions)
 			}
 			else {

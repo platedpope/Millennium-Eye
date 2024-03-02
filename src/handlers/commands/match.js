@@ -170,7 +170,7 @@ module.exports = new Command({
 				// The followUp responds to the ephemeral message, making the initial command invocation is "invisible".
 				// Add a footer identifying who invoked the command to prevent abuse.
 				const finalEmbed = msgOptions.embeds[0]
-				const footerText = finalEmbed.data.footer.text + ` | Requested by: ${interaction.user.username}#${interaction.user.discriminator}`
+				const footerText = finalEmbed.data.footer.text + ` | Requested by: ${interaction.user.username}`
 				finalEmbed.setFooter({ text: footerText })
 
 				interaction.followUp(msgOptions)
