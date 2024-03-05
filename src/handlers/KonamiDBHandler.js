@@ -81,35 +81,37 @@ async function updateKonamiDb() {
 			logError(null, `Master Duel Meta API query parsing returned ${foundCards}/${totalCards} cards. Exiting early because that result does not match expectations.`)
 			return
 		}
+
+		const mdListToNumberMap = {
+			'Forbidden': 0,
+			'Limited 1': 1,
+			'Limited 2': 2,
+			'null': 3
+		}
 		
-		const affectedCards = []
+		const cardListData = {}
 		for (const data of Object.values(cardData)) {
 			// Only care about cards with a database ID.
-			if ('gameId' in data && data['gameId'] !== '') {
-				if ('banStatus' in data && data['banStatus'] !== null) {
-					switch(data['banStatus']) {
-						case 'Forbidden':
-							affectedCards.push([data.gameId, 0])
-							break
-						case 'Limited 1':
-							affectedCards.push([data.gameId, 1])
-							break
-						case 'Limited 2':
-							affectedCards.push([data.gameId, 2])
-							break
-						default:
-							logError(null, `Master Duel Meta API return for card ${data.gameId} has unknown banStatus ${data['banStatus']}.`)
-					}
+			const dbId = data['gameId']
+			if (dbId) {
+				if ('banStatus' in data) {
+					cardListData[dbId] = mdListToNumberMap[data['banStatus']]
 				}
 				// The nameRelease and release fields in Master Duel API are both absent or null for cards that aren't released in Master Duel.
-				if (!('nameRelease' in data || ('nameRelease' in data && data['nameRelease'] === null))) {
-					if (!('release' in data) || ('release' in data && data['release'] === null)) {
+				else if (!(data['nameRelease']) && !(data['release'])) {
+					// Ignore cards we've seen before, some API data is incomplete and this entry with no releases is probably not better than what we saw before.
+					if (!(dbId in cardListData)) {
 						// Track unreleased MD cards as -1 in our banlist data.
-						affectedCards.push([data.gameId, -1])
+						cardListData[dbId] = -1
 					}
+				}
+				else {
+					// This card has no banStatus set, but it does have a release date. Assume it's at 3.
+					cardListData[dbId] = 3
 				}
 			}
 		}
+		const affectedCards = Object.entries(cardListData).filter(data => data[1] !== 3)
 
 		const removeMdBanStatus = _konamiDb.prepare('DELETE FROM banlist WHERE cg = ?')
 		const insertMdBanStatus = _konamiDb.prepare(`

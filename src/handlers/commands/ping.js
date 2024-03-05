@@ -16,8 +16,17 @@ module.exports = new Command({
 		await interaction.editReply(`🏓 Pong! Latency: ${bot.ws.ping} ms`)
 
 		// For testing purposes only, create a heapdump for memory analysis.
-		if (config.testMode) {
-			heapdump.writeSnapshot()
+		if (interaction.user.id === 219319817688186891) {
+			const formatBytesToMB = (data) => `${Math.round(data / 1024 / 1024 * 100) / 100} MB`
+			const mem = process.memoryUsage()
+			const fmtMem = {
+				rss: `${formatBytesToMB(mem.rss)}`,
+				heapTotal: `${formatBytesToMB(mem.heapTotal)}`,
+				heapUsed: `${formatBytesToMB(mem.heapUsed)}`,
+				external: `${formatBytesToMB(mem.external)}`
+			}
+			console.log(fmtMem)
+			// heapdump.writeSnapshot()
 		}
 	}
 })
