@@ -86,7 +86,7 @@ async function _cacheNameToIdIndex(locales = Object.keys(Locales)) {
 	localesToRequest = localesToRequest.filter(l => !(l in _apiResponseCache.nameToIdIndex))
 	if (!localesToRequest.length) return
 
-	for (const l of localesNotCached) {
+	for (const l of localesToRequest) {
 		_apiResponseCache.nameToIdIndex[l] = fetch(`${YGORG_NAME_ID_INDEX}/${l}`, { signal: AbortSignal.timeout(API_TIMEOUT) })
 			.then(async r => {
 				logger.info(`Resolved name->ID index for locale ${l}.`)
