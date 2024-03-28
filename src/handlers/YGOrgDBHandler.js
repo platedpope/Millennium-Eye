@@ -91,7 +91,7 @@ async function _cacheNameToIdIndex(locales = Object.keys(Locales)) {
 			.then(async r => {
 				logger.info(`Resolved name->ID index for locale ${l}.`)
 				const jsonResponse = await r.json()
-				_ygorgDb.prepare('INSERT OR REPLACE INTO nameToIdIndex(locale, jsonResponse) VALUES(?, ?)').run(indexLocale, JSON.stringify(jsonResponse))
+				_ygorgDb.prepare('INSERT OR REPLACE INTO nameToIdIndex(locale, jsonResponse) VALUES(?, ?)').run(l, JSON.stringify(jsonResponse))
 				return jsonResponse
 			})
 			.catch(err => {
