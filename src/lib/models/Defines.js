@@ -5,7 +5,7 @@ module.exports = {
 	KONAMI_DB_CARD_REGEX: /https?:\/\/www\.db\.yugioh-card\.com\/yugiohdb\/(?:card_search|faq_search)\.action\?ope=[24]&cid=(\d+)/g,
 	YGORG_DB_QA_REGEX: /https?:\/\/db\.ygorganization\.com\/qa#(\d+)/g,
 	YGORG_DB_CARD_REGEX: /https?:\/\/db\.ygorganization\.com\/card#(\d+)/g,
-	IGNORE_LINKS_REGEX: /(?:https?|www\.)/g,
+	IGNORE_LINKS_REGEX: /(?:https?|www\.|steamcommunity\.com\/gift)/g,
 	// Constant values.
 	API_TIMEOUT: 1000 * 3,									// 3 seconds.
 	MESSAGE_TIMEOUT: 15,							// 15 seconds.
