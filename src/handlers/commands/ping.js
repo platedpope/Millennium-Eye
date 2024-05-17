@@ -1,7 +1,9 @@
 const heapdump = require('heapdump')
-
+const { inspect } = require('util')
+ 
 const Command = require('lib/models/Command')
 const config = require('config')
+const { logger } = require('lib/utils/logging')
 
 module.exports = new Command({
 	name: 'ping',
@@ -25,7 +27,7 @@ module.exports = new Command({
 				heapUsed: `${formatBytesToMB(mem.heapUsed)}`,
 				external: `${formatBytesToMB(mem.external)}`
 			}
-			console.log(fmtMem)
+			logger.info(inspect(fmtMem))
 			// heapdump.writeSnapshot()
 		}
 	}

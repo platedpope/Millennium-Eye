@@ -1,4 +1,4 @@
-const { Client, Collection, Partials, GatewayIntentBits, Guild, TextChannel } = require('discord.js')
+const { Client, Collection, Partials, GatewayIntentBits, Guild, TextChannel, Options } = require('discord.js')
 const Cache = require('timed-cache')
 
 const config = require('config')
@@ -23,7 +23,24 @@ class MillenniumEyeBot extends Client {
 			partials: [
 				// Need the channel partial to be able to receive DM events.
 				Partials.Channel
-			]})
+			],
+			makeCache: Options.cacheWithLimits({
+				ReactionManager: 0,			// The bot doesn't care about reactions, don't cache any of them.
+				MessageManager: 200, 		// Cache 200 messages per channel.
+				GuildMemberManager: {
+					maxSize: 1000,				// Cache 1000 members per server, always keeping the client.
+					keepOverLimit: member => member.id === member.client.user.id
+				}
+			}),
+			sweepers: {
+				...Options.DefaultSweeperSettings,
+				// Every 30 min, remove cached messages older than 15 minutes.
+				messages: {
+					interval: 1800,
+					lifetime: 900
+				}
+			}
+		})
 
 		/**
 		 * @type {Collection<string, Command>}
