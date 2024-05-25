@@ -1,7 +1,7 @@
 const { EmbedBuilder } = require('discord.js')
 
-const { LocaleEmojis, KONAMI_QA_LINK, KONAMI_REQUEST_LOCALE, YGORG_QA_LINK  } = require('./Defines')
-const { logError, breakUpDiscordMessage } = require('lib/utils/logging')
+const { LocaleEmojis, KONAMI_QA_LINK, KONAMI_REQUEST_LOCALE, YGORESOURCES_QA_LINK  } = require('./Defines')
+const { breakUpDiscordMessage } = require('lib/utils/logging')
 const { replaceIdsWithNames } = require('lib/utils/regex')
 
 class Ruling {
@@ -51,7 +51,7 @@ class Ruling {
 			return embedData
 
 		const konamiDbLink = `${KONAMI_QA_LINK}${this.id}${KONAMI_REQUEST_LOCALE}ja`
-		const ygorgDbLink = `${YGORG_QA_LINK}${this.id}:${locale}`
+		const ygoresourcesDbLink = `${YGORESOURCES_QA_LINK}${this.id}:${locale}`
 
 		let replacedTitle = await replaceIdsWithNames(this.title.get(locale), locale, false)
 		let replacedQuestion = await replaceIdsWithNames(this.question.get(locale), locale)
@@ -77,7 +77,7 @@ class Ruling {
 		// Add translation info to the end of the answer field.
 		let dateView = `**Translated**: ${this.date.get(locale)} | **View**: ${LocaleEmojis.ja} [ja](${konamiDbLink})`
 		if (locale !== 'ja')
-			dateView += ` **·** ${LocaleEmojis[locale]} [${locale}](${ygorgDbLink})`
+			dateView += ` **·** ${LocaleEmojis[locale]} [${locale}](${ygoresourcesDbLink})`
 		if (truncateAnswer) {
 			dateView += `\nNote: The answer shown here was truncated due to being prohibitively long.`
 		}

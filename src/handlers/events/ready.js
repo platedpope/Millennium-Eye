@@ -4,7 +4,7 @@ const { MillenniumEyeBot } = require('lib/models/MillenniumEyeBot')
 const Event = require('lib/models/Event')
 const { clearSearchCache } = require('handlers/QueryHandler')
 const { addTcgplayerDataToDb } = require('handlers/BotDBHandler')
-const { checkForDataManifestUpdate } = require('handlers/YGOrgDBHandler')
+const { checkForDataManifestUpdate } = require('handlers/YGOResourcesHandler')
 const { cacheSetProductData } = require('handlers/TCGPlayerHandler')
 const { ActivityType, PresenceUpdateStatus, Events } = require('discord.js')
 const { setupQueryRegex } = require('lib/utils/regex')
@@ -57,7 +57,7 @@ module.exports = new Event({
 			logger.info('Successfully refreshed application commands.')
 		}
 		catch (err) {
-			logError(err, 'Failed to refresh application commands.')
+			await logError(err, 'Failed to refresh application commands.')
 		}
 
 		// Initialize default query syntax in every server.
@@ -86,7 +86,7 @@ module.exports = new Event({
 		// (This doesn't actually clear the cache, it just checks for stale entries and evicts those).
 		setInterval(clearSearchCache, 1000 * 60 * 60)
 		if (!config.testMode) {
-			// YGOrg manifest check: once per 30 min.
+			// YGOResources manifest check: once per 30 min.
 			await checkForDataManifestUpdate()
 			setInterval(checkForDataManifestUpdate, 30 * 60 * 1000)
 			// Konami database update: once per day.

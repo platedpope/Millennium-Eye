@@ -28,10 +28,15 @@ module.exports = new Event({
 		if (qry.searches.length)  {
 			// Let the user know if they're timed out.
 			if (updateUserTimeout(message.author.id, qry.searches.length)) {
-				await message.reply({
-					content: 'Sorry, you\'ve requested too many searches recently. Please slow down and try again in a minute.',
-					allowedMentions: { repliedUser: false }
-				})
+				try {
+					await message.reply({
+						content: 'Sorry, you\'ve requested too many searches recently. Please slow down and try again in a minute.',
+						allowedMentions: { repliedUser: false }
+					})
+				}
+				catch (err) {
+					await logError(err, 'Failed to send rate limiter warning to user.')
+				}
 				return
 			}
 			

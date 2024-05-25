@@ -34,13 +34,13 @@ module.exports = new Event({
 			try { await command.execute(interaction, bot) }
 			catch (err) {
 				if (err.logMessage) {
-					logError(err, err.logMessage, interaction)
+					await logError(err, err.logMessage, interaction)
 				}
 				else if (!err.channelResponse) {
 					// Only log this error if the error has no channel response.
 					// If it does have a channel response, then it's probably not a "real" error,
 					// and is just reporting something to the user that invoked the command.
-					logError(err, `Failed to execute command ${command.name}!`, interaction)
+					await logError(err, `Failed to execute command ${command.name}!`, interaction)
 				}
 
 				const iResponse = 'channelResponse' in err && err.channelResponse ? err.channelResponse : 'The bot encountered an unexpected error when running that command.'

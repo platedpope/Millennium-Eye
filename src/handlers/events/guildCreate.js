@@ -1,8 +1,7 @@
 const { Guild, Events } = require('discord.js')
 
 const config = require('config')
-const { logger, logError } = require('lib/utils/logging')
-const { setupQueryRegex } = require('lib/utils/regex')
+const { logger } = require('lib/utils/logging')
 const { MillenniumEyeBot } = require('lib/models/MillenniumEyeBot')
 const Event = require('lib/models/Event')
 

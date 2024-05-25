@@ -77,7 +77,7 @@ async function handlePagedRequest(url, options, limitPerPage = 100) {
 		offset += jsonResponse.results.length
 	}
 	const handlePageError = async err => {
-		logError(err, 'Encountered error when handling paged request.')
+		await logError(err, 'Encountered error when handling paged request.')
 	}
 
 	// Need to send the first request so we know what the total we have to deal with is.
@@ -149,7 +149,7 @@ async function cacheBearerToken() {
 			else throw new Error('Did not receive bearer token from TCGPlayer API.')
 		}
 		catch(err) {
-			logError(err.message, 'Failed to get bearer token for TCGPlayer API.')
+			await logError(err.message, 'Failed to get bearer token for TCGPlayer API.')
 		}
 	}
 	
@@ -187,7 +187,7 @@ async function cacheYgoCategory() {
 			}
 		}
 		catch(err) {
-			logError(err.message, 'Failed to cache TCGPlayer category ID for Yu-Gi-Oh.')
+			await logError(err.message, 'Failed to cache TCGPlayer category ID for Yu-Gi-Oh.')
 		}
 	}
 	
@@ -216,7 +216,7 @@ async function cacheSetProductData(dataHandlerCallback) {
 	const setResults = await handlePagedRequest(setUrl)
 	// Something must have gone wrong.
 	if (!setResults.length) {
-		logError('Tried to cache set info, but didn\'t find any sets to cache.')
+		await logError('Tried to cache set info, but didn\'t find any sets to cache.')
 		return
 	}
 
@@ -391,7 +391,7 @@ async function getProductPriceData(products) {
 		}
 	}
 	catch(err) {
-		logError(err.message, 'TCGPlayer price API query failed.', products)
+		await logError(err.message, 'TCGPlayer price API query failed.', products)
 	}
 }
 
@@ -422,7 +422,7 @@ async function getProductPriceData(products) {
 	for (let i = 0; i < apiRequests.length; i++) {
 		const resp = apiRequests[i]
 		if (resp.status === 'rejected') {
-			logError(resp.reason.message, `TCGPlayer set price API query for set ${origSet} failed.`)
+			await logError(resp.reason.message, `TCGPlayer set price API query for set ${origSet} failed.`)
 			continue
 		}
 		// These promises return in the same order we sent the requests in.

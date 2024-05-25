@@ -1,11 +1,11 @@
 const { ActionRowBuilder, StringSelectMenuBuilder, ButtonBuilder } = require('discord.js')
 const { processQuery, queryRespond } = require('handlers/QueryHandler')
-const { searchNameToIdIndex } = require('handlers/YGOrgDBHandler')
+const { searchNameToIdIndex } = require('handlers/YGOResourcesHandler')
 const Command = require('lib/models/Command')
 const { CommandTypes } = require('lib/models/Defines')
 const Query = require('lib/models/Query')
 const Search = require('lib/models/Search')
-const { logger, generateError, logError } = require('lib/utils/logging')
+const { generateError } = require('lib/utils/logging')
 
 /**
  * Helper function to generate the select menu for which card info to display.

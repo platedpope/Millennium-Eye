@@ -27,7 +27,7 @@ function getBanlistStatus(card) {
 /**
  * Runs underlying Python scripts to scrape the Konami database for data.
  * Those scripts used to scrape all card data since the bot's primary data source was the official DB,
- * but now that its primary source is YGOrg DB, all the scripts do is update the banlist information, which is the last dependency on the Konami DB.
+ * but now that its primary source is YGOResources DB, all the scripts do is update the banlist information, which is the last dependency on the Konami DB.
  */
 async function updateKonamiDb() {
 	const updateKonami = new PythonShell(`${process.cwd()}/data/carddata.py`, { pythonOptions: '-u', args: KONAMI_DB_PATH })
@@ -49,7 +49,7 @@ async function updateKonamiDb() {
 		var req = await fetch(`${MASTER_DUEL_API}/cards?collectionCount=true`, { signal: AbortSignal.timeout(API_TIMEOUT) })
 	} 
 	catch(err) {
-		logError(err, `Master Duel Meta API query for collection count returned error.`)
+		await logError(err, `Master Duel Meta API query for collection count returned error.`)
 		return
 	}
 

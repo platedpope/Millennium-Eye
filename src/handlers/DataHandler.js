@@ -5,31 +5,31 @@ const Query = require('lib/models/Query')
 const Ruling = require('lib/models/Ruling')
 const Search = require('lib/models/Search')
 const { addTcgplayerDataToDb } = require('./BotDBHandler')
-const { addToYgorgDb, searchArtworkRepo, populateCardFromYgorgApi, populateRulingFromYgorgApi, getAllNeuronArts } = require('./YGOrgDBHandler')
+const { addToLocalYgoresourcesDb, searchArtworkRepo, populateCardFromYgoresourcesApi, populateRulingFromYgoresourcesApi, getAllNeuronArts } = require('./YGOResourcesHandler')
 const { populateCardFromYugipediaApi } = require('./YugipediaHandler')
 const { getBanlistStatus } = require('./KonamiDBHandler')
 
 /**
- * This is the callback data handler for turning data from the YGOrg database
+ * This is the callback data handler for turning data from the YGOResources database
  * into usable Search data (in this case, either a Card object or a Ruling object).
  * @param {Query} qry The query containing these searches.
  * @param {Array<Search>} qaSearches A map containing QA searches that were resolved through either the DB or API.
  * @param {Array<Search>} cardSearches A map containing card searches that were resolved through the API.
  */
-async function convertYgorgDataToSearchData(qry, qaSearches, cardSearches = []) {
+async function convertYgoresourcesDataToSearchData(qry, qaSearches, cardSearches = []) {
 	// Process any QAs.
 	for (const s of qaSearches) {
 		s.data = new Ruling()
-		populateRulingFromYgorgApi(s.rawData, s.data)
+		populateRulingFromYgoresourcesApi(s.rawData, s.data)
 	}
 
 	// Process any card data.
 	const baseArtPath = `${process.cwd()}/data/card_images`
 	for (const s of cardSearches) {
 		if (!(s.data instanceof Card)) s.data = new Card()
-		populateCardFromYgorgApi(s.rawData, s.data)
+		populateCardFromYgoresourcesApi(s.rawData, s.data)
 
-		// Update banlist status, which isn't provided by YGOrg DB.
+		// Update banlist status, which isn't provided by YGOResources DB.
 		getBanlistStatus(s.data)		
 
 		if (s.data.dbId) {
@@ -52,8 +52,8 @@ async function convertYgorgDataToSearchData(qry, qaSearches, cardSearches = []) 
 	// Resolve any that still don't have art.
 	await searchArtworkRepo(cardSearches.filter(c => !c.data.imageData.size))
 
-	// Add anything from the API to the YGOrg DB as necessary.
-	addToYgorgDb(qaSearches, cardSearches)
+	// Add anything from the API to the YGOResources DB as necessary.
+	addToLocalYgoresourcesDb(qaSearches, cardSearches)
 	// Null out all the raw data now that we've put it in the DB.
 	for (const qas of qaSearches) {
 		qas.rawData = undefined
@@ -130,6 +130,6 @@ function cacheTcgplayerPriceData(searches) {
 }
 
 module.exports = {
-	convertYgorgDataToSearchData, 
+	convertYgoresourcesDataToSearchData, 
 	convertYugipediaDataToSearchData, cacheTcgplayerPriceData
 }

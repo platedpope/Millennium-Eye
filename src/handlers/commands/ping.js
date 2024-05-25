@@ -27,7 +27,7 @@ module.exports = new Command({
 				heapUsed: `${formatBytesToMB(mem.heapUsed)}`,
 				external: `${formatBytesToMB(mem.external)}`
 			}
-			logger.info(inspect(fmtMem))
+			logger.info(`Process memory usage: ${inspect(fmtMem)}`)
 			// heapdump.writeSnapshot()
 		}
 	}

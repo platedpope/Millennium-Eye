@@ -5,9 +5,9 @@ const Query = require('lib/models/Query')
 const { MillenniumEyeBot } = require('lib/models/MillenniumEyeBot')
 const { SEARCH_TIMEOUT_TRIGGER, CACHE_TIMEOUT } = require('lib/models/Defines')
 const { logger, logError } = require('lib/utils/logging')
-const { searchYgorgDb } = require('./YGOrgDBHandler')
+const { searchYgoresourcesDb } = require('./YGOResourcesHandler')
 const { searchYugipedia } = require('./YugipediaHandler')
-const { convertYgorgDataToSearchData, convertYugipediaDataToSearchData, cacheTcgplayerPriceData } = require('./DataHandler')
+const { convertYgoresourcesDataToSearchData, convertYugipediaDataToSearchData, cacheTcgplayerPriceData } = require('./DataHandler')
 const { searchTcgplayer } = require('./TCGPlayerHandler')
 
 /**
@@ -41,13 +41,13 @@ const processSteps = [
 		'evaluatesTypes': new Set(['$'])
 	},
 	{
-		'searchFunction': searchYgorgDb,
-		'dataHandler': convertYgorgDataToSearchData,
+		'searchFunction': searchYgoresourcesDb,
+		'dataHandler': convertYgoresourcesDataToSearchData,
 		'useForOfficial': false,
 		'evaluatesTypes': new Set(['i', 'r', 'a', 'd', 'f', 'q', '$'])
 	},
 	// And another TCGPlayer search step because otherwise card price searches before a card's data is cached result in empty data.
-	// Going TCGPlayer -> YGOrg -> TCGPlayer allows the search logic to first find set price searches, then card data, then price data for that card.
+	// Going TCGPlayer -> YGOResources -> TCGPlayer allows the search logic to first find set price searches, then card data, then price data for that card.
 	{
 		'searchFunction': searchTcgplayer,
 		'dataHandler': cacheTcgplayerPriceData,
@@ -134,7 +134,7 @@ async function processQuery(qry) {
 			if (s.isDataFullyResolved()) {
 				logger.info(`Search step ${stepSearch.name} finished resolving original search(es) [${[...s.originals].join(', ')}] to ${s.data}.`)
 
-				// Don't cache Q&A searches, they already go into the YGOrg database which is effectively a Q&A-specific cache.
+				// Don't cache Q&A searches, they already go into the YGOResources database which is effectively a Q&A-specific cache.
 				if (!s.hasType('q')) {
 					const cacheData = {
 						data: s.data,

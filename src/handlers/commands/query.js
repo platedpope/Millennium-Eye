@@ -1,11 +1,8 @@
 const Command = require('lib/models/Command')
 const { CommandTypes } = require('lib/models/Defines')
 const Query = require('lib/models/Query')
-const Search = require('lib/models/Search')
 const { processQuery, updateUserTimeout, queryRespond } = require('handlers/QueryHandler')
-const config = require('config')
-const { searchNameToIdIndex } = require('handlers/YGOrgDBHandler')
-const { logError } = require('lib/utils/logging')
+const { searchNameToIdIndex } = require('handlers/YGOResourcesHandler')
 
 module.exports = new Command({
 	name: 'query',

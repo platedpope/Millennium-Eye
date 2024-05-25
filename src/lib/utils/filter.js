@@ -37,7 +37,7 @@ class CardDataFilter {
 			if (score > 0)
 				// Save this, and if it's a better score than one we got for that ID previously, overwrite.
 				for (const id of this.idx[k]) 
-					// Ignore negative IDs, they're used for Skills on YGOrg DB.
+					// Ignore negative IDs, they're used for Skills on YGOResources DB.
 					if (id > 0) {
 						// If using names, return "Name|ID" as the key so we can track both name + ID.
 						const scoreKey = returnNames ? `${k}|${id}` : id
@@ -62,7 +62,7 @@ class CardDataFilter {
 	/**
 	 * Computes the distance score between this filter's reference string and
 	 * the value passed in to this function.
-	 * THIS LOGIC IS SHAMELESSLY STOLEN FROM THE YGORG DB. THANKS GALLANTRON :)
+	 * THIS LOGIC IS SHAMELESSLY STOLEN FROM THE YGOResources DB. THANKS GALLANTRON :)
 	 * @param {String} val The value to calculate distance from.
 	 * @returns {Number} The distance score.
 	 */

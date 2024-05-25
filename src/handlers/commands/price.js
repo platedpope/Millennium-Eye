@@ -4,7 +4,7 @@ const Query = require('lib/models/Query')
 const Search = require('lib/models/Search')
 const { processQuery, queryRespond } = require('handlers/QueryHandler')
 const { generateError } = require('lib/utils/logging')
-const { searchNameToIdIndex } = require('handlers/YGOrgDBHandler')
+const { searchNameToIdIndex } = require('handlers/YGOResourcesHandler')
 
 module.exports = new Command({
 	name: 'price',

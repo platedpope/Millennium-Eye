@@ -6,7 +6,7 @@ const deasync = require('deasync')
 const { EmbedBuilder } = require('discord.js')
 const Table = require('ascii-table')
 
-const { EmbedIcons, EmbedColors, BanlistStatus, LocaleEmojis, YGORG_CARD_LINK, YUGIPEDIA_WIKI, KONAMI_CARD_LINK, KONAMI_REQUEST_LOCALE, TCGPLAYER_LOGO, TCGPLAYER_SEARCH, TCGPLAYER_PRODUCT_SEARCH } = require('./Defines')
+const { EmbedIcons, EmbedColors, BanlistStatus, LocaleEmojis, YGORESOURCES_CARD_LINK, YUGIPEDIA_WIKI, KONAMI_CARD_LINK, KONAMI_REQUEST_LOCALE, TCGPLAYER_LOGO, TCGPLAYER_SEARCH, TCGPLAYER_PRODUCT_SEARCH } = require('./Defines')
 const { logError, breakUpDiscordMessage, logger } = require('lib/utils/logging')
 const { TCGPlayerProduct } = require('./TCGPlayer')
 const { replaceIdsWithNames } = require('lib/utils/regex')
@@ -129,7 +129,7 @@ class Card {
 		const imageAttach = this.setEmbedImage(finalEmbed, censorArt ? 'md' : 'ocg', 1)
 
 		// In here to avoid a circular dependency. Not pretty, but oh well.
-		const { searchPropertyToLocaleIndex } = require('handlers/YGOrgDBHandler')
+		const { searchPropertyToLocaleIndex } = require('handlers/YGOResourcesHandler')
 
 		// Generate stat description.
 		let stats = ''
@@ -725,10 +725,10 @@ class Card {
 
 		// Information links. Don't print these for official mode, the card name is already a link to the Konami DB in that case.
 		if (!official) {
-			const cardYgorgCardLink = `${YGORG_CARD_LINK}${this.dbId}`
+			const cardYgoresourcesCardLink = `${YGORESOURCES_CARD_LINK}${this.dbId}`
 			const cardYugipediaCardLink = `${YUGIPEDIA_WIKI}/${nameLink}`
 
-			fieldText += `YGOrg (${LocaleEmojis.en} [data/rulings](${cardYgorgCardLink})) **·** Yugipedia (${LocaleEmojis.en} [card](${cardYugipediaCardLink}))`
+			fieldText += `YGOResources (${LocaleEmojis.en} [data/rulings](${cardYgoresourcesCardLink})) **·** Yugipedia (${LocaleEmojis.en} [card](${cardYugipediaCardLink}))`
 		}
 
 		// Most recent print date.

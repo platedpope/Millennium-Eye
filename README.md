@@ -39,10 +39,10 @@ The bot is focused on supporting regions in the TCG first and foremost, and is w
 
 ## Data Sources
 The bot gathers the data it displays to users from several different sources. In order from most to least commonly used:
-#### [YGOrganization Database](https://db.ygorganization.com/)
-This is a fanmade and fan-run (i.e., unofficial) database that offers all the data from (1) and more. Notably, the OCG version of the Official Card Database contains a section for card FAQs and Q&As that only exists in Japanese and has yet to be ported (officially) to English or any other locale. The bot leverages the YGOrganization database's unofficial translations of many of these FAQs and Q&As, as well as other data that is typically OCG-exclusive.
+#### [YGOResources Database](https://db.ygoresources.com/)
+This is a fanmade and fan-run (i.e., unofficial) database that offers all the data from (1) and more. Notably, the OCG version of the Official Card Database contains a section for card FAQs and Q&As that only exists in Japanese and has yet to be ported (officially) to English or any other locale. The bot leverages the YGOResource database's unofficial translations of many of these FAQs and Q&As, as well as other data that is typically OCG-exclusive.
 
-The bot also makes use of this database's [artwork repository](https://artworks.ygorganization.com/) to source HD, unwatermarked card arts.
+The bot also makes use of this database's [artwork repository](https://artworks.ygoresources.com/) to source HD, unwatermarked card arts.
 #### [Official Card Database](https://www.db.yugioh-card.com/yugiohdb/) 
 This is a repository of card data that is maintained by Konami (the publishers of Yu-Gi-Oh!) themselves. The bot maintains a local copy of relevant parts of this database for various purposes. Usage of this has been gradually phased out over several bot updates, and currently its primary role is as a reference for the current state of the Forbidden & Limited Lists across the TCG, OCG, and Master Duel.
 
@@ -54,6 +54,6 @@ This is the the primary Yu-Gi-Oh! retailer in North America, and the source of a
 Another fanmade and fan-run project that gathers the exact wealth and variety of Yu-Gi-Oh! related information that one might expect from a Wikipedia offshoot dedicated to it. Most often, Yugipedia allows the bot access to data that has not yet made its way to the official database; typically cards that are revealed or teased in advance of their physical release. Aside from early teasers, Yugipedia also allows access to anime- or manga-related material.
 
 ## Acknowledgments
-- gallantron, for writing basically every parser this bot makes use of to store data, as well as the YGOrganization database, and for generally doing everything in your power to make as much Yu-Gi-Oh! data as accessible as possible. It is no exaggeration to say the bot in its current state would not be possible without your hard work and assistance
+- gallantron, for writing basically every parser this bot makes use of to store data, as well as the YGOResources database, and for generally doing everything in your power to make as much Yu-Gi-Oh! data as accessible as possible. It is no exaggeration to say the bot in its current state would not be possible without your hard work and assistance
 - my fellow moderators on the [r/yugioh subreddit Discord](https://discord.com/invite/yugioh), who indulged the bot in its infancy years ago and, in so doing, gave it the publicity it needed to become used across hundreds of servers as it is today
 - many people beyond counting who have used or spread the bot, reported bugs, or made feature suggestions, and whose continued support ensure the survival and improvement of the bot 

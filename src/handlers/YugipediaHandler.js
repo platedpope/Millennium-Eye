@@ -1,5 +1,5 @@
 const { YUGIPEDIA_API, YUGIPEDIA_API_PARAMS, API_TIMEOUT, Locales, LinkMarkersIndexMap } = require('lib/models/Defines')
-const { logError, logger } = require('lib/utils/logging')
+const { logger } = require('lib/utils/logging')
 const { findYugipediaProperty } = require('lib/utils/regex')
 const Search = require('lib/models/Search')
 const Query = require('lib/models/Query')

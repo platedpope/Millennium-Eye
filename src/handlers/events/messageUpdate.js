@@ -5,6 +5,7 @@ const Event = require('lib/models/Event')
 const Query = require('lib/models/Query')
 const { MESSAGE_TIMEOUT } = require('lib/models/Defines')
 const { processQuery, updateUserTimeout, queryRespond } = require('handlers/QueryHandler')
+const { logError } = require('lib/utils/logging')
 
 module.exports = new Event({
 	event: Discord.Events.MessageUpdate,
@@ -50,10 +51,15 @@ module.exports = new Event({
 				// Let the user know they're timed out.
 				// For edits this is a bit imperfect because it will count searches that have already happened...
 				// but honestly, people shouldn't be tripping this limit with normal use regardless.
-				await newMessage.reply({
-					content: 'Sorry, you\'ve requested too many searches recently. Please slow down and try again in a minute.',
-					allowedMentions: { repliedUser: false }
-				})
+				try {
+					await newMessage.reply({
+						content: 'Sorry, you\'ve requested too many searches recently. Please slow down and try again in a minute.',
+						allowedMentions: { repliedUser: false }
+					})
+				}
+				catch (err) {
+					await logError(err, 'Failed to send rate limiter warning to user.')
+				}
 				return
 			}
 

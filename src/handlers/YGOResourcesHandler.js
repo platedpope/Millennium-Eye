@@ -5,21 +5,21 @@ const { logError, logger } = require('lib/utils/logging')
 const { CardDataFilter } = require('lib/utils/filter')
 const Search = require('lib/models/Search')
 const Query = require('lib/models/Query')
-const { Locales, YGORG_NAME_ID_INDEX, YGORG_PROPERTY_METADATA, YGORG_DB_PATH, YGORG_MANIFEST, YGORG_QA_DATA_API, API_TIMEOUT, YGORG_CARD_DATA_API, YGORG_ARTWORK_API } = require('lib/models/Defines')
+const { Locales, YGORESOURCES_NAME_ID_INDEX, YGORESOURCES_PROPERTY_METADATA, YGORESOURCES_DB_PATH, YGORESOURCES_MANIFEST, YGORESOURCES_QA_DATA_API, API_TIMEOUT, YGORESOURCES_CARD_DATA_API, YGORESOURCES_ARTWORK_API } = require('lib/models/Defines')
 const Card = require('lib/models/Card')
 
 /**
- * @typedef YgorgResponseCache
+ * @typedef YgoresourcesResponseCache
  * @property {Number} lastManifestRevision		The last seen manifest revision.
  * @property {Object} cardData								All cached API responses from the card API endpoint.
  * @property {Object} qaData									All cached API responses from the qa API endpoint.
  * @property {Object} nameToIdIndex						A search index mapping names to IDs.
- * @property {Object} propertyArray						The raw property data returned by the YGOrg API that's used in its own API.
- * @property {Object} artworkManifest					The cached artwork manifest from the YGOrg artwork endpoint.
+ * @property {Object} propertyArray						The raw property data returned by the YGOResources API that's used in its own API.
+ * @property {Object} artworkManifest					The cached artwork manifest from the YGOResources artwork endpoint.
 */
 
-const _ygorgDb = new Database(YGORG_DB_PATH)
-/** @type {YgorgResponseCache} */
+const _ygoresourcesDb = new Database(YGORESOURCES_DB_PATH)
+/** @type {YgoresourcesResponseCache} */
 const _apiResponseCache = {
 	lastManifestRevision: undefined,
 	cardData: {},
@@ -34,7 +34,7 @@ const _propertyToLocaleIndex = {}
 
 async function _loadApiResponseCache() {
 	// Load current manifest revision.
-	const dbData = _ygorgDb.prepare('SELECT * FROM manifestData').get()
+	const dbData = _ygoresourcesDb.prepare('SELECT * FROM manifestData').get()
 	if (dbData) {
 		_apiResponseCache['lastManifestRevision'] = dbData.lastManifestRevision
 	}
@@ -43,15 +43,15 @@ async function _loadApiResponseCache() {
 	}
 
 	// Load all card and QA data.
-	const cardData = _ygorgDb.prepare('SELECT * FROM cardData').all()
+	const cardData = _ygoresourcesDb.prepare('SELECT * FROM cardData').all()
 	for (r of cardData) {
 		_apiResponseCache.cardData[r.id] = JSON.parse(r.jsonResponse)
 	}
-	const qaData = _ygorgDb.prepare('SELECT * FROM qaData').all()
+	const qaData = _ygoresourcesDb.prepare('SELECT * FROM qaData').all()
 	for (r of qaData) {
 		_apiResponseCache.qaData[r.id] = JSON.parse(r.jsonResponse)
 	}
-	const idxData = _ygorgDb.prepare('SELECT * FROM nameToIdIndex').all()
+	const idxData = _ygoresourcesDb.prepare('SELECT * FROM nameToIdIndex').all()
 	if (idxData.length) {
 		for (r of idxData) {
 			_apiResponseCache.nameToIdIndex[r.locale] = JSON.parse(r.jsonResponse)
@@ -67,7 +67,7 @@ async function _loadApiResponseCache() {
 }
 
 /**
- * Saves off the YGORG card name -> ID search index for all locales.
+ * Saves off the YGOResources card name -> ID search index for all locales.
  * @param {Array<String>} locale An array of locales to query the search index for.
  */
 async function _cacheNameToIdIndex(locales = Object.keys(Locales)) {
@@ -87,30 +87,30 @@ async function _cacheNameToIdIndex(locales = Object.keys(Locales)) {
 	if (!localesToRequest.length) return
 
 	for (const l of localesToRequest) {
-		_apiResponseCache.nameToIdIndex[l] = fetch(`${YGORG_NAME_ID_INDEX}/${l}`, { signal: AbortSignal.timeout(API_TIMEOUT) })
+		_apiResponseCache.nameToIdIndex[l] = fetch(`${YGORESOURCES_NAME_ID_INDEX}/${l}`, { signal: AbortSignal.timeout(API_TIMEOUT) })
 			.then(async r => {
 				logger.info(`Resolved name->ID index for locale ${l}.`)
 				const jsonResponse = await r.json()
-				_ygorgDb.prepare('INSERT OR REPLACE INTO nameToIdIndex(locale, jsonResponse) VALUES(?, ?)').run(l, JSON.stringify(jsonResponse))
+				_ygoresourcesDb.prepare('INSERT OR REPLACE INTO nameToIdIndex(locale, jsonResponse) VALUES(?, ?)').run(l, JSON.stringify(jsonResponse))
 				return jsonResponse
 			})
-			.catch(err => {
-				logError(err.message, `YGOrg API query for name -> ID index for locale ${l} failed.`)
+			.catch(async err => {
+				await logError(err.message, `YGOResources API query for name -> ID index for locale ${l} failed.`)
 			})
 	}
 
-	logger.info(`Sent new YGOrg API requests for caching name->ID index for locales ${localesToRequest.join(', ')}.`)
+	logger.info(`Sent new YGOResources API requests for caching name->ID index for locales ${localesToRequest.join(', ')}.`)
 }
 
 /**
- * Saves off the YGOrg localization metadata for properties and types.
+ * Saves off the YGOResources localization metadata for properties and types.
  */
 async function _cachePropertyMetadata() {
 	try {
-		var resp = await fetch(YGORG_PROPERTY_METADATA, { signal: AbortSignal.timeout(API_TIMEOUT) })
+		var resp = await fetch(YGORESOURCES_PROPERTY_METADATA, { signal: AbortSignal.timeout(API_TIMEOUT) })
 	}
 	catch (err) {
-		logError(err.message, 'YGOrg API query to initialize property metadata failed.')
+		await logError(err.message, 'YGOResources API query to initialize property metadata failed.')
 		return
 	}
 
@@ -131,7 +131,7 @@ async function _cachePropertyMetadata() {
 			}
 		}
 
-		// Also load some hardcoded ones the bot tracks for itself (not given by YGOrg DB since it doesn't have any use for them).
+		// Also load some hardcoded ones the bot tracks for itself (not given by YGOResources DB since it doesn't have any use for them).
 		_propertyToLocaleIndex['Level'] = {
 			'de': 'Stufe',
 			'en': 'Level',
@@ -173,7 +173,7 @@ async function _cachePropertyMetadata() {
 			'pt': 'Escala de Pêndulo'
 		}
 
-		logger.info('Successfully cached YGOrg DB locale property metadata.')
+		logger.info('Successfully cached YGOResources DB locale property metadata.')
 	}
 }
 
@@ -185,7 +185,7 @@ async function _cacheArtworkManifest() {
 	// First get the manifest. Used the cached one if we've got it.
 	if (!_apiResponseCache.artworkManifest) {
 		try {
-			const resp = await fetch(`${YGORG_ARTWORK_API}/manifest.json`, { signal: AbortSignal.timeout(API_TIMEOUT) })
+			const resp = await fetch(`${YGORESOURCES_ARTWORK_API}/manifest.json`, { signal: AbortSignal.timeout(API_TIMEOUT) })
 			const jsonResponse = await resp.json()
 			if ('cards' in jsonResponse) {
 				_apiResponseCache.artworkManifest = jsonResponse.cards
@@ -196,11 +196,11 @@ async function _cacheArtworkManifest() {
 				}, 24 * 60 * 60 * 1000)
 			}
 			else {
-				logError(undefined, 'No card data in artwork repo manifest?')
+				await logError(undefined, 'No card data in artwork repo manifest?')
 			}
 		}
 		catch (err) {
-			logError(err.message, 'Failed processing artwork repo manifest!')
+			await logError(err.message, 'Failed processing artwork repo manifest!')
 		}
 	}
 }
@@ -211,7 +211,7 @@ async function checkForDataManifestUpdate() {
 	if (!('lastManifestRevision' in _apiResponseCache) || _apiResponseCache.lastManifestRevision === undefined) {
 		const success = await _loadApiResponseCache()
 		if (!success) {
-			logError('Could not load the last manifest revision, so cannot check for updates. Exiting early.')
+			await logError('Could not load the last manifest revision, so cannot check for updates. Exiting early.')
 			return
 		}
 	}
@@ -219,10 +219,10 @@ async function checkForDataManifestUpdate() {
 	const lastManifestRevision = _apiResponseCache['lastManifestRevision']
 	logger.info(`Starting check for new manifest; last revision seen was ${lastManifestRevision}.`)
 	try {
-		var resp = await fetch(`${YGORG_MANIFEST}/${lastManifestRevision}`, { signal: AbortSignal.timeout(API_TIMEOUT) })
+		var resp = await fetch(`${YGORESOURCES_MANIFEST}/${lastManifestRevision}`, { signal: AbortSignal.timeout(API_TIMEOUT) })
 	}
 	catch (err) {
-		logError(err.message, 'Failed processing YGOrg DB manifest.')
+		await logError(err.message, 'Failed processing YGOResources DB manifest.')
 		return
 	}
 
@@ -233,29 +233,29 @@ async function checkForDataManifestUpdate() {
 			const manifest = jsonResponse.data
 			
 			if (!manifest) {
-				logError(undefined, 'Received manifest with no data, exiting.')
+				await logError(undefined, 'Received manifest with no data, exiting.')
 				return
 			}
 
 			logger.info(`Found new manifest ${currManifestRevision}!`)
 
-			const deleteCardData = _ygorgDb.prepare('DELETE FROM cardData WHERE id = ?')
-			const deleteQaData = _ygorgDb.prepare('DELETE FROM qaData WHERE id = ?')
-			const deleteIdxData = _ygorgDb.prepare('DELETE FROM nameToIdIndex WHERE locale = ?')
+			const deleteCardData = _ygoresourcesDb.prepare('DELETE FROM cardData WHERE id = ?')
+			const deleteQaData = _ygoresourcesDb.prepare('DELETE FROM qaData WHERE id = ?')
+			const deleteIdxData = _ygoresourcesDb.prepare('DELETE FROM nameToIdIndex WHERE locale = ?')
 
 			for (const cid in manifest.card) {
 				// Evict cached data first.
 				delete _apiResponseCache.cardData[cid]
 				deleteCardData.run(cid)
 
-				_apiResponseCache.cardData[cid] = fetch(`${YGORG_CARD_DATA_API}/${cid}`, { signal: AbortSignal.timeout(API_TIMEOUT) })
+				_apiResponseCache.cardData[cid] = fetch(`${YGORESOURCES_CARD_DATA_API}/${cid}`, { signal: AbortSignal.timeout(API_TIMEOUT) })
 					.then(async r => {
 						const jsonResponse = await r.json()
-						_ygorgDb.prepare('INSERT OR REPLACE INTO cardData(id, jsonResponse) VALUES(?, ?)').run(cid, JSON.stringify(jsonResponse))
+						_ygoresourcesDb.prepare('INSERT OR REPLACE INTO cardData(id, jsonResponse) VALUES(?, ?)').run(cid, JSON.stringify(jsonResponse))
 						return jsonResponse
 					})
-					.catch(err => {
-						logError(err.message, `Encountered error when querying YGOrg DB for card ID ${cid}.`)
+					.catch(async err => {
+						await logError(err.message, `Encountered error when querying YGOResources DB for card ID ${cid}.`)
 					})
 			}
 			for (const qid in manifest.qa) {
@@ -263,14 +263,14 @@ async function checkForDataManifestUpdate() {
 				delete _apiResponseCache.qaData[qid]
 				deleteQaData.run(qid)
 
-				_apiResponseCache.qaData[qid] = fetch(`${YGORG_QA_DATA_API}/${qid}`, { signal: AbortSignal.timeout(API_TIMEOUT) })
+				_apiResponseCache.qaData[qid] = fetch(`${YGORESOURCES_QA_DATA_API}/${qid}`, { signal: AbortSignal.timeout(API_TIMEOUT) })
 					.then(async r => { 
 						const jsonResponse = await r.json()
-						_ygorgDb.prepare('INSERT OR REPLACE INTO qaData(id, jsonResponse) VALUES(?, ?)').run(qid, JSON.stringify(jsonResponse))
+						_ygoresourcesDb.prepare('INSERT OR REPLACE INTO qaData(id, jsonResponse) VALUES(?, ?)').run(qid, JSON.stringify(jsonResponse))
 						return jsonResponse
 					})
-					.catch(err => {
-						logError(err.message, `Encountered error when querying YGOrg DB for ruling ID ${qid}.`)
+					.catch(async err => {
+						await logError(err.message, `Encountered error when querying YGOResources DB for ruling ID ${qid}.`)
 					})
 			}
 			const hasNameIdxChanges = 'idx' in manifest && 'card' in manifest.idx && 'name' in manifest.idx.card
@@ -280,22 +280,22 @@ async function checkForDataManifestUpdate() {
 					delete _apiResponseCache.nameToIdIndex[loc]
 					deleteIdxData.run(loc)
 
-					_apiResponseCache.nameToIdIndex[loc] = fetch(`${YGORG_NAME_ID_INDEX}/${loc}`, { signal: AbortSignal.timeout(API_TIMEOUT) })
+					_apiResponseCache.nameToIdIndex[loc] = fetch(`${YGORESOURCES_NAME_ID_INDEX}/${loc}`, { signal: AbortSignal.timeout(API_TIMEOUT) })
 						.then(async r => {
 							const jsonResponse = await r.json()
-							_ygorgDb.prepare('INSERT OR REPLACE INTO nameToIdIndex(locale, jsonResponse) VALUES(?, ?)').run(loc, JSON.stringify(jsonResponse))
+							_ygoresourcesDb.prepare('INSERT OR REPLACE INTO nameToIdIndex(locale, jsonResponse) VALUES(?, ?)').run(loc, JSON.stringify(jsonResponse))
 							return jsonResponse
 						})
-						.catch(err => {
-							logError(err.message, `Encountered error when querying YGOrg DB for name->ID index for locale ${loc}.`)
+						.catch(async err => {
+							await logError(err.message, `Encountered error when querying YGOResources DB for name->ID index for locale ${loc}.`)
 						})
 				}
 			}
 
 			_apiResponseCache['lastManifestRevision'] = currManifestRevision
-			_ygorgDb.prepare('DELETE FROM manifestData').run()
-			_ygorgDb.prepare('INSERT OR REPLACE INTO manifestData(lastManifestRevision) VALUES(?)').run(currManifestRevision)
-			logger.info(`Cached new YGOrg manifest revision ${currManifestRevision}.`)
+			_ygoresourcesDb.prepare('DELETE FROM manifestData').run()
+			_ygoresourcesDb.prepare('INSERT OR REPLACE INTO manifestData(lastManifestRevision) VALUES(?)').run(currManifestRevision)
+			logger.info(`Cached new YGOResources manifest revision ${currManifestRevision}.`)
 			if ('card' in manifest) {
 				const evictCards = Object.keys(manifest.card).length
 				logger.info(`- Card data: ${evictCards} evicted`)
@@ -314,14 +314,14 @@ async function checkForDataManifestUpdate() {
 }
 
 /**
- * Search the YGOrg database to resolve card data.
+ * Search the YGOResources database to resolve card data.
  * This will both look in our local database for QA or FAQ data,
  * as well as query the API as necessary to resolve any other data.
  * @param {Array<Search>} searches The array of searches to evaluate.
  * @param {Query} qry The query that contains all these searches.
  * @param {Function} dataHandlerCallback The callback for handling the data produced by this search.
  */
-async function searchYgorgDb(searches, qry, dataHandlerCallback) {
+async function searchYgoresourcesDb(searches, qry, dataHandlerCallback) {
 	const qaSearches = []
 	const cardSearches = []
 	// Track all searches that weren't cached so we send API requests for them.
@@ -392,17 +392,17 @@ async function searchYgorgDb(searches, qry, dataHandlerCallback) {
 	for (const s of uncachedSearches) {
 		const id = s.term
 		if (s.hasType('q')) {
-			requests.push(fetch(`${YGORG_QA_DATA_API}/${id}`, { signal : AbortSignal.timeout(API_TIMEOUT) })
+			requests.push(fetch(`${YGORESOURCES_QA_DATA_API}/${id}`, { signal : AbortSignal.timeout(API_TIMEOUT) })
 				.then(async r => await r.json())
-				.catch(err => {
-					logError(err.message, `YGOrg API query for QA ID ${id} failed.`)
+				.catch(async err => {
+					await logError(err.message, `YGOResources API query for QA ID ${id} failed.`)
 			}))
 		}
 		else {
-			requests.push(fetch(`${YGORG_CARD_DATA_API}/${id}`, { signal: AbortSignal.timeout(API_TIMEOUT) })
+			requests.push(fetch(`${YGORESOURCES_CARD_DATA_API}/${id}`, { signal: AbortSignal.timeout(API_TIMEOUT) })
 				.then(async r => await r.json())
-				.catch(err => {
-					logError(err.message, `YGOrg API query for card ID ${id} failed.`)
+				.catch(async err => {
+					await logError(err.message, `YGOResources API query for card ID ${id} failed.`)
 				}))
 		}
 	}
@@ -455,11 +455,11 @@ async function searchArtworkRepo(artSearches) {
 			for (const [artId, artPaths] of Object.entries(cardArtData)) {
 				// Send requests for each art.
 				const bestArtRepoLoc = artPaths.bestArt
-				const bestArtFullUrl = new URL(bestArtRepoLoc, YGORG_ARTWORK_API)
+				const bestArtFullUrl = new URL(bestArtRepoLoc, YGORESOURCES_ARTWORK_API)
 				const req = fetch(bestArtFullUrl.toString(), { signal: AbortSignal.timeout(API_TIMEOUT) })
 					.then(async r => await r.arrayBuffer())
-					.catch(err => {
-						logError(err.message, `Failed art repo query for card ${card}, art ID ${artId}.`)
+					.catch(async err => {
+						await logError(err.message, `Failed art repo query for card ${card}, art ID ${artId}.`)
 					})
 
 				repoResponses[i].push(req)
@@ -530,7 +530,7 @@ async function getAllNeuronArts(card) {
 
 			// If we get here, we're missing an existing crop(s) so we need to look for the source image(s) from the repo.
 			// As of writing this, paths in the manifest look like:
-			// https://artworks-jp-n.ygorganization.com/2/0/41_1.png
+			// https://artworks-jp-n.ygoresources.com/2/0/41_1.png
 			// We have local copies of the repo that follow the same subdir structure,
 			// but need to replace the entire https://...com section with our base path instead.
 			if (bestRepoTcgPath) {
@@ -550,11 +550,11 @@ async function getAllNeuronArts(card) {
 }
 
 /**
- * Populates a Ruling's data with data from the YGOrg DB API.
- * @param {Object} apiData The API data returned from the YGOrg API for this ruling ID.
+ * Populates a Ruling's data with data from the YGOResources DB API.
+ * @param {Object} apiData The API data returned from the YGOResources API for this ruling ID.
  * @param {Ruling} ruling The ruling to populate with data.
  */
-function populateRulingFromYgorgApi(apiData, ruling) {
+function populateRulingFromYgoresourcesApi(apiData, ruling) {
 	const qaData = apiData.qaData
 	for (const locale in qaData) {
 		// Ignore outdated translations.
@@ -574,12 +574,12 @@ function populateRulingFromYgorgApi(apiData, ruling) {
 }
 
 /**
- * Populates a Card's data with data from the YGOrg DB API.
+ * Populates a Card's data with data from the YGOResources DB API.
  * This function will not overwrite any data that is already present in the Card that is passed.
- * @param apiData The response from a card data API query on the YGOrg DB. 
+ * @param apiData The response from a card data API query on the YGOResources DB. 
  * @param {Card} card The card to set data for. 
  */
- function populateCardFromYgorgApi(apiData, card) {
+ function populateCardFromYgoresourcesApi(apiData, card) {
 	// Database ID is at the uppermost level.
 	card.dbId = apiData.cardId
 	// Descend into card data to populate all the fields we can.
@@ -627,7 +627,7 @@ function populateRulingFromYgorgApi(apiData, ruling) {
 			
 		}
 	}
-	// YGOrg API also returns FAQ data for card queries, may as well populate that while we're here too if we need to.
+	// YGOResources API also returns FAQ data for card queries, may as well populate that while we're here too if we need to.
 	const apiFaqData = apiData.faqData
 	if (apiFaqData && card.faqData.size === 0) {
 		const faqMap = card.faqData
@@ -691,14 +691,14 @@ function insertFaqData(faqMap, locale, effectIndex, entry) {
 }
 
 /**
- * Add (or replace) the given values in the YGOrg DB.
+ * Add (or replace) the given values in the YGOResources DB.
  * @param {Array<Search>} qaSearches Search data containing new QAs to add.
  * @param {Array<Search>} cardSearches Search data containing new card data to add.
  */
-function addToYgorgDb(qaSearches, cardSearches) {
+function addToLocalYgoresourcesDb(qaSearches, cardSearches) {
 	if (qaSearches.length) {
-		const insertQa = _ygorgDb.prepare(`INSERT OR REPLACE INTO qaData(id, jsonResponse) VALUES(?, ?)`)
-		let insertAllQas = _ygorgDb.transaction(searchData => {
+		const insertQa = _ygoresourcesDb.prepare(`INSERT OR REPLACE INTO qaData(id, jsonResponse) VALUES(?, ?)`)
+		let insertAllQas = _ygoresourcesDb.transaction(searchData => {
 			for (const s of searchData) {
 				insertQa.run(s.data.id, JSON.stringify(s.rawData))
 				_apiResponseCache.qaData[s.data.id] = s.rawData
@@ -707,8 +707,8 @@ function addToYgorgDb(qaSearches, cardSearches) {
 		insertAllQas(qaSearches)
 	}
 	if (cardSearches.length) {
-		const insertCard = _ygorgDb.prepare(`INSERT OR REPLACE INTO cardData(id, jsonResponse) VALUES(?, ?)`)
-		let insertAllCards = _ygorgDb.transaction(searchData => {
+		const insertCard = _ygoresourcesDb.prepare(`INSERT OR REPLACE INTO cardData(id, jsonResponse) VALUES(?, ?)`)
+		let insertAllCards = _ygoresourcesDb.transaction(searchData => {
 			for (const s of searchData) {
 				insertCard.run(s.data.dbId, JSON.stringify(s.rawData))
 				_apiResponseCache.cardData[s.data.dbId] = s.rawData
@@ -798,7 +798,7 @@ function searchPropertyArray(index, locale) {
 }
 
 module.exports = {
-	checkForDataManifestUpdate, searchYgorgDb, searchArtworkRepo, addToYgorgDb, 
-	populateCardFromYgorgApi, populateRulingFromYgorgApi,
+	checkForDataManifestUpdate, searchYgoresourcesDb, searchArtworkRepo, addToLocalYgoresourcesDb, 
+	populateCardFromYgoresourcesApi, populateRulingFromYgoresourcesApi,
 	searchNameToIdIndex, searchPropertyToLocaleIndex, searchPropertyArray, getAllNeuronArts
 }

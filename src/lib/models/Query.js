@@ -2,7 +2,7 @@ const { Message, CommandInteraction, GuildChannel } = require('discord.js')
 
 const Search = require('./Search')
 const { MillenniumEyeBot } = require('./MillenniumEyeBot')
-const { KONAMI_DB_CARD_REGEX, KONAMI_DB_QA_REGEX, YGORG_DB_CARD_REGEX, YGORG_DB_QA_REGEX, IGNORE_LINKS_REGEX, Locales } = require('./Defines')
+const { KONAMI_DB_CARD_REGEX, KONAMI_DB_QA_REGEX, YGORESOURCES_DB_CARD_REGEX, YGORESOURCES_DB_QA_REGEX, IGNORE_LINKS_REGEX, Locales } = require('./Defines')
 const { logError, logger } = require('lib/utils/logging')
 
 const CODE_TAG_REGEX = /`+.*?`+/gs
@@ -23,7 +23,7 @@ class Query {
 	 * @param {MillenniumEyeBot} bot The bot.
 	 */
 	constructor(qry, bot) {
-		// Keep track of whether we matched any DB links (either Konami or YGOrg).
+		// Keep track of whether we matched any DB links (either Konami or YGOResources).
 		// They produce automatic Discord embeds that we want to try to suppress.
 		this.matchedDbLinks = false
 		
@@ -137,12 +137,15 @@ class Query {
 
 		const cardLinks = [
 			...msgContent.matchAll(KONAMI_DB_CARD_REGEX), 
-			...msgContent.matchAll(YGORG_DB_CARD_REGEX)
+			...msgContent.matchAll(YGORESOURCES_DB_CARD_REGEX)
 		]
 		if (cardLinks.length) {
 			for (const l of cardLinks) {
 				let sType = this.rulings ? 'r' : 'i'
-				let sContent = parseInt(l[1], 10)
+				// Because of the disjunction in the YGOResources card regex, it technically has two capture groups,
+				// and one is not guaranteed to be defined, so this will use the group that resulted in a match.
+				const idMatch = l[1] ?? l[2]
+				let sContent = parseInt(idMatch, 10)
 				let sLocale = this.locale
 
 				searchData.push([sContent, sType, sLocale])
@@ -151,12 +154,15 @@ class Query {
 		}
 		const qaLinks = [
 			...msgContent.matchAll(KONAMI_DB_QA_REGEX),
-			...msgContent.matchAll(YGORG_DB_QA_REGEX)
+			...msgContent.matchAll(YGORESOURCES_DB_QA_REGEX)
 		]
 		if (qaLinks.length) {
 			for (const l of qaLinks) {
 				let sType = 'q'
-				let sContent = parseInt(l[1], 10)
+				// Because of the disjunction in the YGOResources QA regex, it technically has two capture groups,
+				// and one is not guaranteed to be defined, so this will use the group that resulted in a match.
+				const idMatch = l[1] ?? l[2]
+				let sContent = parseInt(idMatch, 10)
 				let sLocale = this.locale
 	
 				searchData.push([sContent, sType, sLocale])
@@ -267,7 +273,7 @@ class Query {
 						}
 					}
 					catch (err) {
-						logError('Encountered error building data embeds for data:', s.data, err)
+						await logError('Encountered error building data embeds for data:', s.data, err)
 					}
 				}
 			}

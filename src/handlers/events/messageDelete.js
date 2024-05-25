@@ -21,7 +21,7 @@ module.exports = new Event({
 				bot.replyCache.remove(message.id)
 			}
 			catch (err) {
-				logError(err)
+				await logError(err)
 			}
 		}
 	}
