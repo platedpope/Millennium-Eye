@@ -9,6 +9,12 @@ const Card = require('lib/models/Card')
 
 const botDb = new Database(BOT_DB_PATH)
 
+// For some reason, the name on some TCGPlayer listings is different from the official name on the database.
+// This is a map of "official name" -> "TCGPlayer name" used to resolve those name differences.
+const tcgplayerNameAliases = {
+	'Mystical Elf - White Lightning': 'Mystical Elf White Lightning'
+}
+
 /**
  * @typedef {Object} SetData
  * @property {Number} setId
@@ -102,7 +108,13 @@ function searchTcgplayerData(searches) {
 			// If we have a Card, then we need to try and fill out its products.
 			const productQry = botDb.prepare(`SELECT * FROM tcgplayerProducts WHERE dbId = ? OR fullName = ? COLLATE NOCASE`)
 			const priceQry = botDb.prepare('SELECT * FROM tcgplayerProductPrices WHERE tcgplayerProductId = ?')
-			const productRows = productQry.all(searchData.dbId, searchData.name.get('en'))
+			let productRows = productQry.all(searchData.dbId, searchData.name.get('en'))
+			// If this doesn't result in anything, check our name aliases too
+			// to make sure we're not missing it due to TCGPlayer having a weird name for the card.
+			if (!(productRows.length)) {
+				productRows = productQry.all(searchData.dbId, tcgplayerNameAliases[searchData.name.get('en')]) 
+			}
+
 			for (const r of productRows) {
 				const tcgProduct = new TCGPlayerProduct()
 				tcgProduct.productId = r.tcgplayerProductId

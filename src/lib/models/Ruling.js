@@ -53,9 +53,15 @@ class Ruling {
 		const konamiDbLink = `${KONAMI_QA_LINK}${this.id}${KONAMI_REQUEST_LOCALE}ja`
 		const ygoresourcesDbLink = `${YGORESOURCES_QA_LINK}${this.id}:${locale}`
 
+		// Konami has made a habit of listing 5 billion other cards a ruling could possibly apply to.
+		// YGOResources DB places "~~~" before these lists to denote that one of these card lists is starting (and to make it collapsible),
+		// so look for that first to prune it and make sure those long-ass lists don't appear in the ruling embeds.
+		// We do this before replacing IDs with names so that we avoid having to look up all the IDs in the list.
+		const prunedAnswer = this.answer.get(locale).split('~~~')[0].trim()
+
 		let replacedTitle = await replaceIdsWithNames(this.title.get(locale), locale, false)
 		let replacedQuestion = await replaceIdsWithNames(this.question.get(locale), locale)
-		let replacedAnswer = await replaceIdsWithNames(this.answer.get(locale), locale)
+		let replacedAnswer = await replaceIdsWithNames(prunedAnswer, locale)
 		if (random)
 			replacedAnswer = `||${replacedAnswer}||`
 
@@ -68,6 +74,7 @@ class Ruling {
 			const truncTitle = breakUpDiscordMessage(replacedTitle, 256, '.')
 			replacedTitle = truncTitle[0]
 		}
+		
 		// Maximum field length is 1024 characters. Break up questions and answers before they're too long.
 		replacedQuestion = breakUpDiscordMessage(replacedQuestion, 1024, '\n')
 		replacedAnswer = breakUpDiscordMessage(replacedAnswer, 1024, '\n')

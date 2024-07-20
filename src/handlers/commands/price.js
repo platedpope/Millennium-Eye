@@ -68,8 +68,12 @@ module.exports = new Command({
 		// Defer reply in case this query takes a bit.
 		await interaction.deferReply()
 		await processQuery(qry)
-
 		const priceSearch = qry.searches[0]
+		if (!priceSearch.data) {
+			await queryRespond(bot, interaction, 'Could not find any price data with the given search and filter(s).', qry)
+			return
+		}
+
 		const priceFilters = {}
 		if (rarity)
 			priceFilters.rarity = rarity
@@ -79,10 +83,11 @@ module.exports = new Command({
 		const embedData = priceSearch.data.generatePriceEmbed(locale, qry.official, priceFilters)
 
 		const msgOptions = {}
-		if ('embed' in embedData)
+		if ('embed' in embedData) {
 			msgOptions.embeds = [embedData.embed]
+		}
 		else {
-			await queryRespond(bot, interaction, 'Could not find any price data with the given search and filter(s).', qry, { ephemeral: true })
+			await queryRespond(bot, interaction, 'Could not find any price data with the given search and filter(s).', qry)
 			return
 		}
 		

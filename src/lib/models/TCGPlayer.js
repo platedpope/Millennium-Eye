@@ -56,6 +56,7 @@ class TCGPlayerProduct {
 			trimmedRarity = trimmedRarity.replace(/Duel Terminal Technology/, 'DT')
 				.replace(/Duel Terminal/, 'DT')
 				.replace(/Prismatic/, 'Pris.')
+				.replace(/Quarter Century/, 'QC')
 
 			const productData = { 
 				identifier: useName ? this.fullName : this.printCode,

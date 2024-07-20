@@ -106,6 +106,11 @@ async function _cacheNameToIdIndex(locales = Object.keys(Locales)) {
  * Saves off the YGOResources localization metadata for properties and types.
  */
 async function _cachePropertyMetadata() {
+	// Already cached it.
+	if (_apiResponseCache.propertyArray.length > 0 && Object.keys(_propertyToLocaleIndex).length > 0) {
+		return;
+	}
+
 	try {
 		var resp = await fetch(YGORESOURCES_PROPERTY_METADATA, { signal: AbortSignal.timeout(API_TIMEOUT) })
 	}
@@ -729,6 +734,9 @@ function addToLocalYgoresourcesDb(qaSearches, cardSearches) {
 async function searchNameToIdIndex(search, locales, returnMatches = 1, returnNames = false) {
 	// Make sure we have the necessary locales cached before trying to search.
 	await _cacheNameToIdIndex(locales)
+	// Also use the opportunity to cache property metadata if we haven't already,
+	// since if we're searching for card names we sorta need that too.
+	await _cachePropertyMetadata()
 
 	const matches = new Map()
 
