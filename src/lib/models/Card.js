@@ -495,13 +495,14 @@ class Card {
 		const faqBlocks = this.faqData.get(locale)
 
 		let numFields = 0
+		// Maintain the embed field we're currently working on, since if length allows it may actually end up containing multiple FAQ blocks.
 		let currFaqField = ''
 		for (const fb of faqBlocks) {
 			let blockString = ''
 
-			// If this block has a label at the front, use that first and make it stand out.
+			// If this block has a label at the front, treat it special and make it stand out.
 			let currLine = 0
-			if (fb.lines[currLine].startsWith('About ') || (fb.lines[currLine].startsWith('【') && fb.lines[currLine].endsWith('】'))) {
+			if (fb.lines[currLine].startsWith('About') || fb.lines[currLine].startsWith('Regarding') || (fb.lines[currLine].startsWith('【') && fb.lines[currLine].endsWith('】'))) {
 				blockString += `**${fb.lines[currLine]}**\n`
 				currLine++
 			}
@@ -510,19 +511,20 @@ class Card {
 				blockString += await replaceIdsWithNames(`● ${fb.lines[currLine]}\n`, locale, true)
 			}
 
-			// Add the complete block to the field. If this would push us over the 1024 field character limit, then push the current field to the embed and start again with this block.
-			const tempField = currFaqField + blockString
-			if (tempField.length > 1024) {
-				finalEmbed.addFields({ name: numFields === 0 ? '__FAQ Entries__' : '__cont.__',
-									value: currFaqField, inline: false })
-				numFields++
-				currFaqField = blockString
+			// Fields can only be 1024 characters; add this block to the field but make sure to break things if we need to.
+			const brokenUpBlock = breakUpDiscordMessage(`${currFaqField}\n` + blockString, 1024, '\n')
+			// If this resulted in a broken up block, then add all the fields except the last, which we'll carry forward in case more blocks need to be added.
+			if (brokenUpBlock.length > 1) {
+				for (let i = 0; i < brokenUpBlock.length - 1; i++) {
+					finalEmbed.addFields({ name: numFields === 0 ? '__FAQ Entries__' : '__cont.__',
+										value: brokenUpBlock[i], inline: false })
+					numFields++
+				}
 			}
-			else {
-				currFaqField += `\n${blockString}`
-			}
+			// Carry the last broken up block (or if it wasn't broken up at all, this is just the original block) forward.
+			currFaqField = brokenUpBlock[brokenUpBlock.length - 1]
 		}
-		// Finish up the fields.
+		// Finish adding whatever field we have left.
 		finalEmbed.addFields({ name: numFields === 0 ? '__FAQ Entries__' : '__cont.__',
 							value: currFaqField, inline: false })
 

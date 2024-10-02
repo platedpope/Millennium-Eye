@@ -44,7 +44,6 @@ module.exports = new Event({
 			catch (err) {
 				// Probably didn't have permissions. Just ignore this.
 			}
-
 		
 			await processQuery(qry)
 			
