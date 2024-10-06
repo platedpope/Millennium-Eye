@@ -9,12 +9,6 @@ const Card = require('lib/models/Card')
 
 const botDb = new Database(BOT_DB_PATH)
 
-// For some reason, the name on some TCGPlayer listings is different from the official name on the database.
-// This is a map of "official name" -> "TCGPlayer name" used to resolve those name differences.
-const tcgplayerNameAliases = {
-	'Mystical Elf - White Lightning': 'Mystical Elf White Lightning'
-}
-
 /**
  * @typedef {Object} SetData
  * @property {Number} setId
@@ -108,11 +102,24 @@ function searchTcgplayerData(searches) {
 			// If we have a Card, then we need to try and fill out its products.
 			const productQry = botDb.prepare(`SELECT * FROM tcgplayerProducts WHERE dbId = ? OR fullName = ? COLLATE NOCASE`)
 			const priceQry = botDb.prepare('SELECT * FROM tcgplayerProductPrices WHERE tcgplayerProductId = ?')
-			let productRows = productQry.all(searchData.dbId, searchData.name.get('en'))
-			// If this doesn't result in anything, check our name aliases too
-			// to make sure we're not missing it due to TCGPlayer having a weird name for the card.
+
+			const searchName = searchData.name.get('en')
+			let productRows = productQry.all(searchData.dbId, searchName)
+			// If this doesn't result in anything, resort to FTS to see if we can get a close match.
 			if (!(productRows.length)) {
-				productRows = productQry.all(searchData.dbId, tcgplayerNameAliases[searchData.name.get('en')]) 
+				// Adjust the name for FTS compatibility by removing weird symbols and double quoting quotes.
+				const ftsName = searchName.replace(/[^\x00-\x7F]/, ' ').trim().replace("\"", "\"\"")
+				// FTS has a ton of (even ASCII) symbols it treats as special in non-string literals, so we want to convert this search to a string literal.
+				// Unfortunately string literals are treated as one search token which is pretty inflexible for search purposes, since anything that doesn't match it exactly doesn't hit.
+				// A bit hacky: split up the name on whitespace and quote each token to avoid issues with any symbols in each part. Add a * at the end of the last token for good measure to include prefixes.
+				const ftsTokens = ftsName.split(' ').map(v => `"${v}"`)
+				ftsTokens[ftsTokens.length-1] = `${ftsTokens[ftsTokens.length-1]}*`
+
+				productRows = botDb.prepare(`SELECT * FROM products_idx WHERE fullName MATCH '${ftsTokens.join(' ')}' ORDER BY rank`).all()
+				// Take the name of the highest ranked match and feed it back to the original query so we get what we were actually looking for.
+				if (productRows.length) {
+					productRows = productQry.all(searchData.dbId, productRows[0].fullName)
+				}
 			}
 
 			for (const r of productRows) {

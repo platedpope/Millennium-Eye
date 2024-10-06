@@ -1,6 +1,5 @@
 const { EmbedBuilder } = require('discord.js')
 const Table = require('ascii-table')
-const table = require('better-sqlite3/lib/methods/table')
 
 const { TCGPLAYER_LOGO, TCGPLAYER_SET_SEARCH, TCGPLAYER_PRICE_TIMEOUT } = require('./Defines')
 const { logger } = require('lib/utils/logging')

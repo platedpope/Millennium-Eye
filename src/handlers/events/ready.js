@@ -85,9 +85,6 @@ module.exports = new Event({
 		// Search term cache clear: once every hour.
 		// (This doesn't actually clear the cache, it just checks for stale entries and evicts those).
 		setInterval(clearSearchCache, 1000 * 60 * 60)
-			// Konami database update: once per day.
-			await updateKonamiDb()
-			setInterval(updateKonamiDb, 24 * 60 * 60 * 1000)
 		if (!config.testMode) {
 			// YGOResources manifest check: once per 30 min.
 			await checkForDataManifestUpdate()

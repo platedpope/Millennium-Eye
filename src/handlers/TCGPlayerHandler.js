@@ -198,19 +198,6 @@ async function cacheSetProductData(dataHandlerCallback) {
 	// Nothing to do without knowing which catalog ID to search through.
 	if (!await cacheYgoCategory()) return
 
-	// Querying the TCGPlayer set catalog can produce paged values,
-	// meaning we need to send multiple requests. Keep track of our final array of data here.
-	/*
-	const apiRequestOptions = {
-		method: 'GET',
-		url: `${TCGPLAYER_API_VERSION}/catalog/groups`,
-		headers: requestHeaders,
-		params: {
-			categoryId: ygoCategoryId
-		}
-	}
-	*/
-
 	const setUrl = new URL(`${TCGPLAYER_API_VERSION}/catalog/groups`, TCGPLAYER_API)
 	setUrl.searchParams.set('categoryId', _ygoCategoryId)
 	const setResults = await handlePagedRequest(setUrl)

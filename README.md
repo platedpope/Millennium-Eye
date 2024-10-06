@@ -40,7 +40,7 @@ The bot is focused on supporting regions in the TCG first and foremost, and is w
 ## Data Sources
 The bot gathers the data it displays to users from several different sources. In order from most to least commonly used:
 #### [YGOResources Database](https://db.ygoresources.com/)
-This is a fanmade and fan-run (i.e., unofficial) database that offers all the data from (1) and more. Notably, the OCG version of the Official Card Database contains a section for card FAQs and Q&As that only exists in Japanese and has yet to be ported (officially) to English or any other locale. The bot leverages the YGOResource database's unofficial translations of many of these FAQs and Q&As, as well as other data that is typically OCG-exclusive.
+This is a fanmade and fan-run (i.e., unofficial) database that mirrors the official Konami card database and offers its own wealth of data. Notably, the OCG version of the Official Card Database contains a section for card FAQs and Q&As that only exists in Japanese and has yet to be ported (officially) to English or any other locale; this database compiles and offers unofficial translations of this data (done by YGOrganization and other trusted sources) plus a number of other things. There is no more accessible single source of data for the physical card game, so the bot leverages the YGOResource database as much as possible.
 
 The bot also makes use of this database's [artwork repository](https://artworks.ygoresources.com/) to source HD, unwatermarked card arts.
 #### [Official Card Database](https://www.db.yugioh-card.com/yugiohdb/) 

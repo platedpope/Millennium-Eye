@@ -238,7 +238,7 @@ async function checkForDataManifestUpdate() {
 			const manifest = jsonResponse.data
 			
 			if (!manifest) {
-				await logError(undefined, 'Received manifest with no data, exiting.')
+				await logError(manifest, 'Received manifest with no data changes, exiting.')
 				return
 			}
 
