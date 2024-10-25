@@ -1,9 +1,7 @@
 const Database = require('better-sqlite3')
-const fs = require('fs')
 
 const Search = require('lib/models/Search')
-const { BOT_DB_PATH, TCGPLAYER_PRICE_TIMEOUT } = require('lib/models/Defines')
-const { logger, logError } = require('lib/utils/logging')
+const { BOT_DB_PATH } = require('lib/models/Defines')
 const { TCGPlayerSet, TCGPlayerProduct, TCGPlayerPrice } = require('lib/models/TCGPlayer')
 const Card = require('lib/models/Card')
 
@@ -186,12 +184,13 @@ function addTcgplayerDataToDb(tcgData) {
 			else if (s instanceof Search) {
 				const searchData = s.data
 				for (const p of searchData.products) {
-					for (const pd of p.priceData)
+					for (const pd of p.priceData) {
 						insertProductPriceData.run(p.productId, pd.type, pd.lowPrice, pd.midPrice, pd.highPrice, pd.marketPrice, pd.cacheTime.toISOString())
-					// Update card database ID too.
-					if (searchData instanceof Card)
-						botDb.prepare('UPDATE tcgplayerProducts SET dbId = ? WHERE fullName = ?').run(searchData.dbId, searchData.name.get('en'))
+					}	
 				}
+				// Update card database ID too.
+				if (searchData instanceof Card)
+					botDb.prepare('UPDATE tcgplayerProducts SET dbId = ? WHERE fullName = ?').run(searchData.dbId, searchData.name.get('en'))
 			}
 		}
 	})
