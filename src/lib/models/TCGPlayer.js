@@ -152,12 +152,13 @@ class TCGPlayerSet {
 		for (const p of this.products) {
 			// Apply any filters so we know which products we don't care about.
 			if (filters && Object.keys(filters).length) {
-				if ('rarity' in filters) 
-					// Special case the "Rare" filter, because so many rarities have "Rare" in their names but aren't literally "Rare".
-					if (filters.rarity === 'Rare' && (!p.rarity || p.rarity !== filters.rarity)) {
+				if ('rarity' in filters && p.rarity) 
+					// If the rarity filter has "Rare" in the name, we want an exact match. This is to cover special cases where they'd otherwise be caught as substrings of other rarities,
+					// e.g. "Secret Rare" is also part of "Quarter Century Secret Rare", or "Gold Secret Rare", etc.
+					if (filters.rarity.inclues('Rare') && p.rarity !== filters.rarity) {
 						continue
 					}
-					else if (!p.rarity || !p.rarity.match(new RegExp(filters.rarity))) continue
+					else if (!p.rarity.match(new RegExp(filters.rarity))) continue
 			}
 
 			let priceDataOptions = { useName: true }

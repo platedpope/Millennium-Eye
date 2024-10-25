@@ -29,15 +29,16 @@ module.exports = new Command({
 					// since TCGPlayer rarities are a mess and there are a lot I don't want to offer as options.
 					{ name: 'Common', value: 'Common' },
 					{ name: 'Rare', value: 'Rare' },
-					{ name: 'Super Rare', value: 'Super' },
-					{ name: 'Ultra Rare', value: 'Ultra' },
-					{ name: 'Secret Rare', value: 'Secret' },
-					{ name: 'Prismatic Secret Rare', value: 'Prismatic Secret' },
-					{ name: 'Ultimate Rare', value: 'Ultimate' },
-					{ name: 'Ghost Rare', value: 'Ghost' },
-					{ name: 'Gold Rare', value: 'Gold' },
-					{ name: 'Collector\'s Rare', value: 'Collector\'s' },
-					{ name: 'Starlight Rare', value: 'Starlight' }
+					{ name: 'Super Rare', value: 'Super Rare' },
+					{ name: 'Ultra Rare', value: 'Ultra Rare' },
+					{ name: 'Secret Rare', value: 'Secret Rare' },
+					{ name: 'Ultimate Rare', value: 'Ultimate Rare' },
+					{ name: 'Ghost', value: 'Ghost Rare' },
+					{ name: 'Starlight Rare', value: 'Starlight Rare' },
+					{ name: 'Quarter Century Secret Rare', value: 'Quarter Century Secret Rare' },
+					{ name: 'Prismatic', value: 'Prismatic' },
+					{ name: 'Gold', value: 'Gold' },
+					{ name: 'Collector\'s', value: 'Collector\'s' }
 				]
 			},
 			{

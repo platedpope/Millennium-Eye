@@ -6,6 +6,7 @@ module.exports = {
 	YGORESOURCES_DB_QA_REGEX: /https?:\/\/db\.ygorganization\.com\/qa#(\d+)|https?:\/\/db\.ygoresources\.com\/qa#(\d+)/g,
 	YGORESOURCES_DB_CARD_REGEX: /https?:\/\/db\.ygorganization\.com\/card#(\d+)|https?:\/\/db\.ygoresources\.com\/card#(\d+)/g,
 	IGNORE_LINKS_REGEX: /https?|www\.|steamcommunity\.com/g,
+	MARKDOWN_LINK_REGEX: /\[.*\]\(https?:.*\)/g,
 	// Constant values.
 	API_TIMEOUT: 1000 * 3,									// 3 seconds.
 	MESSAGE_TIMEOUT: 15,							// 15 seconds.

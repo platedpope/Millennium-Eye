@@ -2,7 +2,7 @@ const { Message, CommandInteraction, GuildChannel } = require('discord.js')
 
 const Search = require('./Search')
 const { MillenniumEyeBot } = require('./MillenniumEyeBot')
-const { KONAMI_DB_CARD_REGEX, KONAMI_DB_QA_REGEX, YGORESOURCES_DB_CARD_REGEX, YGORESOURCES_DB_QA_REGEX, IGNORE_LINKS_REGEX, Locales } = require('./Defines')
+const { KONAMI_DB_CARD_REGEX, KONAMI_DB_QA_REGEX, YGORESOURCES_DB_CARD_REGEX, YGORESOURCES_DB_QA_REGEX, IGNORE_LINKS_REGEX, Locales, MARKDOWN_LINK_REGEX } = require('./Defines')
 const { logError, logger } = require('lib/utils/logging')
 
 const CODE_TAG_REGEX = /`+.*?`+/gs
@@ -81,11 +81,13 @@ class Query {
 		* - characters between `` (code tags)
 		* - characters between || (spoiler tags)
 		* - characters in quote lines (> text...)
+		* - characters that form a sort of markdown link (e.g., [this is a markdown link](https://link-to-website.com/))
 		* Also, convert entire message content to lowercase for case insensitivity.
 		*/
 		msgContent = msgContent.replace(CODE_TAG_REGEX, '')
 			.replace(SPOILER_REGEX, '')
 			.replace(QUOTE_REGEX, '')
+			.replace(MARKDOWN_LINK_REGEX, '')
 			.toLowerCase()
 
 		const searchData = []
