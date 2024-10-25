@@ -155,7 +155,7 @@ class TCGPlayerSet {
 				if ('rarity' in filters && p.rarity) 
 					// If the rarity filter has "Rare" in the name, we want an exact match. This is to cover special cases where they'd otherwise be caught as substrings of other rarities,
 					// e.g. "Secret Rare" is also part of "Quarter Century Secret Rare", or "Gold Secret Rare", etc.
-					if (filters.rarity.inclues('Rare') && p.rarity !== filters.rarity) {
+					if (filters.rarity.includes('Rare') && p.rarity !== filters.rarity) {
 						continue
 					}
 					else if (!p.rarity.match(new RegExp(filters.rarity))) continue
