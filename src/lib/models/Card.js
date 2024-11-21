@@ -298,9 +298,9 @@ class Card {
 			const lastPrint = sortedDates[0]
 
 			var firstText = `First (oldest) print: **${firstPrint}**`
-			if (new Date(firstPrint) > today) firstText += ' *(not yet released)*'
+			if (new Date(firstPrint) > today) firstText += ' *(upcoming print)*'
 			var lastText = `Last (newest) print: **${lastPrint}**`
-			if (new Date(lastPrint) > today) lastText += ` *(not yet released)*`
+			if (new Date(lastPrint) > today) lastText += ` *(upcoming print)*`
 		}
 		else {
 			firstText = `First (oldest) print: **Not yet released**`
@@ -742,7 +742,7 @@ class Card {
 			// Check if the date is in the future.
 			const mostRecentPrint = sortedPrintDates[0]
 			fieldText += `\nLast ${locale.toUpperCase()}  print: **${mostRecentPrint}**`
-			if (new Date(mostRecentPrint) > new Date()) fieldText += ' *(not yet released)*'
+			if (new Date(mostRecentPrint) > new Date()) fieldText += ' *(upcoming print)*'
 		}
 
 		return fieldText
@@ -813,18 +813,22 @@ class Card {
 		else 
 			if (this.tcgList)
 				return this.tcgList !== -1
-		
+			
 		// If we got this far, we need to look at print dates instead.
 		const localePrints = this.printData.get(locale)
 		// No prints means no release.
 		if (!localePrints || !localePrints.size) return false
+		// If we want to consider future prints "released", then just say this is released whenever we have ANY prints.
+		else if (includeFuturePrints) return true 
 		else {
-			// This has prints, but need to check whether they're in the future.
-			if (includeFuturePrints) return true
+			// If we're not considering a future print as a "release", then go through our prints,
+			// and if we find a single one that's not in the future, we'll consider it released.
+			const currDate = new Date()
+			for (const p of localePrints)
+				if (currDate >= new Date(p[1])) return true
 
-			const sortedDates = this.sortPrintDates(locale)
-			// If the most recent print is in the future, this isn't released.
-			return new Date() >= new Date(sortedDates[0])
+			// If we got this far, there's no print that isn't in the future, so mark this as unreleased.
+			return false
 		}
 	}
 
