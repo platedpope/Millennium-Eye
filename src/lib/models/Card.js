@@ -879,7 +879,11 @@ class Card {
 	 * @returns {String} The name in the given locale converted to a URL-friendly format. 
 	 */
 	getNameYugipediaUrl(locale = 'en') {
-		return encodeURI(this.name.get(locale))
+		// Trim illegal characters from the name.
+		let trimmedName = this.name.get(locale).replace(/[\<\>]/g, '')
+		console.log(trimmedName)
+
+		return encodeURI(trimmedName)
 	}
 
 	/**

@@ -103,6 +103,7 @@ async function searchYugipedia(searches, qry, dataHandlerCallback) {
 			.replace(/<br\s*\/?>/gs, '\n')
 			.replace(/{{PAGENAME}}/gs, apiData.title)
 			.replace(/<.*?>/gs, '')
+		console.log(revData)
 
 		// Name(s)
 		// EN name is always the title of the page.
@@ -142,9 +143,9 @@ async function searchYugipedia(searches, qry, dataHandlerCallback) {
 			card.passcode = findYugipediaProperty('password', revData, true)
 		}
 		// Effect(s)
-		// EN effect is "lore", while the others are "<locale>_lore".
+		// EN effect is "text", while the others are "<locale>_text".
 		if (!card.effect.get('en')) {
-			let enEffect = findYugipediaProperty('lore', revData)
+			let enEffect = findYugipediaProperty('text', revData)
 			if (enEffect)
 				card.effect.set('en', enEffect)
 		}
@@ -153,7 +154,7 @@ async function searchYugipedia(searches, qry, dataHandlerCallback) {
 			if (card.effect.get(loc)) continue
 			if (loc === 'en') continue
 
-			let locEffect = findYugipediaProperty(`${loc}_lore`, revData)
+			let locEffect = findYugipediaProperty(`${loc}_text`, revData)
 			if (locEffect)
 				card.effect.set(loc, locEffect)
 		}
