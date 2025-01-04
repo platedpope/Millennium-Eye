@@ -103,7 +103,6 @@ async function searchYugipedia(searches, qry, dataHandlerCallback) {
 			.replace(/<br\s*\/?>/gs, '\n')
 			.replace(/{{PAGENAME}}/gs, apiData.title)
 			.replace(/<.*?>/gs, '')
-		console.log(revData)
 
 		// Name(s)
 		// EN name is always the title of the page.

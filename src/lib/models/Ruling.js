@@ -99,7 +99,7 @@ class Ruling {
 
 		const finalEmbed = new EmbedBuilder()
 
-		finalEmbed.setAuthor({ name: replacedTitle, iconURL: konamiDbLink })
+		finalEmbed.setAuthor({ name: replacedTitle, url: konamiDbLink })
 		for (let i = 0; i < replacedQuestion.length; i++) {
 			finalEmbed.addFields({
 				name: i === 0 ? '__Question__' : '__Question (cont.)__',

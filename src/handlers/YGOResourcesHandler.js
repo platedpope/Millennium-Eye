@@ -5,7 +5,7 @@ const { logError, logger } = require('lib/utils/logging')
 const { CardDataFilter } = require('lib/utils/filter')
 const Search = require('lib/models/Search')
 const Query = require('lib/models/Query')
-const { Locales, YGORESOURCES_NAME_ID_INDEX, YGORESOURCES_PROPERTY_METADATA, YGORESOURCES_DB_PATH, YGORESOURCES_MANIFEST, YGORESOURCES_QA_DATA_API, API_TIMEOUT, YGORESOURCES_CARD_DATA_API, YGORESOURCES_ARTWORK_API } = require('lib/models/Defines')
+const { Locales, YGORESOURCES_NAME_ID_INDEX, YGORESOURCES_TYPES_METADATA, YGORESOURCES_PROPERTY_METADATA, YGORESOURCES_DB_PATH, YGORESOURCES_MANIFEST, YGORESOURCES_QA_DATA_API, API_TIMEOUT, YGORESOURCES_CARD_DATA_API, YGORESOURCES_ARTWORK_API } = require('lib/models/Defines')
 const Card = require('lib/models/Card')
 
 /**
@@ -14,7 +14,8 @@ const Card = require('lib/models/Card')
  * @property {Object} cardData								All cached API responses from the card API endpoint.
  * @property {Object} qaData									All cached API responses from the qa API endpoint.
  * @property {Object} nameToIdIndex						A search index mapping names to IDs.
- * @property {Object} propertyArray						The raw property data returned by the YGOResources API that's used in its own API.
+ * @property {Array} typesArray								The raw types localization data returned by the YGOResources API.
+ * @property {Object} propertyMap 						The raw property localization data returned by the YGOresources API.
  * @property {Object} artworkManifest					The cached artwork manifest from the YGOResources artwork endpoint.
 */
 
@@ -25,12 +26,16 @@ const _apiResponseCache = {
 	cardData: {},
 	qaData: {},
 	nameToIdIndex: {},
-	propertyArray: [],
+	typesArray: [],
+	propertyMap: {},
 	artworkManifest: null
 }
 
-// The propertyToLocaleIndex is the propertyArray API data converted into a map for easy type lookups for the bot's purposes.
+// The typesToLocale is the typesArray API data converted into a map for easy type lookups for the bot's purposes.
+// Similarly, the propertyToLocaleIndex is the propertyMap API data flattened out into something more usable for bot lookups.
+const _typesToLocaleIndex = {}
 const _propertyToLocaleIndex = {}
+
 
 async function _loadApiResponseCache() {
 	// Load current manifest revision.
@@ -61,7 +66,8 @@ async function _loadApiResponseCache() {
 		// Force-cache the name to ID index if we don't have it in the database for some reason.
 		await _cacheNameToIdIndex()
 	}
-	await _cachePropertyMetadata()
+	await _cacheTypesLocaleMetadata()
+	await _cachePropertyLocaleMetadata()
 
 	return true
 }
@@ -105,9 +111,44 @@ async function _cacheNameToIdIndex(locales = Object.keys(Locales)) {
 /**
  * Saves off the YGOResources localization metadata for properties and types.
  */
-async function _cachePropertyMetadata() {
+async function _cacheTypesLocaleMetadata() {
 	// Already cached it.
-	if (_apiResponseCache.propertyArray.length > 0 && Object.keys(_propertyToLocaleIndex).length > 0) {
+	if (_apiResponseCache.typesArray.length > 0 && Object.keys(_typesToLocaleIndex).length > 0) {
+		return;
+	}
+
+	try {
+		var resp = await fetch(YGORESOURCES_TYPES_METADATA, { signal: AbortSignal.timeout(API_TIMEOUT) })
+	}
+	catch (err) {
+		await logError(err.message, 'YGOResources API query to initialize types metadata failed.')
+		return
+	}
+
+	if (resp) {
+		const jsonResponse = await resp.json()
+		_apiResponseCache.typesArray = jsonResponse
+		// Also rejig this by pulling out the EN values to make them keys in a map for easy future lookups.
+		for (const typeEntry of jsonResponse) {
+			if (!typeEntry) continue
+			else if (!('en' in typeEntry)) continue
+
+			// Pull out the EN property name and make it a key.
+			const enType = typeEntry['en']
+			_typesToLocaleIndex[enType] = {}
+			for (const locale in typeEntry) {
+				// Make each locale a key under EN that maps to the translation of that property.
+				_typesToLocaleIndex[enType][locale] = typeEntry[locale]
+			}
+		}
+
+		logger.info('Successfully cached YGOResources DB locale types metadata.')
+	}
+}
+
+async function _cachePropertyLocaleMetadata() {
+	// Already cached it.
+	if (Object.keys(_apiResponseCache.propertyMap).length > 0 && Object.keys(_propertyToLocaleIndex).length > 0) {
 		return;
 	}
 
@@ -121,21 +162,40 @@ async function _cachePropertyMetadata() {
 
 	if (resp) {
 		const jsonResponse = await resp.json()
-		_apiResponseCache.propertyArray = jsonResponse
-		// Also rejig this by pulling out the EN values to make them keys in a map for easy future lookups.
-		for (const prop of jsonResponse) {
-			if (!prop) continue
-			else if (!('en' in prop)) continue
+		_apiResponseCache.propertyMap = jsonResponse
 
-			// Pull out the EN property name and make it a key.
-			const enProp = prop['en']
-			_propertyToLocaleIndex[enProp] = {}
-			for (const locale in prop) {
-				// Make each locale a key under EN that maps to the translation of that property.
-				_propertyToLocaleIndex[enProp][locale] = prop[locale]
+		if ('attributes' in jsonResponse) {
+			for (const att in jsonResponse['attributes']) {
+				// Change Spell/Trap a bit for formatting, since the YGOResources API stores them in all caps which looks ugly.
+				if (att === 'spell' || att === 'trap') {
+					_propertyToLocaleIndex[att] = {}
+					for (const [locale, attLocale] of Object.entries(jsonResponse['attributes'][att])) {
+						// Change to all lowercase, then make the first character uppercase.
+						const lowerAtt = attLocale.toLowerCase()
+						const adjustedAtt = String(lowerAtt).charAt(0).toUpperCase() + String(lowerAtt).slice(1)
+						_propertyToLocaleIndex[att][locale] = adjustedAtt
+					}
+				}
+				else {
+					_propertyToLocaleIndex[att] = jsonResponse['attributes'][att]
+				}
 			}
 		}
+		else {
+			await logError(jsonResponse, 'YGOResources API query for property metadata did not include attribute data.')
+			return
+		}
 
+		if ('properties' in jsonResponse) {
+			for (const prop in jsonResponse['properties']) {
+				_propertyToLocaleIndex[prop] = jsonResponse['properties'][prop]
+			}
+		}
+		else {
+			await logError(jsonResponse, 'YGOResources API query for property metadata did not include property data.')
+			return
+		}
+		
 		// Also load some hardcoded ones the bot tracks for itself (not given by YGOResources DB since it doesn't have any use for them).
 		_propertyToLocaleIndex['Level'] = {
 			'de': 'Stufe',
@@ -177,7 +237,7 @@ async function _cachePropertyMetadata() {
 			'ko': '펜듈럼 스케일',
 			'pt': 'Escala de Pêndulo'
 		}
-
+	
 		logger.info('Successfully cached YGOResources DB locale property metadata.')
 	}
 }
@@ -620,7 +680,7 @@ function populateRulingFromYgoresourcesApi(apiData, ruling) {
 				}
 				if (!card.types.length && 'properties' in localeCardData)
 					for (const prop of localeCardData.properties)
-						card.types.push(searchPropertyArray(prop, 'en'))
+						card.types.push(searchTypesArray(prop, 'en'))
 				if (!card.attack && 'atk' in localeCardData) card.attack = localeCardData.atk
 				if (!card.defense && 'def' in localeCardData) card.defense = localeCardData.def
 				if (!card.pendScale && 'pendulumScale' in localeCardData) card.pendScale = localeCardData.pendulumScale
@@ -736,7 +796,8 @@ async function searchNameToIdIndex(search, locales, returnMatches = 1, returnNam
 	await _cacheNameToIdIndex(locales)
 	// Also use the opportunity to cache property metadata if we haven't already,
 	// since if we're searching for card names we sorta need that too.
-	await _cachePropertyMetadata()
+	await _cacheTypesLocaleMetadata()
+	await _cachePropertyLocaleMetadata()
 
 	const matches = new Map()
 
@@ -772,6 +833,40 @@ async function searchNameToIdIndex(search, locales, returnMatches = 1, returnNam
 }
 
 /**
+ * Searches the types property metadata to map an English type(s) to its version in another locale.
+ * @param {String | Array<String>} type The type(s) in English.
+ * @param {String} locale The locale's version of the type to search for.
+ * @returns {String | Array<String>} The type(s) in the given locale.
+ */
+function searchTypesToLocaleIndex(type, locale) {
+	let types = []
+
+	// If we're just converting the one type, return immediately once we find it.
+	if (typeof type === 'string' && type in _typesToLocaleIndex)
+		return _typesToLocaleIndex[type][locale]
+	else {
+		// Otherwise, loop through our properties to map each of them to the proper value.
+		for (const t of type) {
+			if (t in _typesToLocaleIndex)
+				types.push(_typesToLocaleIndex[t][locale])
+		}
+	}
+
+	return types
+}
+
+/**
+ * Returns the locale of the property at the given index of the property array. 
+ * @param {Number} index The index of the property array to look at.
+ * @param {String} locale The locale to search for at that index.
+ */
+function searchTypesArray(index, locale) {
+	const type = _apiResponseCache.typesArray.at(index)
+	if (type)
+		return type[locale]
+}
+
+/**
  * Searches the locale property metadata to map an English property(s) to its version in another locale.
  * @param {String | Array<String>} type The property(s) in English.
  * @param {String} locale The locale's version of the property to search for.
@@ -780,7 +875,7 @@ async function searchNameToIdIndex(search, locales, returnMatches = 1, returnNam
 function searchPropertyToLocaleIndex(prop, locale) {
 	let props = []
 
-	// If we're just converting the one property, return immediately once we find it.
+	// If we're just converting the one type, return immediately once we find it.
 	if (typeof prop === 'string' && prop in _propertyToLocaleIndex)
 		return _propertyToLocaleIndex[prop][locale]
 	else {
@@ -794,19 +889,8 @@ function searchPropertyToLocaleIndex(prop, locale) {
 	return props
 }
 
-/**
- * Returns the locale of the property at the given index of the property array. 
- * @param {Number} index The index of the property array to look at.
- * @param {String} locale The locale to search for at that index.
- */
-function searchPropertyArray(index, locale) {
-	const prop = _apiResponseCache.propertyArray.at(index)
-	if (prop)
-		return prop[locale]
-}
-
 module.exports = {
 	checkForDataManifestUpdate, searchYgoresourcesDb, searchArtworkRepo, addToLocalYgoresourcesDb, 
 	populateCardFromYgoresourcesApi, populateRulingFromYgoresourcesApi,
-	searchNameToIdIndex, searchPropertyToLocaleIndex, searchPropertyArray, getAllNeuronArts
+	searchNameToIdIndex, searchTypesToLocaleIndex, searchTypesArray, searchPropertyToLocaleIndex, getAllNeuronArts
 }

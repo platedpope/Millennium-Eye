@@ -123,57 +123,71 @@ class Card {
 		const colorIcon = this.getEmbedColorAndIcon()
 		const titleUrl = this.getEmbedTitleLink(locale, official)
 
-		finalEmbed.setAuthor({ name: cardName, iconURL: colorIcon[1], url: titleUrl })
+		finalEmbed.setAuthor({ name: cardName, url: titleUrl })
 		finalEmbed.setColor(colorIcon[0])
 		const censorArt = locale !== 'ja' && locale !== 'ko'
 		const imageAttach = this.setEmbedImage(finalEmbed, censorArt ? 'md' : 'ocg', 1)
 
 		// In here to avoid a circular dependency. Not pretty, but oh well.
-		const { searchPropertyToLocaleIndex } = require('handlers/YGOResourcesHandler')
+		const { searchPropertyToLocaleIndex, searchTypesToLocaleIndex } = require('handlers/YGOResourcesHandler')
 
 		// Generate stat description.
-		let stats = ''
+		let cardDesc = ''
+		const lowerType = this.cardType.toLowerCase()
+		if (lowerType === 'spell' || lowerType === 'trap') {
+			// If this has no property then it's a "Normal" Spell/Trap. The localizations for "Normal" are stored in the type index for monsters, so our lookup needs to change accordingly.
+			if (this.property !== null) {
+				cardDesc = `${EmbedIcons[this.property]} ${EmbedIcons[lowerType]} ${searchPropertyToLocaleIndex([this.property, lowerType], locale).join(' ')}`
+			}
+			else {
+				cardDesc = `${EmbedIcons[lowerType]} ${searchTypesToLocaleIndex('Normal', locale)} ${searchPropertyToLocaleIndex(lowerType, locale)}`
+			}
+		}
+		// Attribute
+		if (this.attribute !== null) {
+			cardDesc = `${EmbedIcons[this.attribute]} ${searchPropertyToLocaleIndex(this.attribute, locale)} • `
+		}
 		// Level/Rank
 		if (this.levelRank !== null) {
 			const lrString = (this.levelRank >= 1) ? `${this.levelRank}` : '?'
 			if (this.types.includes('Xyz'))
-				stats = `${EmbedIcons['Rank']} **${searchPropertyToLocaleIndex('Rank', locale)}**: ${lrString}`
+				cardDesc += `${EmbedIcons['Rank']} ${searchPropertyToLocaleIndex('Rank', locale)}: ${lrString}`
 			else
-				stats = `${EmbedIcons['Level']} **${searchPropertyToLocaleIndex('Level', locale)}**: ${lrString}`
+				cardDesc += `${EmbedIcons['Level']} ${searchPropertyToLocaleIndex('Level', locale)}: ${lrString}`
 		}
 		// Link Markers
 		else if (this.linkMarkers.length) {
-			stats = `**Rating**: Link-${this.linkMarkers.length}\t**(**`
+			cardDesc = `**Rating**: Link-${this.linkMarkers.length}\t**(**`
 			for (const m of this.linkMarkers)
-				stats += `${EmbedIcons[m]}`
-			stats += '**)**'
+				cardDesc += `${EmbedIcons[m]}`
+			cardDesc += '**)**'
 		}
 		// Pendulum Scale
 		if (this.pendScale !== null)
-			stats += ` | ${EmbedIcons['Pendulum Scales']} **${searchPropertyToLocaleIndex('Pendulum Scale', locale)}**: ${this.pendScale}`
+			cardDesc += ` | ${EmbedIcons['Pendulum Scales']} **${searchTypesToLocaleIndex('Pendulum Scale', locale)}**: ${this.pendScale}`
 		// Monster Types
 		if (this.types.length) {
 			if (locale !== 'en')
-				var newLocaleTypes = searchPropertyToLocaleIndex(this.types, locale)
+				var newLocaleTypes = searchTypesToLocaleIndex(this.types, locale)
 			
 			if (locale === 'en' || !newLocaleTypes)
-				stats += `\n**[** ${this.types.join(' **/** ')} **]**`
+				cardDesc += `\n**[** ${this.types.join(' **/** ')} **]**`
 			else
-				stats += `\n**[** ${newLocaleTypes.join(' **/** ')} **]**`
+				cardDesc += `\n**[** ${newLocaleTypes.join(' **/** ')} **]**`
 		}
 		// ATK/DEF (value of -1 means ?)
 		if (this.attack !== null) {
-			stats += '\n\n'
+			cardDesc += '\n\n'
 			const atkStr = this.attack >= 0 ? `${this.attack}` : '?'
-			stats += `**ATK** ${atkStr}`
+			cardDesc += `**ATK** ${atkStr}`
 		}
 		if (this.defense !== null) {
 			const defStr = this.defense >= 0 ? `${this.defense}` : '?'
-			stats += ` / **DEF** ${defStr}`
+			cardDesc += ` / **DEF** ${defStr}`
 		}
 
-		if (stats)
-			finalEmbed.setDescription(stats)
+		if (cardDesc)
+			finalEmbed.setDescription(cardDesc)
 
 		// Pendulum Effect
 		const pendEffect = this.pendEffect.get(locale)
@@ -184,7 +198,7 @@ class Card {
 		if (effect) {
 			if (this.types.includes('Normal'))
 				effect = `*${effect}*`
-			finalEmbed.addFields({ name: searchPropertyToLocaleIndex('Effect', locale), value: effect, inline: false })
+			finalEmbed.addFields({ name: searchTypesToLocaleIndex('Effect', locale), value: effect, inline: false })
 		}
 
 		// Display ruling data if necessary. Only do this for cards that are on the database.
@@ -246,7 +260,7 @@ class Card {
 		const colorIcon = this.getEmbedColorAndIcon()
 		const titleUrl = this.getEmbedTitleLink(locale, official)
 
-		finalEmbed.setAuthor({ name: cardName, iconURL: colorIcon[1], url: titleUrl })
+		finalEmbed.setAuthor({ name: cardName, url: titleUrl })
 		finalEmbed.setColor(colorIcon[0])
 		// Set the image.
 		if (!source && !artId) {
@@ -286,7 +300,7 @@ class Card {
 		const cardName = this.name.get(locale)
 		const colorIcon = this.getEmbedColorAndIcon()
 		const titleUrl = this.getEmbedTitleLink(locale, official)
-		finalEmbed.setAuthor({ name: cardName, iconURL: colorIcon[1], url: titleUrl })
+		finalEmbed.setAuthor({ name: cardName, url: titleUrl })
 		finalEmbed.setColor(colorIcon[0])
 
 		// Set the description field to be the first and last print dates in this locale.
@@ -453,7 +467,7 @@ class Card {
 		const cardName = this.name.get(locale)
 		const colorIcon = this.getEmbedColorAndIcon()
 		const titleUrl = this.getEmbedTitleLink(locale, official)
-		finalEmbed.setAuthor({ name: cardName, iconURL: colorIcon[1], url: titleUrl })
+		finalEmbed.setAuthor({ name: cardName, url: titleUrl })
 		finalEmbed.setColor(colorIcon[0])
 		finalEmbed.setFooter({ text: 'This bot uses TCGPlayer price data, but is not endorsed or certified by TCGPlayer.', iconURL: TCGPLAYER_LOGO })
 		finalEmbed.setTitle('View on TCGPlayer')
@@ -490,7 +504,7 @@ class Card {
 		const cardName = this.name.get(locale)
 		const colorIcon = this.getEmbedColorAndIcon()
 
-		finalEmbed.setAuthor({ name: cardName, iconURL: colorIcon[1] })
+		finalEmbed.setAuthor({ name: cardName })
 		finalEmbed.setColor(colorIcon[0])
 
 		const faqBlocks = this.faqData.get(locale)
@@ -546,14 +560,10 @@ class Card {
 			// Ignore case just for good measure.
 			const lowerType = this.cardType.toLowerCase()
 			
-			// Spells and Traps only have one color each, and icons are either based on their property
-			// or, if they have no special property (e.g., Normal Spell), just their card type.
+			// Spells and Traps only have one color or icon each.
 			if (lowerType === 'spell' || lowerType === 'trap') {
 				color = EmbedColors[lowerType]
-				if (this.property in EmbedIcons)
-					icon = EmbedIcons[this.property]
-				else
-					icon = EmbedIcons[lowerType]
+				icon = EmbedIcons[lowerType]
 			}
 			// Monster colors are based on their type, and icons are their Attribute.
 			else {
@@ -881,7 +891,6 @@ class Card {
 	getNameYugipediaUrl(locale = 'en') {
 		// Trim illegal characters from the name.
 		let trimmedName = this.name.get(locale).replace(/[\<\>]/g, '')
-		console.log(trimmedName)
 
 		return encodeURI(trimmedName)
 	}
