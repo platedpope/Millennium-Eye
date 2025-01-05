@@ -133,14 +133,16 @@ class Card {
 
 		// Generate stat description.
 		let cardDesc = ''
-		const lowerType = this.cardType.toLowerCase()
-		if (lowerType === 'spell' || lowerType === 'trap') {
-			// If this has no property then it's a "Normal" Spell/Trap. The localizations for "Normal" are stored in the type index for monsters, so our lookup needs to change accordingly.
-			if (this.property !== null) {
-				cardDesc = `${EmbedIcons[this.property]} ${EmbedIcons[lowerType]} ${searchPropertyToLocaleIndex([this.property, lowerType], locale).join(' ')}`
-			}
-			else {
-				cardDesc = `${EmbedIcons[lowerType]} ${searchTypesToLocaleIndex('Normal', locale)} ${searchPropertyToLocaleIndex(lowerType, locale)}`
+		if (this.cardType !== null) {
+			const lowerType = this.cardType.toLowerCase()
+			if (lowerType === 'spell' || lowerType === 'trap') {
+				// If this has no property then it's a "Normal" Spell/Trap. The localizations for "Normal" are stored in the type index for monsters, so our lookup needs to change accordingly.
+				if (this.property !== null) {
+					cardDesc = `${EmbedIcons[this.property]} ${EmbedIcons[lowerType]} ${searchPropertyToLocaleIndex([this.property, lowerType], locale).join(' ')}`
+				}
+				else {
+					cardDesc = `${EmbedIcons[lowerType]} ${searchTypesToLocaleIndex('Normal', locale)} ${searchPropertyToLocaleIndex(lowerType, locale)}`
+				}
 			}
 		}
 		// Attribute
