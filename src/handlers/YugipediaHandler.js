@@ -104,6 +104,7 @@ async function searchYugipedia(searches, qry, dataHandlerCallback) {
 			.replace(/{{PAGENAME}}/gs, apiData.title)
 			.replace(/<.*?>/gs, '')
 
+		console.log(revData)
 		// Name(s)
 		// EN name is always the title of the page.
 		if (!card.name.get('en'))
@@ -147,6 +148,12 @@ async function searchYugipedia(searches, qry, dataHandlerCallback) {
 			let enEffect = findYugipediaProperty('text', revData)
 			if (enEffect)
 				card.effect.set('en', enEffect)
+			else {
+				// Some older entries on Yugipedia store effect text in "lore" rather than "text".
+				enEffect = findYugipediaProperty('lore', revData)
+				if (enEffect)
+					card.effect.set('en', enEffect)
+			}
 		}
 		// Go through the other locales.
 		for (const loc in Locales) {
@@ -156,6 +163,12 @@ async function searchYugipedia(searches, qry, dataHandlerCallback) {
 			let locEffect = findYugipediaProperty(`${loc}_text`, revData)
 			if (locEffect)
 				card.effect.set(loc, locEffect)
+			else {
+				// Some older entries on Yugipedia store effect text in "<locale>_lore" rather than "<locale>_text".
+				locEffect = findYugipediaProperty(`${loc}_lore`, revData)
+				if (locEffect)
+					card.effect.set(loc, locEffect)
+			}
 		}
 		// Card Type (only appears for Spells/Traps)
 		if (!card.cardType) {
@@ -184,6 +197,12 @@ async function searchYugipedia(searches, qry, dataHandlerCallback) {
 				if (types)
 					// Yugipedia formats Monster Types as a single line, separated with slashes, but the bot uses an array.
 					card.types = types.split(' / ')
+				else {
+					// Some weird cards use "type" instead of "types".
+					types = findYugipediaProperty('type', revData)
+					if (types)
+						card.types = types.split(' / ')
+				}
 			}
 			// Attribute
 			if (!card.attribute) {
