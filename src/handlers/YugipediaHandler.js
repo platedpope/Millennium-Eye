@@ -68,7 +68,7 @@ async function searchYugipedia(searches, qry, dataHandlerCallback) {
 		for (const c of categories) {
 			if (c.title === 'Category:Anime cards' ||
 				c.title === 'Category:Manga cards' ||
-				c.title === 'Category.Video game cards with no OCG/TCG counterpart')
+				c.title === 'Category:Video game cards with no OCG/TCG counterpart')
 			{
 				// Any of these categories automatically mean a card isn't in any CG.
 				card.notInCg = true
@@ -104,7 +104,6 @@ async function searchYugipedia(searches, qry, dataHandlerCallback) {
 			.replace(/{{PAGENAME}}/gs, apiData.title)
 			.replace(/<.*?>/gs, '')
 
-		console.log(revData)
 		// Name(s)
 		// EN name is always the title of the page.
 		if (!card.name.get('en'))
