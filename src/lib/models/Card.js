@@ -166,7 +166,7 @@ class Card {
 		}
 		// Pendulum Scale
 		if (this.pendScale !== null)
-			cardDesc += ` | ${EmbedIcons['Pendulum Scales']} **${searchTypesToLocaleIndex('Pendulum Scale', locale)}**: ${this.pendScale}`
+			cardDesc += ` • ${EmbedIcons['Pendulum Scales']} ${searchPropertyToLocaleIndex('Pendulum Scale', locale)}: ${this.pendScale}`
 		// Monster Types
 		if (this.types.length) {
 			if (locale !== 'en')
