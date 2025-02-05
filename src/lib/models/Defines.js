@@ -39,6 +39,7 @@ module.exports = {
 	KONAMI_REQUEST_LOCALE: `&request_locale=`,
 	KONAMI_CARD_LINK: `https://www.db.yugioh-card.com/yugiohdb/card_search.action?ope=2&cid=`,
 	KONAMI_QA_LINK: `https://www.db.yugioh-card.com/yugiohdb/faq_search.action?ope=5&fid=`,
+	KONAMI_DB_LOGO: 'https://cdn.discordapp.com/attachments/1016081806635827362/1336526536529936424/konami-db-edit15-bg.png?ex=67a420d5&is=67a2cf55&hm=4bed4d18a62d52a4572476038e7419ec56ff5fb0898a49758310ccbaf8d4b4c5&',
 	YGORESOURCES_MANIFEST: `https://db.ygoresources.com/manifest`,
 	YGORESOURCES_CARD_LINK: `https://db.ygoresources.com/card#`,
 	YGORESOURCES_QA_LINK: `https://db.ygoresources.com/qa#`,
@@ -115,7 +116,6 @@ module.exports = {
 		'6': '➡',
 		'Yugipedia Logo': 'https://cdn.discordapp.com/attachments/558000214087172101/558021639607156746/Wiki_2x.png',
 		'Skill': 'https://cdn.discordapp.com/attachments/558000214087172101/558117295252176916/nKigv6X.png',
-		'Konami DB Logo': 'https://cdn.discordapp.com/attachments/549781799484522518/627857980389589002/yugioh.png',
 	},
 	EmbedColors: {
 		'Effect': 0xFF8B53,

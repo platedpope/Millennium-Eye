@@ -1,6 +1,6 @@
 const { EmbedBuilder } = require('discord.js')
 
-const { LocaleEmojis, KONAMI_QA_LINK, KONAMI_REQUEST_LOCALE, YGORESOURCES_QA_LINK  } = require('./Defines')
+const { LocaleEmojis, KONAMI_QA_LINK, KONAMI_REQUEST_LOCALE, YGORESOURCES_QA_LINK, KONAMI_DB_LOGO  } = require('./Defines')
 const { breakUpDiscordMessage } = require('lib/utils/logging')
 const { replaceIdsWithNames } = require('lib/utils/regex')
 
@@ -99,7 +99,7 @@ class Ruling {
 
 		const finalEmbed = new EmbedBuilder()
 
-		finalEmbed.setAuthor({ name: replacedTitle, url: konamiDbLink })
+		finalEmbed.setAuthor({ name: replacedTitle, url: konamiDbLink, iconURL: KONAMI_DB_LOGO,  })
 		for (let i = 0; i < replacedQuestion.length; i++) {
 			finalEmbed.addFields({
 				name: i === 0 ? '__Question__' : '__Question (cont.)__',
