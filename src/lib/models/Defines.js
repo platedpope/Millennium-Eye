@@ -20,6 +20,7 @@ module.exports = {
 	KONAMI_DB_PATH: `${process.cwd()}/data/carddata.db`,
 	NEURON_DB_PATH: `${process.cwd()}/data/neuron_name_rainbow`,
 	YGORESOURCES_DB_PATH: `${process.cwd()}/data/ygoresources.db`,
+	MASTER_DUEL_API_RESPONSE_PATH: `${process.cwd()}/data/mdm.json`,
 	YUGIPEDIA_API_PARAMS: {
 		action: 'query',
 		format: 'json',
