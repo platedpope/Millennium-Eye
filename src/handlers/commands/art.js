@@ -68,6 +68,24 @@ function generateArtSelect(selectedSource, selectedId, cardImageData, disable = 
 	return messageRows
 }
 
+async function bootstrapQuery(contents, locale, official) {
+	// Check for whether this is a database ID, in which case it should be made into an integer.
+	// Unless the card search is "7", which is also a card name. God dammit.
+	const cid = parseInt(contents, 10)
+	if (!isNaN(cid) && contents !== '7')
+		contents = cid
+	// Bootstrap a query from this information.
+	const qry = new Query([new Search(contents, 'a', locale)])
+	qry.locale = locale
+	qry.official = official
+
+	// Defer reply in case this query takes a bit.
+	// await interaction.deferReply()
+	await processQuery(qry)
+
+	return qry
+}
+
 module.exports = new Command({
 	name: 'art',
 	description: 'Queries all art available for the given card.',
@@ -77,28 +95,33 @@ module.exports = new Command({
 		options: [
 			{
 				name: 'card',
-				description: 'The card to search for (name or database ID).',
+				description: 'The card to search for, given by name or database ID.',
 				type: CommandTypes.STRING,
 				autocomplete: true,
 				required: true
+			},
+			{
+				name: 'source',
+				description: 'Card art source. Defaults based on availability following Master Duel > TCG > OCG priority.',
+				type: CommandTypes.STRING,
+				autocomplete: true
+			},
+			{
+				name: 'art',
+				description: 'Art number. 1 is primary and 2+ are alternate arts in any order.',
+				type: CommandTypes.STRING,
+				autocomplete: true
 			}
 		]
 	},
 	execute: async (interaction, bot) => {
-		let card = interaction.options.getString('card', true)
-		// Check for whether this is a database ID, in which case it should be made into an integer.
-		const cid = parseInt(card, 10)
-		if (!isNaN(cid))
-			card = cid
+		const card = interaction.options.getString('card')
+		let givenSource = interaction.options.getString('source')
+		let givenArt = interaction.options.getString('art')
 		const locale = bot.getCurrentChannelSetting(interaction.channel, 'locale')
-		// Bootstrap a query from this information.
-		const qry = new Query([new Search(card, 'a', locale)])
-		qry.official = bot.getCurrentChannelSetting(interaction.channel, 'official')
-		qry.locale = locale
+		const official = bot.getCurrentChannelSetting(interaction.channel, 'official')
 
-		// Defer reply in case this query takes a bit.
-		// await interaction.deferReply()
-		await processQuery(qry)
+		const qry = await bootstrapQuery(card, locale, official)
 		
 		const artSearch = qry.searches[0]
 		if (!artSearch || !artSearch.data) {
@@ -108,27 +131,58 @@ module.exports = new Command({
 
 		/** @type {Card} */
 		const cardData = artSearch.data
+		const msgOptions = {}
+		let embedData = {}
 
-		// Set up all the information beforehand.
-		let viewedArt = 1
-		// Pick a default source in order of priority: md -> tcg -> ocg
-		let srcIdx = 0
-		const testSources = ['md', 'tcg', 'ocg']
-		do {
-			var viewedSource = testSources[srcIdx]
-			srcArts = cardData.imageData.get(viewedSource)
-			srcIdx++
-		} while (!srcArts && srcIdx < testSources.length)
-		
-		
-		// If we got here and still don't have any source arts, then we've got nothing.
+		let viewedSource = givenSource
+		let viewedArt = givenArt
+		// Art can come in as (e.g.) "md|2", which can be split into both a source and art ID.
+		if (viewedArt && viewedArt.includes('|')) {
+			[viewedSource, viewedArt] = viewedArt.split('|')
+		}
+		let srcArts = new Map()
+
+		// Sanity check that if we were given both a source and art ID, they're not nonsense. Return an error if they are.
+		if (viewedSource && viewedArt) {
+			if (!(cardData.imageData.get(viewedSource)) ||
+					!(cardData.imageData.get(viewedSource).get(viewedArt))) 
+			{
+				await queryRespond(bot, interaction, 'Could not find any art data with the given search.', qry, { ephemeral: true })
+				return
+			}
+
+			// If we got here, then the given source and art ID are good, and we can just generate an embed and send it.
+			embedData = cardData.generateArtEmbed(locale, official, viewedSource, viewedArt)
+			if ('embed' in embedData)
+				msgOptions.embeds = [embedData.embed]
+			if ('attachment' in embedData)
+				msgOptions.files = [embedData.attachment]
+
+			await queryRespond(bot, interaction, '', qry, msgOptions)
+			return
+		}
+
+		// Set sensible defaults to start with if we weren't given the full picture.
+		if (!(cardData.imageData.get(viewedSource))) {
+			let srcIdx = 0
+			const testSources = ['md', 'tcg', 'ocg']
+			do {
+				viewedSource = testSources[srcIdx]
+				srcArts = cardData.imageData.get(viewedSource)
+				srcIdx++
+			} while (!srcArts && srcIdx < testSources.length)
+		}
+		// If we didn't find a single good source here, then we've got nothing.
 		if (!srcArts) {
 			await queryRespond(bot, interaction, 'Could not find any art data with the given search.', qry, { ephemeral: true })
 			return
 		}
+		// Sensible default art is just ID 1, which should always exist.
+		if (!(cardData.imageData.get(viewedSource).get(viewedArt))) {
+			viewedArt = 1
+		}
 		
-		const msgOptions = {}
-		const embedData = cardData.generateArtEmbed(locale, qry.official, viewedSource, viewedArt)
+		embedData = cardData.generateArtEmbed(locale, qry.official, viewedSource, viewedArt)
 		if ('embed' in embedData)
 			msgOptions.embeds = [embedData.embed]
 		if ('attachment' in embedData)
@@ -202,21 +256,103 @@ module.exports = new Command({
 	},
 	autocomplete: async (interaction, bot) => {
 		const focus = interaction.options.getFocused(true)
-		const search = focus.value.toLowerCase()
-		const locale = bot.getCurrentChannelSetting(interaction.channel, 'locale')
 
-		const matches = await searchNameToIdIndex(search, [locale], 25, true)
+		if (focus.name === 'card') {
+			const search = focus.value.toLowerCase()
+			const locale = bot.getCurrentChannelSetting(interaction.channel, 'locale')
 
-		const options = []
-		matches.forEach((score, m) => {
-			// Matches return in the form "Name|ID". We need both, name is what we display while ID is what the choice maps to.
-			const parseMatch = m.split('|')
-			const name = parseMatch[0]
-			const id = parseMatch[1]
+			const matches = await searchNameToIdIndex(search, [locale], 25, true)
 
-			options.push({ name: name, value: id })
-		})
+			const options = []
+			matches.forEach((score, m) => {
+				// Matches return in the form "Name|ID". We need both, name is what we display while ID is what the choice maps to.
+				const parseMatch = m.split('|')
+				const name = parseMatch[0]
+				const id = parseMatch[1]
 
-		await interaction.respond(options)
+				options.push({ name: name, value: id })
+			})
+
+			await interaction.respond(options)
+		}
+		else if (focus.name === 'source') {
+			// If a card has been given in the card search field, then resolve it to data and present the options available for art source.
+			const card = interaction.options.getString('card')
+			if (!card) return 
+			
+			const locale = bot.getCurrentChannelSetting(interaction.channel, 'locale')
+			const official = bot.getCurrentChannelSetting(interaction.channel, 'official')
+			const qry = await bootstrapQuery(card, locale, official)
+			const artSearch = qry.searches[0]
+			if (!artSearch || !artSearch.data) return
+
+			/** @type {Card} */
+			const cardData = artSearch.data
+
+
+			const totalSources = [
+				{ name: 'TCG', value: 'tcg' },
+				{ name: 'OCG', value: 'ocg' },
+				{ name: 'Master Duel (High Res)', value: 'md' }
+			]
+			const availSources = []
+
+			for (const s of totalSources) {
+				if (cardData.imageData.get(s['value'])) {
+					availSources.push(s)
+				}
+			}
+
+			await interaction.respond(availSources)
+		}
+		else if (focus.name === 'art') {
+			// If a card has been given in the card search field, then resolve it to data and present the options available for art source.
+			const card = interaction.options.getString('card')
+			let source = interaction.options.getString('source')
+			if (!card) return
+
+			const locale = bot.getCurrentChannelSetting(interaction.channel, 'locale')
+			const official = bot.getCurrentChannelSetting(interaction.channel, 'official')
+			const qry = await bootstrapQuery(card, locale, official)
+			const artSearch = qry.searches[0]
+			if (!artSearch || !artSearch.data) return
+
+			/** @type {Card} */
+			const cardData = artSearch.data
+
+			const artOptions = []
+			if (source && cardData.imageData.get(source)) {
+				cardData.imageData.get(source).forEach((path, aid) => {
+					artOptions.push({ name: `Art ${aid}`, value: aid })
+				})
+			}
+			// If no (good) source is given, combine all the ones we can find!
+			else {
+				const possibleSources = ['md', 'tcg', 'ocg']
+				for (const s of possibleSources) {
+					const availArts = cardData.imageData.get(s)
+					if (availArts) {
+						availArts.forEach((path, aid) => {
+							if (s === 'md') {
+								artOptions.push({ name: `Master Duel Art ${aid}`, value: `md|${aid}` })
+							}
+							else if (s === 'tcg') {
+								artOptions.push({ name: `TCG Art ${aid}`, value: `tcg|${aid}`})
+							}
+							else if (s === 'ocg') {
+								artOptions.push({ name: `OCG Art ${aid}`, value: `ocg|${aid}` })
+							}
+						})
+					}
+				}
+			}
+
+			// Make sure this doesn't go over 25, which is the max number of options supported by Discord autocomplete.
+			if (artOptions.length > 25) {
+				artOptions.length = 25
+			}
+
+			await interaction.respond(artOptions)
+		}
 	}
 })
