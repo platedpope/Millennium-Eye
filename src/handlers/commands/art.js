@@ -120,6 +120,7 @@ module.exports = new Command({
 			srcIdx++
 		} while (!srcArts && srcIdx < testSources.length)
 		
+		
 		// If we got here and still don't have any source arts, then we've got nothing.
 		if (!srcArts) {
 			await queryRespond(bot, interaction, 'Could not find any art data with the given search.', qry, { ephemeral: true })
@@ -189,8 +190,8 @@ module.exports = new Command({
 				delete msgOptions.components
 				delete msgOptions.ephemeral
 				// The followUp responds to the ephemeral message, making the initial command invocation is "invisible".
-				// Add a footer identifying who invoked the command to prevent abuse.
-				msgOptions.embeds[0].setFooter({ text: `Requested by: ${interaction.user.username}`})
+				// Add a line indicating who requested the embed to prevent abuse.
+				msgOptions.embeds[0].setDescription(`Requested by: <@${interaction.user.id}>`)
 				interaction.followUp(msgOptions)
 			}
 			else {
