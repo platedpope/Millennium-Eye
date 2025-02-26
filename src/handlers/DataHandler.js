@@ -47,6 +47,13 @@ async function convertYgoresourcesDataToSearchData(qry, qaSearches, cardSearches
 			else if (fs.existsSync(tcgArtPath)) {
 				s.data.addImageData('md', '1', tcgArtPath)
 			}
+			// Check for alt arts.
+			const altArtPath = baseArtPath + `/known_md_alts/`
+			const altFiles = fs.readdirSync(altArtPath).filter(f => f.includes(`${s.data.dbId}`))
+			for (f of altFiles) {
+				numMdArts = s.data.imageData.has('md') ? s.data.imageData.get('md').size : 0 
+				s.data.addImageData('md', `${numMdArts + 1}`, altArtPath + f)
+			}
 		}
 	}
 	// Resolve any that still don't have art.

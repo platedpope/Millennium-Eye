@@ -111,7 +111,7 @@ module.exports = new Command({
 
 		// Set up all the information beforehand.
 		let viewedArt = 1
-		// Pick a default source in rder of priority: md -> tcg -> ocg
+		// Pick a default source in order of priority: md -> tcg -> ocg
 		let srcIdx = 0
 		const testSources = ['md', 'tcg', 'ocg']
 		do {
