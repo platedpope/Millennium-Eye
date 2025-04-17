@@ -307,7 +307,7 @@ async function searchYugipedia(searches, qry, dataHandlerCallback) {
 	if ('original' in apiData) {
 		const imageData = apiData.original
 		// Use a placeholder art ID (100) for Yugipedia images.
-		card.addImageData('url', '1', imageData.source)
+		card.addImageData('url', 'Yugipedia Art 1', imageData.source)
 	}
 }
 

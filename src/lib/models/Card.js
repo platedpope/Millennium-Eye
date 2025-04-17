@@ -125,8 +125,7 @@ class Card {
 
 		finalEmbed.setAuthor({ name: cardName, url: titleUrl })
 		finalEmbed.setColor(colorIcon[0])
-		const censorArt = locale !== 'ja' && locale !== 'ko'
-		const imageAttach = this.setEmbedImage(finalEmbed, censorArt ? 'md' : 'ocg', 1)
+		const imageAttach = this.setEmbedImage(finalEmbed, locale)
 
 		// In here to avoid a circular dependency. Not pretty, but oh well.
 		const { searchPropertyToLocaleIndex, searchTypesToLocaleIndex } = require('handlers/YGOResourcesHandler')
@@ -159,7 +158,7 @@ class Card {
 		}
 		// Link Markers
 		else if (this.linkMarkers.length) {
-			cardDesc = `**Rating**: Link-${this.linkMarkers.length}\t**(**`
+			cardDesc += `**Rating**: Link-${this.linkMarkers.length}\t**(**`
 			for (const m of this.linkMarkers)
 				cardDesc += `${EmbedIcons[m]}`
 			cardDesc += '**)**'
@@ -264,13 +263,7 @@ class Card {
 
 		finalEmbed.setAuthor({ name: cardName, url: titleUrl })
 		finalEmbed.setColor(colorIcon[0])
-		// Set the image.
-		if (!source && !artId) {
-			const censorArt = locale !== 'ja' && locale !== 'ko'
-			source = censorArt ? 'md' : 'ocg'
-			artId = 1
-		}
-		const imageAttach = this.setEmbedImage(finalEmbed, source, artId, false)
+		const imageAttach = this.setEmbedImage(finalEmbed, locale, source, artId, false)
 
 		embedData.embed = finalEmbed
 		if (imageAttach) {
@@ -627,26 +620,14 @@ class Card {
 	 * @param {Boolean} thumbnail Whether to set the thumbnail rather than the actual image. Defaults to true.
 	 * @returns The URL for the attachment, if any (null if no attachment).
 	 */
-	setEmbedImage(embed, source, id, thumbnail = true) {
-		let srcArts = this.imageData.get(source)
-		if (!srcArts) {
-			// If we don't have this default, then go through our potential sources until we find one that works.
-			// Order of priority: md -> tcg -> ocg -> url
-			let srcIdx = 0
-			const testSources = ['md', 'tcg', 'ocg', 'url']
-			do {
-				source = testSources[srcIdx]
-				srcArts = this.imageData.get(source)
-				srcIdx++
-			} while (!srcArts && srcIdx < testSources.length)
-			
-			// If we got here and still don't have any source arts, then we've got nothing.
-			if (!srcArts) return
-		}
-
-		let artPath = srcArts.get(`${id}`)
-		// Nothing to do if this ID doesn't map to anything.
-		if (!artPath) return
+	setEmbedImage(embed, locale, source = undefined, id = undefined, thumbnail = true) {
+		let selectedArt = this.getFirstValidArt(locale, source, id)
+		// Nothing to do if there's no valid art.
+		if (!selectedArt) return
+		
+		source = selectedArt[0]
+		id = selectedArt[1]
+		const artPath = this.imageData.get(source).get(id)
 
 		const saveImageData = (data, path) => {
 			let artCropDims = { 'top': 69, 'left': 32, 'width': 193, 'height': 191 }
@@ -930,6 +911,50 @@ class Card {
 		}
 
 		return fullyResolved
+	}
+
+	/**
+	 * Helper function to find valid artworks
+	 * @param {String} locale The locale to search.
+	 * @param {String} source A given source to search for a valid art before any others.
+	 * @param {String} artId A specific art ID to search for before any others.
+	 * @returns {Array<string> | undefined} A tuple with 2 members: (source, art ID), or undefined if no valid art is found.
+	 */
+	getFirstValidArt(locale, source = undefined, artId = undefined) {
+		const censorArt = locale !== 'ja' && locale !== 'ko'
+		let selectedSource = source ?? '' 
+		let srcArts = []
+		
+		const searchSources = [ 'md', censorArt ? 'tcg' : 'ocg', 'url' ]
+		let srcIdx = 0
+		do {
+			if (selectedSource !== '') {
+				srcArts = [...this.imageData.get(selectedSource).keys()]
+				break
+			}
+			else {
+				selectedSource = searchSources[srcIdx]
+				srcArts = [...this.imageData.get(selectedSource).keys()]
+				srcIdx++
+			}
+		} while (!srcArts && srcIdx < searchSources.length)
+
+		// If we got here without a valid source or were given an art ID that doesn't exist, then no art to find.
+		if (!srcArts) {
+			return
+		}
+		
+		let selectedArt = artId
+		if (selectedArt && !srcArts.includes(selectedArt)) {
+			return
+		}
+		
+		if (!selectedArt) {
+			selectedArt = srcArts[0]
+		}
+
+		// Just return the first available art.
+		return [selectedSource, selectedArt]
 	}
 
 	/**

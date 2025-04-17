@@ -30,29 +30,45 @@ async function convertYgoresourcesDataToSearchData(qry, qaSearches, cardSearches
 		populateCardFromYgoresourcesApi(s.rawData, s.data)
 
 		// Update banlist status, which isn't provided by YGOResources DB.
-		getBanlistStatus(s.data)		
+		getBanlistStatus(s.data)
 
+		// If there's a DB ID, then we should have Neuron or Master Duel art to find.
 		if (s.data.dbId) {
-			// Find all the art data, both from Neuron and Master Duel.
 			// Neuron art first, which includes all alternate artworks.
 			await getAllNeuronArts(s.data)
 
 			// Now Master Duel high-res artwork if possible.
-			// Master Duel has "common" and "tcg" art, where "tcg" is art that's censored in the TCG.
+			// Master Duel organizes its artwork into different CG paths:
+			// - common: arts that are the same in both TCG and OCG
+			// - tcg: TCG-specific artworks (usually censored)
+			// - ocg: OCG-specific artworks (usually uncensored)
 			const commonArtPath = baseArtPath + `/common/${s.data.dbId}.png`
 			const tcgArtPath = baseArtPath + `/tcg/${s.data.dbId}.png`
+			const ocgArtPath = baseArtPath + `/ocg/${s.data.dbId}.png`
 			if (fs.existsSync(commonArtPath)) {
-				s.data.addImageData('md', '1', commonArtPath)
+				s.data.addImageData('md', 'MD Base Art', commonArtPath)
 			}
-			else if (fs.existsSync(tcgArtPath)) {
-				s.data.addImageData('md', '1', tcgArtPath)
+			if (fs.existsSync(tcgArtPath)) {
+				s.data.addImageData('md', 'MD Base Art (TCG)', tcgArtPath)
+			}
+			if (fs.existsSync(ocgArtPath)) {
+				s.data.addImageData('md', 'MD Base Art (OCG)', ocgArtPath)
 			}
 			// Check for alt arts.
 			const altArtPath = baseArtPath + `/known_md_alts/`
 			const altFiles = fs.readdirSync(altArtPath).filter(f => f.includes(`${s.data.dbId}`))
-			for (f of altFiles) {
-				numMdArts = s.data.imageData.has('md') ? s.data.imageData.get('md').size : 0 
-				s.data.addImageData('md', `${numMdArts + 1}`, altArtPath + f)
+			for (const f of altFiles) {
+				// Find the next available art ID.
+				let artNum = 1
+				const cg_specific = f.match(/tcg|ocg/)
+				const cg_specific_string = cg_specific ? ` (${cg_specific[0].toUpperCase()})` : ''
+				let artId = `MD Alt Art ${artNum}${cg_specific_string}`
+				while (s.data.imageData.has(artId)) {
+					artNum++
+					artId = `MD Alt Art ${artNum}${cg_specific_string}`
+				}
+
+				s.data.addImageData('md', artId, altArtPath + f)
 			}
 		}
 	}

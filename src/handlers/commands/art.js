@@ -140,7 +140,6 @@ module.exports = new Command({
 		if (viewedArt && viewedArt.includes('|')) {
 			[viewedSource, viewedArt] = viewedArt.split('|')
 		}
-		let srcArts = new Map()
 
 		// Sanity check that if we were given both a source and art ID, they're not nonsense. Return an error if they are.
 		if (viewedSource && viewedArt) {
@@ -162,24 +161,11 @@ module.exports = new Command({
 			return
 		}
 
-		// Set sensible defaults to start with if we weren't given the full picture.
-		if (!(cardData.imageData.get(viewedSource))) {
-			let srcIdx = 0
-			const testSources = ['md', 'tcg', 'ocg']
-			do {
-				viewedSource = testSources[srcIdx]
-				srcArts = cardData.imageData.get(viewedSource)
-				srcIdx++
-			} while (!srcArts && srcIdx < testSources.length)
-		}
-		// If we didn't find a single good source here, then we've got nothing.
-		if (!srcArts) {
+		// Set sensible defaults to start with if we weren't given any specific values to search for.
+		[viewedSource, viewedArt] = cardData.getFirstValidArt(locale)
+		if (!viewedArt) {
 			await queryRespond(bot, interaction, 'Could not find any art data with the given search.', qry, { ephemeral: true })
 			return
-		}
-		// Sensible default art is just ID 1, which should always exist.
-		if (!(cardData.imageData.get(viewedSource).get(viewedArt))) {
-			viewedArt = 1
 		}
 		
 		embedData = cardData.generateArtEmbed(locale, qry.official, viewedSource, viewedArt)
@@ -334,7 +320,7 @@ module.exports = new Command({
 					if (availArts) {
 						availArts.forEach((path, aid) => {
 							if (s === 'md') {
-								artOptions.push({ name: `Master Duel Art ${aid}`, value: `md|${aid}` })
+								artOptions.push({ name: `${aid}`, value: `md|${aid}` })
 							}
 							else if (s === 'tcg') {
 								artOptions.push({ name: `TCG Art ${aid}`, value: `tcg|${aid}`})
