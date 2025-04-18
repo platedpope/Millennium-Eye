@@ -927,17 +927,23 @@ class Card {
 		
 		const searchSources = [ 'md', censorArt ? 'tcg' : 'ocg', 'url' ]
 		let srcIdx = 0
-		do {
-			if (selectedSource !== '') {
-				srcArts = [...this.imageData.get(selectedSource).keys()]
-				break
+
+		if (selectedSource !== '') {	
+			srcArts = this.imageData.get(selectedSource)
+			if (srcArts) {
+				srcArts = [...srcArts.keys()]
 			}
-			else {
+		}
+		else {
+			do {
 				selectedSource = searchSources[srcIdx]
-				srcArts = [...this.imageData.get(selectedSource).keys()]
+				srcArts = this.imageData.get(selectedSource)
+				if (srcArts) {
+					srcArts = [...srcArts.keys()]
+				}
 				srcIdx++
-			}
-		} while (!srcArts && srcIdx < searchSources.length)
+			} while (!srcArts && srcIdx < searchSources.length)
+		}
 
 		// If we got here without a valid source or were given an art ID that doesn't exist, then no art to find.
 		if (!srcArts) {
