@@ -1,25 +1,19 @@
-const Command = require('lib/models/Command')
-const { CommandTypes } = require('lib/models/Defines')
+const { SlashCommandBuilder } = require('discord.js')
+
 const Query = require('lib/models/Query')
 const { processQuery, updateUserTimeout, queryRespond } = require('handlers/QueryHandler')
 const { searchNameToIdIndex } = require('handlers/YGOResourcesHandler')
 
-module.exports = new Command({
-	name: 'query',
-	description: 'Query details of a card or ruling.',
-	options: {
-		name: 'query',
-		description: 'Query details of a card or ruling.',
-		options: [
-			{
-				name: 'content',
-				description: 'The content of the query, same as an ordinary message.',
-				type: CommandTypes.STRING,
-				autocomplete: true,
-				required: true
-			}
-		]
-	},
+module.exports = {
+	data: new SlashCommandBuilder()
+		.setName('query')
+		.setDescription('Query details of a card or ruling.')
+		.addStringOption(op => 
+			op.setName('content')
+				.setDescription('The content of the query, either following the normal syntax or a standalone card name.')
+				.setRequired(true)
+				.setAutocomplete(true)
+		),
 	execute: async (interaction, bot) => {
 		const qry = new Query(interaction, bot)
 
@@ -87,4 +81,4 @@ module.exports = new Command({
 
 		await interaction.respond(options)
 	}
-})
+}

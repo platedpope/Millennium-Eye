@@ -1,8 +1,8 @@
 const heapdump = require('heapdump')
 const { inspect } = require('util')
+const { SlashCommandBuilder } = require('discord.js')
  
 const { logger } = require('lib/utils/logging')
-const { SlashCommandBuilder } = require('discord.js')
 
 module.exports = {
 	data: new SlashCommandBuilder()

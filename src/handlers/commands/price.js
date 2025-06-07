@@ -1,30 +1,24 @@
-const Command = require('lib/models/Command')
-const { CommandTypes } = require('lib/models/Defines')
+const { SlashCommandBuilder } = require('discord.js')
+
 const Query = require('lib/models/Query')
 const Search = require('lib/models/Search')
 const { processQuery, queryRespond } = require('handlers/QueryHandler')
-const { generateError } = require('lib/utils/logging')
 const { searchNameToIdIndex } = require('handlers/YGOResourcesHandler')
 
-module.exports = new Command({
-	name: 'price',
-	description: 'Searches price data for a card or set.',
-	options: {
-		name: 'price',
-		description: 'Searches price data for a card or set.',
-		options: [
-			{
-				name: 'search',
-				description: 'The set or card name to search for.',
-				type: CommandTypes.STRING,
-				autocomplete: true,
-				required: true
-			},
-			{
-				name: 'rarity',
-				description: 'Filter price data to prints of the given rarity.',
-				type: CommandTypes.STRING,
-				choices: [
+module.exports = {
+	data: new SlashCommandBuilder()
+		.setName('price')
+		.setDescription('Searches price data for a card or set.')
+		.addStringOption(op => 
+			op.setName('search')
+				.setDescription('The set or card name to search for.')
+				.setRequired(true)
+				.setAutocomplete(true)
+		)
+		.addStringOption(op =>
+			op.setName('rarity')
+				.setDescription('Filter price data to prints of the given rarity.')
+				.setChoices([
 					// These are unfortunately hardcoded instead of ripped from the TCGPlayer API
 					// since TCGPlayer rarities are a mess and there are a lot I don't want to offer as options.
 					{ name: 'Common', value: 'Common' },
@@ -39,19 +33,16 @@ module.exports = new Command({
 					{ name: 'Prismatic', value: 'Prismatic' },
 					{ name: 'Gold', value: 'Gold' },
 					{ name: 'Collector\'s', value: 'Collector\'s' }
-				]
-			},
-			{
-				name: 'sort',
-				description: 'Change how prices are ordered.',
-				type: CommandTypes.STRING,
-				choices: [
+				])
+		)
+		.addStringOption(op =>
+			op.setName('sort')
+				.setDescription('Change how prices are ordered.')
+				.setChoices([
 					{ name: 'Ascending (least expensive first)', value: 'asc' },
 					{ name: 'Descending (most expensive first)', value: 'desc' }
-				]
-			}
-		]
-	},
+				])
+		),
 	execute: async (interaction, bot) => {
 		let search = interaction.options.getString('search', true)
 		const rarity = interaction.options.getString('rarity', false)
@@ -115,4 +106,4 @@ module.exports = new Command({
 			await interaction.respond(options)
 		}
 	}
-})
+}
