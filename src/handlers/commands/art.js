@@ -1,11 +1,8 @@
-const { ActionRowBuilder, StringSelectMenuBuilder, ButtonBuilder } = require('discord.js')
+const { ActionRowBuilder, StringSelectMenuBuilder, ButtonBuilder, SlashCommandBuilder } = require('discord.js')
 
-const Command = require('lib/models/Command')
-const { CommandTypes } = require('lib/models/Defines')
 const Query = require('lib/models/Query')
 const Search = require('lib/models/Search')
 const { queryRespond, processQuery } = require('handlers/QueryHandler')
-const { generateError } = require('lib/utils/logging')
 const { searchNameToIdIndex } = require('handlers/YGOResourcesHandler')
 const Card = require('lib/models/Card')
 
@@ -86,34 +83,26 @@ async function bootstrapQuery(contents, locale, official) {
 	return qry
 }
 
-module.exports = new Command({
-	name: 'art',
-	description: 'Queries all art available for the given card.',
-	options: {
-		name: 'art',
-		description: 'Queries all art available for the given card.',
-		options: [
-			{
-				name: 'card',
-				description: 'The card to search for, given by name or database ID.',
-				type: CommandTypes.STRING,
-				autocomplete: true,
-				required: true
-			},
-			{
-				name: 'source',
-				description: 'Card art source. Defaults based on availability following Master Duel > TCG > OCG priority.',
-				type: CommandTypes.STRING,
-				autocomplete: true
-			},
-			{
-				name: 'art',
-				description: 'Art number. 1 is primary and 2+ are alternate arts in any order.',
-				type: CommandTypes.STRING,
-				autocomplete: true
-			}
-		]
-	},
+module.exports = {
+	data: new SlashCommandBuilder()
+		.setName('art')
+		.setDescription('Queries all art available for a given card.')
+		.addStringOption(op => 
+			op.setName('card')
+				.setDescription('The card to search for, given by name or database ID.')
+				.setRequired(true)
+				.setAutocomplete(true)
+		)
+		.addStringOption(op => 
+			op.setName('source')
+				.setDescription('Card art source. Defaults based on availability following Master Duel > TCG > OCG priority.')
+				.setAutocomplete(true)
+		)
+		.addStringOption(op => 
+			op.setName('art')
+				.setDescription('Art number, with 1 being the primary and 2+ being alternate arts in any order.')
+				.setAutocomplete(true)
+		),
 	execute: async (interaction, bot) => {
 		const card = interaction.options.getString('card')
 		let givenSource = interaction.options.getString('source')
@@ -341,4 +330,4 @@ module.exports = new Command({
 			await interaction.respond(artOptions)
 		}
 	}
-})
+}

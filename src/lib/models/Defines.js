@@ -149,19 +149,6 @@ module.exports = {
 		'Top-Center': 8,
 		'Top-Right': 9
 	},
-	// Discord API value verification.
-	CommandTypes: {
-		'SUB_COMMAND': 1,
-		'SUB_COMMAND_GROUP': 2,
-		'STRING': 3,
-		'INTEGER': 4,
-		'BOOLEAN': 5,
-		'USER': 6,
-		'CHANNEL': 7,
-		'ROLE': 8,
-		'MENTIONABLE': 9,
-		'NUMBER': 10,
-	},
 	ChannelTypes: {
 		'GUILD_TEXT': 0,
 		'DM': 1,

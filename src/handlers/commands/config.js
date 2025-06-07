@@ -1,9 +1,7 @@
-const { ActionRowBuilder, ButtonBuilder, StringSelectMenuBuilder, CommandInteraction, TextChannel, PermissionFlagsBits, ChannelSelectMenuBuilder, ChannelType } = require('discord.js')
+const { ActionRowBuilder, ButtonBuilder, StringSelectMenuBuilder, CommandInteraction, TextChannel, PermissionFlagsBits, ChannelSelectMenuBuilder, ChannelType, SlashCommandBuilder } = require('discord.js')
 
 const config = require('config')
 const { generateError } = require('lib/utils/logging')
-const Command = require('lib/models/Command')
-const { CommandTypes, Locales, LocaleEmojis } = require('lib/models/Defines')
 
 const localeChoices = []
 // Allow changing the default syntax.
@@ -203,68 +201,49 @@ function generateConfigSelectComponents(selection = undefined) {
 	return messageRows
 }
 
-module.exports = new Command({
-	name: 'config',
-	description: 'Set configuration items to determine how the bot treats a particular server or channel.',
-	options: {
-		name: 'config',
-		description: 'Set configuration items to determine how the bot treats a particular server or channel.',
-		default_member_permissions: PermissionFlagsBits.ManageGuild,
-		options: [
-			{
-				name: 'settings',
-				description: 'Print, toggle, and change server or channel configuration items.',
-				type: CommandTypes.SUB_COMMAND
-			},
-			{
-				name: 'query',
-				description: 'Sets a card query type the bot will respond to in this server.',
-				type: CommandTypes.SUB_COMMAND_GROUP,
-				options: [
-					{
-						name: 'add',
-						description: 'Add new symbols and an associated locale to recognize as a card query.',
-						type: CommandTypes.SUB_COMMAND,
-						options: [
-							{
-								name: 'open',
-								description: 'The symbol(s) indicating the start of a card query, e.g. the \'[\' in \'[card name]\'.',
-								type: CommandTypes.STRING,
-								required: true
-							},
-							{
-								name: 'close',
-								description: 'The symbol(s) indicating the close of a card query, e.g. the \']\' in \'[card name]\'.',
-								type: CommandTypes.STRING,
-								required: true
-							},
-							{
-								name: 'locale',
-								description: 'The locale code indicating which locale card queries using this syntax will be treated as.',
-								type: CommandTypes.STRING,
-								required: true,
-								choices: localeChoices
-							}
-						]
-					},
-					{
-						name: 'remove',
-						description: 'Remove the symbols associated with a given locale.',
-						type: CommandTypes.SUB_COMMAND,
-						options: [
-							{
-								name: 'locale',
-								description: 'The locale associated with the query syntax you want to remove.',
-								type: CommandTypes.STRING,
-								required: true,
-								choices: localeChoices
-							}
-						]
-					}
-				]
-			}
-		]
-	},
+module.exports = {
+	data: new SlashCommandBuilder()
+		.setName('config')
+		.setDescription('Configure the bot\'s default server- or channel-based settings.')
+		.setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild)
+		.addSubcommand(sc => 
+			sc.setName('settings')
+				.setDescription('Print, toggle, and change server or channel configuration items.')
+		)
+		.addSubcommandGroup(sg =>
+			sg.setName('query')
+				.setDescription('Configure query syntax for the bot to respond to.')
+				.addSubcommand(sc =>
+					sc.setName('add')
+						.setDescription('Add new symbols and an associated locale to recognize as a card query.')
+						.addStringOption(op =>
+							op.setName('open')
+								.setDescription('The symbol(s) indicating the start of a card query, e.g., the \'[\' in \'[card name]\'.')
+								.setRequired(true)
+						)
+						.addStringOption(op =>
+							op.setName('close')
+								.setDescription('The symbol(s) indicating the start of a card query, e.g., the \']\' in \'[card name]\'.')
+								.setRequired(true)
+						)
+						.addStringOption(op =>
+							op.setName('locale')
+								.setDescription('Which locale card queries using this syntax will be treated as.')
+								.setRequired(true)
+								.setChoices(localeChoices)
+						)
+				)
+				.addSubcommand(sc =>
+					sc.setName('remove')
+						.setDescription('Remove the query syntax associated with a given locale.')
+						.addStringOption(op =>
+							op.setName('locale')
+								.setDescription('Which locale for which to remove the query syntax.')
+								.setRequired(true)
+								.setChoices(localeChoices)
+						)
+				)
+		),
 	execute: async (interaction, bot) => {
 		const scg = interaction.options.getSubcommandGroup(false)
 		const sc = interaction.options.getSubcommand()
@@ -425,4 +404,4 @@ module.exports = new Command({
 				`Received a non-existent subcommand/option for command ${interaction.commandName}.`
 			)
 	}
-})
+}

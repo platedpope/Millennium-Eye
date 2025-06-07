@@ -4,7 +4,6 @@ const Table = require('ascii-table')
 
 const { logger } = require('lib/utils/logging')
 const { MillenniumEyeBot } = require('lib/models/MillenniumEyeBot')
-const Command = require('lib/models/Command')
 const { Permissions } = require('lib/models/Defines')
 
 const GP = promisify(glob)
@@ -17,9 +16,6 @@ module.exports = async bot => {
 
 	(await GP(`${process.cwd()}/src/handlers/commands/*.js`))
 		.map(async file => {
-			/**
-			 * @type {Command}
-			 */
 			const cmd = require(file)
 
 			if (!cmd.name) {
