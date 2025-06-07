@@ -7,9 +7,27 @@ const { TCGPLAYER_API, API_TIMEOUT, TCGPLAYER_API_VERSION } = require('lib/model
 const { TCGPlayerSet, TCGPlayerProduct, TCGPlayerPrice } = require('lib/models/TCGPlayer')
 const { logError, logger } = require('lib/utils/logging')
 
+/**
+ * Splits an array into smaller arrays of the given batch size.
+ * @param {Array<any>} dataToBatch The array to split.
+ * @param {number} batchSize The max size of each smaller array.
+ * @returns {Array<Array<any>} The batched arrays.
+ */
+function _batchArray(dataToBatch, batchSize = 100) {
+	const numBatches = Math.ceil(dataToBatch.length / batchSize)
+	const batches = Array(numBatches)
+		.fill([])
+		.map((val, idx) => {
+			const offset = idx * batchSize
+			return dataToBatch.slice(offset, offset + batchSize)
+		})
+	
+	return batches
+}
+
 // TCGPlayer API limits to 300 requests/min, i.e., 6 per sec.
 // Try not to piss them off. :)
-const limiter = new RateLimiter({
+const apiReqLimiter = new RateLimiter({
 	tokensPerInterval: 6,
 	interval: 'second'
 })
@@ -20,8 +38,8 @@ const limiter = new RateLimiter({
  * @param {RequestInit} options 
  * @returns {Promise<Response>} 
  */
-async function limitedFetch(url, options) {
-	await limiter.removeTokens()
+async function _limitedFetch(url, options) {
+	await apiReqLimiter.removeTokens()
 
 	// Default add headers and a timeout to all of our fetches.
 	if (!options) options = {}
@@ -82,7 +100,7 @@ async function handlePagedRequest(url, options, limitPerPage = 100) {
 
 	// Need to send the first request so we know what the total we have to deal with is.
 	try {
-		let response = await limitedFetch(urlWithParams, options)
+		let response = await _limitedFetch(urlWithParams, options)
 		await handlePageResponse(response)
 	}
 	catch (err) {
@@ -97,7 +115,7 @@ async function handlePagedRequest(url, options, limitPerPage = 100) {
 		urlWithParams.searchParams.set('offset', offset)
 		try {
 			numRequests++
-			let response = await limitedFetch(urlWithParams, options)
+			let response = await _limitedFetch(urlWithParams, options)
 			await handlePageResponse(response)
 		}
 		catch(err) {
@@ -121,7 +139,7 @@ async function cacheBearerToken() {
 		const tokenUrl = new URL('token', TCGPLAYER_API)
 		try {
 			const resp = 
-				await limitedFetch(tokenUrl, {
+				await _limitedFetch(tokenUrl, {
 					method: 'post',
 					headers: new Headers({
 						'Content-Type': 'x-www-form-urlencoded',
@@ -172,7 +190,7 @@ async function cacheYgoCategory() {
 		const catUrl = new URL(`${TCGPLAYER_API_VERSION}/catalog/categories`, TCGPLAYER_API)
 		catUrl.searchParams.set('sortOrder', 'categoryId')
 		try {
-			const resp = await limitedFetch(catUrl)
+			const resp = await _limitedFetch(catUrl)
 			const jsonResponse = await resp.json()
 			for (const cat of jsonResponse.results) {
 				if (cat.name === 'YuGiOh') {
@@ -287,54 +305,32 @@ async function cacheSetProductData(dataHandlerCallback) {
 			dataHandlerCallback(updatedProducts)
 		}
 
-		// Split the sets into batches of 3 to send requests about, max one batch per second (though a batch might take longer if it's paged).
-		// Some might be paged so they end up needing more requests. Even if not, 3 requests/sec leaves bandwidth for bot queries in the meantime.
-		const numPerBatch = 3
-		const numBatches = Math.ceil(updatedSets.length / numPerBatch) 
-		const requestBatches = Array(numBatches).fill().map((val, index) => {
-			const offset = index * numPerBatch
-			return updatedSets.slice(offset, offset + numPerBatch)
+		// Update set data at a rate of 3/sec max.
+		const setRequestLimiter = new RateLimiter({
+			'tokensPerInterval': 3,
+			'interval': 'second'
 		})
 
-		const timer = ms => new Promise(res => setTimeout(res, ms))
-		for (const setBatch of requestBatches) {
-			let batchRequests = []
-			for (const set of setBatch) {
-				// Set data and price requests are paged, need to set up options beforehand.
-				/*
-				const setDataRequestOptions = {
-					method: 'get',
-					url: `${TCGPLAYER_API_VERSION}/catalog/products`,
-					headers: requestHeaders,
-					params: {
-						groupId: set.setId,
-						getExtendedFields: true
-					}
-				}
-				*/
-				const prodUrl = new URL(`${TCGPLAYER_API_VERSION}/catalog/products`, TCGPLAYER_API)
-				prodUrl.searchParams.set('groupId', set.setId)
-				prodUrl.searchParams.set('getExtendedFields', true)
-				batchRequests.push(handlePagedRequest(prodUrl))
-			}
+		let setRequests = []
+		for (const set of updatedSets) {
+			const prodUrl = new URL(`${TCGPLAYER_API_VERSION}/catalog/products`, TCGPLAYER_API)
+			prodUrl.searchParams.set('groupId', set.setId)
+			prodUrl.searchParams.set('getExtendedFields', true)
 
-			const startTime = performance.now()
-			// Throw all our results into one big array to process the results at once.
-			const allResults = []
-			batchRequests = await Promise.allSettled(batchRequests)
-			for (const req of batchRequests) {
-				// Something went wrong here, it should've already been logged out.
-				if (req.status === 'rejected') continue
-				if (!req.value.length) continue
-
-				allResults.push(...req.value)
-			}
-			handleSetDataResponse(allResults)
-			const totalTime = performance.now() - startTime
-			// Always wait a minimum of 1 second between batches.
-			if (totalTime < 1000)
-				await timer(1000 - totalTime)
+			await setRequestLimiter.removeTokens()
+			setRequests.push(handlePagedRequest(prodUrl))
 		}
+		// Throw all our results into one big array to process the results at once.
+		const allResults = []
+		setRequests = await Promise.allSettled(setRequests)
+		for (const req of setRequests) {
+			// Something went wrong here, it should've already been logged out.
+			if (req.status === 'rejected') continue
+			if (!req.value.length) continue
+
+			allResults.push(...req.value)
+		}
+		handleSetDataResponse(allResults)
 
 		logger.info(`Finished caching product data for ${updatedSets.length} updated sets.`)
 	}
@@ -352,33 +348,46 @@ async function getProductPriceData(products) {
 	const prodMap = {}
 	for (const p of products)
 		prodMap[p.productId] = p
-	// Turn all the product IDs into a comma-separated string for the API request.
-	const prodIds = Object.keys(prodMap).join(',')
+	// Split the products into batches of size 100 to ensure large queries don't produce insanely huge URL requests.
+	const prodBatches = _batchArray(Object.keys(prodMap), 100)
+	// Update product data at a rate of 4 batches/sec max.
+	const productRequestLimiter = new RateLimiter({
+		'tokensPerInterval': 4,
+		'interval': 'second'
+	})
 
-	try {
-		const priceUrl = new URL(`${TCGPLAYER_API_VERSION}/pricing/product/${prodIds}`, TCGPLAYER_API)
-		const resp = await limitedFetch(priceUrl)
-		const jsonResponse = await resp.json()
-		for (const r of jsonResponse.results) {
-			// Skip the results that have null price data due the type of print being non-existent (e.g., no 1st Edition prints).
-			if (!r.lowPrice || !r.midPrice || !r.highPrice || !r.marketPrice) continue
+	let productRequests = []
+	for (const pb of prodBatches) {
+		const pids = pb.join(',')
+		const priceUrl = new URL(`${TCGPLAYER_API_VERSION}/pricing/product/${pids}`, TCGPLAYER_API)
 
-			const prodId = r.productId
-			const origProduct = prodMap[prodId]
-
-			const pd = new TCGPlayerPrice()
-			pd.type = r.subTypeName
-			pd.lowPrice = r.lowPrice
-			pd.midPrice = r.midPrice
-			pd.highPrice = r.highPrice
-			pd.marketPrice = r.marketPrice
-			pd.updateCacheTime(new Date())
-
-			origProduct.priceData.push(pd)
-		}
+		await productRequestLimiter.removeTokens()
+		productRequests.push(
+			_limitedFetch(priceUrl)
+			.catch(async err => await logError(err.message, `TCGPlayer product price query for ${priceUrl} failed.`))
+		)
 	}
-	catch(err) {
-		await logError(err.message, 'TCGPlayer price API query failed.', products)
+	
+	productRequests = await Promise.allSettled(productRequests)
+	for (const req of productRequests) {
+		if (req.status === 'rejected') continue
+
+		const r = await req.value.json()
+		// Skip the results that have null price data due the type of print being non-existent (e.g., no 1st Edition prints).
+		if (!r.lowPrice || !r.midPrice || !r.highPrice || !r.marketPrice) continue
+
+		const prodId = r.productId
+		const origProduct = prodMap[prodId]
+
+		const pd = new TCGPlayerPrice()
+		pd.type = r.subTypeName
+		pd.lowPrice = r.lowPrice
+		pd.midPrice = r.midPrice
+		pd.highPrice = r.highPrice
+		pd.marketPrice = r.marketPrice
+		pd.updateCacheTime(new Date())
+
+		origProduct.priceData.push(pd)
 	}
 }
 
@@ -400,7 +409,7 @@ async function getProductPriceData(products) {
 	for (const s of sets) {
 		const priceUrl = new URL(`${TCGPLAYER_API_VERSION}/pricing/group/${s.setId}`, TCGPLAYER_API)
 		apiRequests.push(
-			limitedFetch(priceUrl)
+			_limitedFetch(priceUrl)
 				.then(async r => await r.json())
 		)
 	}
