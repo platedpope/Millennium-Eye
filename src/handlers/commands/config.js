@@ -2,6 +2,7 @@ const { ActionRowBuilder, ButtonBuilder, StringSelectMenuBuilder, CommandInterac
 
 const config = require('config')
 const { generateError } = require('lib/utils/logging')
+const { Locales, LocaleEmojis } = require('lib/models/Defines')
 
 const localeChoices = []
 // Allow changing the default syntax.

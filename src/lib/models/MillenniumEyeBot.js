@@ -1,4 +1,4 @@
-const { Client, Collection, Partials, GatewayIntentBits, Guild, TextChannel, Options } = require('discord.js')
+const { Client, Collection, Partials, GatewayIntentBits, Guild, TextChannel, Options, CommandInteraction, SlashCommandBuilder } = require('discord.js')
 const Cache = require('timed-cache')
 
 const config = require('config')
@@ -6,6 +6,29 @@ const { generateError } = require('lib/utils/logging')
 const { setupQueryRegex } = require('lib/utils/regex')
 const ConfigCache = require('./ConfigCache')
 const { Locales, MESSAGE_TIMEOUT } = require('./Defines')
+
+/**
+ * @param {CommandInteraction} interaction
+ * @param {MillenniumEyeBot} bot 
+ */
+async function CommandExecFunction(interaction, bot) {}
+/**
+ * @param {CommandInteraction} interaction
+ * @param {MillenniumEyeBot} bot 
+ */
+ async function CommandAutocompleteFunction(interaction, bot) {}
+
+class Command {
+	/**
+	 * @typedef {{data: SlashCommandBuilder, execute: CommandExecFunction, autocomplete: CommandAutocompleteFunction}} CommandArgs
+	 * @param {CommandArgs} args 
+	 */
+	constructor(args) {
+		this.data = args.data
+		this.execute = args.execute
+		this.autocomplete = args.autocomplete
+	}
+}
 
 class MillenniumEyeBot extends Client {
 	constructor() {
@@ -42,9 +65,7 @@ class MillenniumEyeBot extends Client {
 			}
 		})
 
-		/**
-		 * @type {Collection<string, Command>}
-		 */
+		/** @type {Collection<string, Command>} */
 		this.commands = new Collection()
 
 		this.logChannel = config.logChannel
@@ -225,5 +246,5 @@ class MillenniumEyeBot extends Client {
 const meInstance = new MillenniumEyeBot()
 
 module.exports =  { 
-	MillenniumEyeBot, meInstance
+	MillenniumEyeBot, Command, meInstance
 }

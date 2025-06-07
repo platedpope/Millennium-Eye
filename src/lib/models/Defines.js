@@ -136,9 +136,9 @@ module.exports = {
 		1: 'Limited',
 		2: 'Semi-Limited'
 	},
-	//																		7 8 9
+	//																																		7 8 9
 	// Link markers are stored by the konami DB in the following format:	4   6
-	//																		1 2 3
+	//																																		1 2 3
 	LinkMarkersIndexMap: {
 		'Bottom-Left': 1,
 		'Bottom-Center': 2,

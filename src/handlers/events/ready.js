@@ -1,3 +1,5 @@
+const { ActivityType, PresenceUpdateStatus, Events } = require('discord.js')
+
 const config = require('config')
 const { logger, logError } = require ('lib/utils/logging')
 const { MillenniumEyeBot } = require('lib/models/MillenniumEyeBot')
@@ -6,8 +8,6 @@ const { clearSearchCache } = require('handlers/QueryHandler')
 const { addTcgplayerDataToDb } = require('handlers/BotDBHandler')
 const { checkForDataManifestUpdate } = require('handlers/YGOResourcesHandler')
 const { cacheSetProductData } = require('handlers/TCGPlayerHandler')
-const { ActivityType, PresenceUpdateStatus, Events } = require('discord.js')
-const { setupQueryRegex } = require('lib/utils/regex')
 const { updateKonamiDb } = require('handlers/KonamiDBHandler')
 
 module.exports = new Event({
@@ -28,12 +28,11 @@ module.exports = new Event({
 				// Currently, everything is a global command unless test mode is enabled.
 				// Future commands may be implemented that are guild-only.
 				if (config.testMode)
-					applicationGuildCommands.push(cmd.options)
+					applicationGuildCommands.push(cmd.data.toJSON())
 				else 
-					applicationGlobalCommands.push(cmd.options)
+					applicationGlobalCommands.push(cmd.data.toJSON())
 			}
 
-			logger.info('Beginning refresh of application commands.')
 			if (applicationGuildCommands.length) {
 				logger.info(`Refreshing ${applicationGuildCommands.length} guild commands.`)
 				applicationGuildCommands.map(cmd => logger.debug(`- ${cmd.name}`))
