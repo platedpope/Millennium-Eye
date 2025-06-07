@@ -1,34 +1,20 @@
-const { EmbedBuilder, PermissionsBitField } = require('discord.js')
+const { EmbedBuilder, PermissionsBitField, SlashCommandBuilder } = require('discord.js')
 
-const config = require('config')
-const Command = require('lib/models/Command')
-const { QueryTypes, Locales, CommandTypes, LocaleEmojis } = require('lib/models/Defines')
+const { QueryTypes, Locales, LocaleEmojis } = require('lib/models/Defines')
 
-module.exports = new Command({
-	name: 'help',
-	description: 'Responds with a summary of the bot features and how to use them.',
-	options: {
-		name: 'help',
-		description: 'Provides a summary of a bot feature and how to use it.',
-		options: [
-			{
-				name: 'feature',
-				description: 'What set of bot features to request help with.',
-				type: CommandTypes.STRING,
-				required: true,
-				choices: [
-					{
-						'name': 'Syntax',
-						'value': 'syntax'
-					},
-					{
-						'name': 'Commands',
-						'value': 'commands'
-					}
-				]
-			}
-		]
-	},
+module.exports = {
+	data: new SlashCommandBuilder()
+		.setName('help')
+		.setDescription('Print a summary of the bot features and how to use them.')
+		.addStringOption(op => 
+			op.setName('feature')
+				.setDescription('Which set of bot features to request help with.')
+				.setRequired(true)
+				.addChoices([
+					{ 'name': 'Syntax', 'value': 'syntax' },
+					{ 'name': 'Commands', 'value': 'commands' }
+				])
+		),
 	execute: async (interaction, bot) => {
 		const embedData = new EmbedBuilder()
 
@@ -138,4 +124,4 @@ module.exports = new Command({
 			embeds: [ embedData ]
 		})
 	}
-})
+}

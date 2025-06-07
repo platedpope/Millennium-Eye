@@ -1,18 +1,13 @@
 const heapdump = require('heapdump')
 const { inspect } = require('util')
  
-const Command = require('lib/models/Command')
-const config = require('config')
 const { logger } = require('lib/utils/logging')
+const { SlashCommandBuilder } = require('discord.js')
 
-module.exports = new Command({
-	name: 'ping',
-	description: 'Pings the bot to test uptime and latency.',
-	options: {
-		name: 'ping',
-		description: 'Pings the bot to test uptime and latency.',
-		options: []
-	},
+module.exports = {
+	data: new SlashCommandBuilder()
+		.setName('ping')
+		.setDescription('Pings the bot to test uptime and latency.'),
 	execute: async (interaction, bot) => {
 		await interaction.reply('Pinging...')
 		await interaction.editReply(`🏓 Pong! Latency: ${bot.ws.ping} ms`)
@@ -31,4 +26,4 @@ module.exports = new Command({
 			// heapdump.writeSnapshot()
 		}
 	}
-})
+}
