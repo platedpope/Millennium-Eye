@@ -372,22 +372,24 @@ async function getProductPriceData(products) {
 	for (const req of productRequests) {
 		if (req.status === 'rejected') continue
 
-		const r = await req.value.json()
-		// Skip the results that have null price data due the type of print being non-existent (e.g., no 1st Edition prints).
-		if (!r.lowPrice || !r.midPrice || !r.highPrice || !r.marketPrice) continue
+		const resp = await req.value.json()
+		for (const r of resp.results) {
+			// Skip the results that have null price data due the type of print being non-existent (e.g., no 1st Edition prints).
+			if (!r.lowPrice || !r.midPrice || !r.highPrice || !r.marketPrice) continue
 
-		const prodId = r.productId
-		const origProduct = prodMap[prodId]
+			const prodId = r.productId
+			const origProduct = prodMap[prodId]
 
-		const pd = new TCGPlayerPrice()
-		pd.type = r.subTypeName
-		pd.lowPrice = r.lowPrice
-		pd.midPrice = r.midPrice
-		pd.highPrice = r.highPrice
-		pd.marketPrice = r.marketPrice
-		pd.updateCacheTime(new Date())
+			const pd = new TCGPlayerPrice()
+			pd.type = r.subTypeName
+			pd.lowPrice = r.lowPrice
+			pd.midPrice = r.midPrice
+			pd.highPrice = r.highPrice
+			pd.marketPrice = r.marketPrice
+			pd.updateCacheTime(new Date())
 
-		origProduct.priceData.push(pd)
+			origProduct.priceData.push(pd)
+		}
 	}
 }
 
