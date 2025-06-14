@@ -5,7 +5,7 @@ const { logError, logger } = require('lib/utils/logging')
 const { CardDataFilter } = require('lib/utils/filter')
 const Search = require('lib/models/Search')
 const Query = require('lib/models/Query')
-const { Locales, YGORESOURCES_NAME_ID_INDEX, YGORESOURCES_TYPES_METADATA, YGORESOURCES_PROPERTY_METADATA, YGORESOURCES_DB_PATH, YGORESOURCES_MANIFEST, YGORESOURCES_QA_DATA_API, API_TIMEOUT, YGORESOURCES_CARD_DATA_API, YGORESOURCES_ARTWORK_API } = require('lib/models/Defines')
+const { Locales, YGORESOURCES_NAME_ID_INDEX, YGORESOURCES_TYPES_METADATA, YGORESOURCES_PROPERTY_METADATA, YGORESOURCES_DB_PATH, YGORESOURCES_MANIFEST, YGORESOURCES_QA_DATA_API, API_TIMEOUT, YGORESOURCES_CARD_DATA_API, YGORESOURCES_ARTWORK_API, ARTWORK_REPO_MANIFEST_PATH } = require('lib/models/Defines')
 const Card = require('lib/models/Card')
 
 /**
@@ -249,23 +249,37 @@ async function _cachePropertyLocaleMetadata() {
 async function _cacheArtworkManifest() {
 	// First get the manifest. Used the cached one if we've got it.
 	if (!_apiResponseCache.artworkManifest) {
-		try {
-			const resp = await fetch(`${YGORESOURCES_ARTWORK_API}/manifest.json`, { signal: AbortSignal.timeout(API_TIMEOUT) })
-			const jsonResponse = await resp.json()
-			if ('cards' in jsonResponse) {
-				_apiResponseCache.artworkManifest = jsonResponse.cards
-				logger.info('Cached new artwork repo manifest, resetting in 24 hrs.')
-				setTimeout(() => {
-					_apiResponseCache.artworkManifest = null
-					logger.info('Evicted cached artwork repo manifest, will re-cache the next time it is necessary.')
-				}, 24 * 60 * 60 * 1000)
-			}
-			else {
-				await logError(undefined, 'No card data in artwork repo manifest?')
+		// Use a cached copy saved on disk if it's recent enough. 
+		if (fs.existsSync(ARTWORK_REPO_MANIFEST_PATH)) {
+			const cacheStats = fs.statSync(ARTWORK_REPO_MANIFEST_PATH)
+			// If it's newer than ~a day (23 hrs), use it. Otherwise send a new API request.
+			const modTime = new Date(cacheStats.mtime)
+			if ((Date.now() - modTime) < 23 * 60 * 60 * 1000) {
+				const cacheData = fs.readFileSync(ARTWORK_REPO_MANIFEST_PATH, 'utf-8')
+				_apiResponseCache.artworkManifest = JSON.parse(cacheData)
+				logger.info('Loaded cached artwork manifest from disk.')
 			}
 		}
-		catch (err) {
-			await logError(err.message, 'Failed processing artwork repo manifest!')
+		else {
+			try {
+				const resp = await fetch(`${YGORESOURCES_ARTWORK_API}/manifest.json`, { signal: AbortSignal.timeout(API_TIMEOUT) })
+				const jsonResponse = await resp.json()
+				if ('cards' in jsonResponse) {
+					_apiResponseCache.artworkManifest = jsonResponse.cards
+					logger.info('Cached new artwork repo manifest, resetting in 24 hrs.')
+					fs.writeFileSync(ARTWORK_REPO_MANIFEST_PATH, JSON.stringify(jsonResponse.cards, null, 2))
+					setTimeout(() => {
+						_apiResponseCache.artworkManifest = null
+						logger.info('Evicted cached artwork repo manifest, will re-cache the next time it is necessary.')
+					}, 24 * 60 * 60 * 1000)
+				}
+				else {
+					await logError(undefined, 'No card data in artwork repo manifest?')
+				}
+			}
+			catch (err) {
+				await logError(err.message, 'Failed processing artwork repo manifest!')
+			}
 		}
 	}
 }
