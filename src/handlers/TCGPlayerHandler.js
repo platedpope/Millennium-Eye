@@ -39,7 +39,7 @@ const apiReqLimiter = new RateLimiter({
  * @returns {Promise<Response>} 
  */
 async function _limitedFetch(url, options) {
-	await apiReqLimiter.removeTokens()
+	await apiReqLimiter.removeTokens(1)
 
 	// Default add headers and a timeout to all of our fetches.
 	if (!options) options = {}
@@ -258,79 +258,66 @@ async function cacheSetProductData(dataHandlerCallback) {
 	// Immediately throw these to the data handler so we have at least set name/info cached.
 	dataHandlerCallback(updatedSets)
 
-	// Now start a slow crawl of set data for the sets that were updated.
+	// Now dive in and update each set's product data.
 	if (updatedSets.length) {
-		const handleSetDataResponse = results => {
-			// The results will be all the products in this set. Parse them and cache them.
-			const updatedProducts = []
-	
-			for (const p of results) {
-				const cachedProduct = cachedProductData.products[p.productId]
-				const modDate = new Date(p.modifiedOn)
-	
-				let prodToModify = null
-				if (!cachedProduct) {
-					prodToModify = new TCGPlayerProduct()
-					cachedProductData.products[p.productId] = prodToModify
-				}
-				else if (cachedProduct.cacheTime < modDate) {
-					prodToModify = cachedProduct
-				}
-	
-				if (prodToModify) {
-					prodToModify.productId = p.productId
-					prodToModify.fullName = p.name.split('(')[0].trim()		// Ignore anything parenthetical, TCGPlayer likes adding things to the name.
-					prodToModify.set = cachedProductData.sets[p.groupId]
-					prodToModify.cacheTime = modDate
-					// Rarity and print code are in the extended fields.
-					if (p.extendedData) {
-						for (const eField of p.extendedData) {
-							// There are quite a few extended fields, stop iterating once we've found what we need.
-							if (prodToModify.printCode && prodToModify.rarity) break
-							// Print code is stored as "Number".
-							if (eField.name === 'Number') {
-								prodToModify.printCode = eField.value
-							}
-							else if (eField.name === 'Rarity') {
-								prodToModify.rarity = eField.value
-							}
-						}
-						updatedProducts.push(prodToModify)
-					}
-				}
-			}
-	
-			if (updatedProducts.length)
-				logger.info(`Updating product info for ${updatedProducts.length} products.`)
-			dataHandlerCallback(updatedProducts)
-		}
-
-		// Update set data at a rate of 3/sec max.
-		const setRequestLimiter = new RateLimiter({
-			'tokensPerInterval': 3,
-			'interval': 'second'
-		})
-
 		let setRequests = []
 		for (const set of updatedSets) {
 			const prodUrl = new URL(`${TCGPLAYER_API_VERSION}/catalog/products`, TCGPLAYER_API)
 			prodUrl.searchParams.set('groupId', set.setId)
 			prodUrl.searchParams.set('getExtendedFields', true)
 
-			await setRequestLimiter.removeTokens()
-			setRequests.push(handlePagedRequest(prodUrl))
+			setRequests.push(
+				handlePagedRequest(prodUrl)
+				.then(resp => {
+					// The results will be all the products in this set. Parse them and cache them.
+					const updatedProducts = []
+			
+					for (const p of resp) {
+						const cachedProduct = cachedProductData.products[p.productId]
+						const modDate = new Date(p.modifiedOn)
+			
+						let prodToModify = null
+						if (!cachedProduct) {
+							prodToModify = new TCGPlayerProduct()
+							cachedProductData.products[p.productId] = prodToModify
+						}
+						else if (cachedProduct.cacheTime < modDate) {
+							prodToModify = cachedProduct
+						}
+			
+						if (prodToModify) {
+							prodToModify.productId = p.productId
+							prodToModify.fullName = p.name.split('(')[0].trim()		// Ignore anything parenthetical, TCGPlayer likes adding things to the name.
+							prodToModify.set = cachedProductData.sets[p.groupId]
+							prodToModify.cacheTime = modDate
+							// Rarity and print code are in the extended fields.
+							if (p.extendedData) {
+								for (const eField of p.extendedData) {
+									// There are quite a few extended fields, stop iterating once we've found what we need.
+									if (prodToModify.printCode && prodToModify.rarity) break
+									// Print code is stored as "Number".
+									if (eField.name === 'Number') {
+										prodToModify.printCode = eField.value
+									}
+									else if (eField.name === 'Rarity') {
+										prodToModify.rarity = eField.value
+									}
+								}
+								updatedProducts.push(prodToModify)
+							}
+						}
+					}
+			
+					if (updatedProducts.length) {
+						logger.info(`Updated info for ${updatedProducts.length} products in set ID ${set.setId}.`)
+						dataHandlerCallback(updatedProducts)
+					}
+				})
+				.catch(async err => await logError(err.message, `TCGPlayer set query for ${prodUrl} failed.`))
+			)
 		}
-		// Throw all our results into one big array to process the results at once.
-		const allResults = []
-		setRequests = await Promise.allSettled(setRequests)
-		for (const req of setRequests) {
-			// Something went wrong here, it should've already been logged out.
-			if (req.status === 'rejected') continue
-			if (!req.value.length) continue
 
-			allResults.push(...req.value)
-		}
-		handleSetDataResponse(allResults)
+		setRequests = await Promise.allSettled(setRequests)
 
 		logger.info(`Finished caching product data for ${updatedSets.length} updated sets.`)
 	}
@@ -350,47 +337,39 @@ async function getProductPriceData(products) {
 		prodMap[p.productId] = p
 	// Split the products into batches of size 100 to ensure large queries don't produce insanely huge URL requests.
 	const prodBatches = _batchArray(Object.keys(prodMap), 100)
-	// Update product data at a rate of 4 batches/sec max.
-	const productRequestLimiter = new RateLimiter({
-		'tokensPerInterval': 4,
-		'interval': 'second'
-	})
 
 	let productRequests = []
 	for (const pb of prodBatches) {
 		const pids = pb.join(',')
 		const priceUrl = new URL(`${TCGPLAYER_API_VERSION}/pricing/product/${pids}`, TCGPLAYER_API)
 
-		await productRequestLimiter.removeTokens()
 		productRequests.push(
 			_limitedFetch(priceUrl)
+			.then(async resp => {
+				const jsonData = await resp.json()
+				for (const r of jsonData.results) {
+					// Skip the results that have null price data due the type of print being non-existent (e.g., no 1st Edition prints).
+					if (!r.lowPrice || !r.midPrice || !r.highPrice || !r.marketPrice) continue
+		
+					const prodId = r.productId
+					const origProduct = prodMap[prodId]
+		
+					const pd = new TCGPlayerPrice()
+					pd.type = r.subTypeName
+					pd.lowPrice = r.lowPrice
+					pd.midPrice = r.midPrice
+					pd.highPrice = r.highPrice
+					pd.marketPrice = r.marketPrice
+					pd.updateCacheTime(new Date())
+		
+					origProduct.priceData.push(pd)
+				}
+			})
 			.catch(async err => await logError(err.message, `TCGPlayer product price query for ${priceUrl} failed.`))
 		)
 	}
 	
 	productRequests = await Promise.allSettled(productRequests)
-	for (const req of productRequests) {
-		if (req.status === 'rejected') continue
-
-		const resp = await req.value.json()
-		for (const r of resp.results) {
-			// Skip the results that have null price data due the type of print being non-existent (e.g., no 1st Edition prints).
-			if (!r.lowPrice || !r.midPrice || !r.highPrice || !r.marketPrice) continue
-
-			const prodId = r.productId
-			const origProduct = prodMap[prodId]
-
-			const pd = new TCGPlayerPrice()
-			pd.type = r.subTypeName
-			pd.lowPrice = r.lowPrice
-			pd.midPrice = r.midPrice
-			pd.highPrice = r.highPrice
-			pd.marketPrice = r.marketPrice
-			pd.updateCacheTime(new Date())
-
-			origProduct.priceData.push(pd)
-		}
-	}
 }
 
 /**
