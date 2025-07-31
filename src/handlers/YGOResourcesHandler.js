@@ -260,7 +260,8 @@ async function _cacheArtworkManifest() {
 				logger.info('Loaded cached artwork manifest from disk.')
 			}
 		}
-		else {
+		// If we still don't have it after checking disk, send an API request.
+		if (!_apiResponseCache.artworkManifest) {
 			try {
 				const resp = await fetch(`${YGORESOURCES_ARTWORK_API}/manifest.json`, { signal: AbortSignal.timeout(API_TIMEOUT) })
 				const jsonResponse = await resp.json()
