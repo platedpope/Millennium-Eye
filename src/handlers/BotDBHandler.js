@@ -101,12 +101,15 @@ function searchTcgplayerData(searches) {
 			const productQry = botDb.prepare(`SELECT * FROM tcgplayerProducts WHERE dbId = ? OR fullName = ? COLLATE NOCASE`)
 			const priceQry = botDb.prepare('SELECT * FROM tcgplayerProductPrices WHERE tcgplayerProductId = ?')
 
-			const searchName = searchData.name.get('en')
+			const searchName = searchData.name.get('en').split('(')[0].trim() // Trim anything parenthetical from the name because that's what we do when entering it into the database.
 			let productRows = productQry.all(searchData.dbId, searchName)
 			// If this doesn't result in anything, resort to FTS to see if we can get a close match.
 			if (!(productRows.length)) {
 				// Adjust the name for FTS compatibility by removing weird symbols and double quoting quotes.
-				const ftsName = searchName.replace(/[^\x00-\x7F]/g, ' ').trim().replace("\"", "\"\"").replace(/[<>]/g, '')
+				const ftsName = searchName.replace(/[^\x00-\x7F]/g, ' ').trim()
+				.replace("\"", "\"\"")
+				.replace("\'", "\'\'")
+				.replace(/[<>]/g, '')
 				// FTS has a ton of (even ASCII) symbols it treats as special in non-string literals, so we want to convert this search to a string literal.
 				// Unfortunately string literals are treated as one search token which is pretty inflexible for search purposes, since anything that doesn't match it exactly doesn't hit.
 				// A bit hacky: split up the name on whitespace and quote each token to avoid issues with any symbols in each part. Add a * at the end of the last token for good measure to include prefixes.
