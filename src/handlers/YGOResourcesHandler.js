@@ -257,6 +257,10 @@ async function _cacheArtworkManifest() {
 			if ((Date.now() - modTime) < 23 * 60 * 60 * 1000) {
 				const cacheData = fs.readFileSync(ARTWORK_REPO_MANIFEST_PATH, 'utf-8')
 				_apiResponseCache.artworkManifest = JSON.parse(cacheData)
+				setTimeout(() => {
+						_apiResponseCache.artworkManifest = null
+						logger.info('Evicted cached artwork repo manifest, will re-cache the next time it is necessary.')
+				}, 24 * 60 * 60 * 1000)
 				logger.info('Loaded cached artwork manifest from disk.')
 			}
 		}
