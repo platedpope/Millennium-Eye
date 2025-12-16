@@ -1,4 +1,3 @@
-const heapdump = require('heapdump')
 const { inspect } = require('util')
 const { SlashCommandBuilder } = require('discord.js')
  
@@ -12,7 +11,6 @@ module.exports = {
 		await interaction.reply('Pinging...')
 		await interaction.editReply(`🏓 Pong! Latency: ${bot.ws.ping} ms`)
 
-		// For testing purposes only, create a heapdump for memory analysis.
 		if (interaction.user.id === '219319817688186891') {
 			const formatBytesToMB = (data) => `${Math.round(data / 1024 / 1024 * 100) / 100} MB`
 			const mem = process.memoryUsage()
@@ -23,7 +21,6 @@ module.exports = {
 				external: `${formatBytesToMB(mem.external)}`
 			}
 			logger.info(`Process memory usage: ${inspect(fmtMem)}`)
-			// heapdump.writeSnapshot()
 		}
 	}
 }

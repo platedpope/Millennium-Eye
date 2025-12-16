@@ -925,7 +925,7 @@ class Card {
 		let selectedSource = source ?? '' 
 		let srcArts = []
 		
-		const searchSources = [ 'md', censorArt ? 'tcg' : 'ocg', 'url' ]
+		const searchSources = [ 'md', censorArt ? 'tcg' : 'ocg', censorArt ? 'ocg' : 'tcg', 'url' ]
 		let srcIdx = 0
 
 		if (selectedSource !== '') {	
