@@ -1,8 +1,31 @@
-const { YUGIPEDIA_API, YUGIPEDIA_API_PARAMS, API_TIMEOUT, Locales, LinkMarkersIndexMap } = require('lib/models/Defines')
+const { YUGIPEDIA_API, API_TIMEOUT, Locales, LinkMarkersIndexMap } = require('lib/models/Defines')
 const { logger } = require('lib/utils/logging')
 const { findYugipediaProperty } = require('lib/utils/regex')
 const Search = require('lib/models/Search')
 const Query = require('lib/models/Query')
+
+/**
+ * Utility function to form the URL parameters for a Yugipedia API search.
+ * @param {string} searchTerm Term to search Yugipedia for.
+ * @param {boolean} titleSearch Whether to make this a title search or a "nearmatch" search. Default is "nearmatch", which is what Yugipedia itself uses.
+ * @returns {URLSearchParams} 
+ */
+function formYugipediaSearchParams(searchTerm, titleSearch = false) {
+	return new URLSearchParams({
+		action: 'query',
+		format: 'json',
+		formatversion: 2,
+		redirects: true,
+		prop: 'revisions|categories|pageimages',
+		rvprop: 'content',
+		cllimit: 50,
+		piprop: 'original',
+		generator: 'search',
+		gsrlimit: 10,
+		gsrwhat: titleSearch ? 'title' : 'nearmatch',
+		gsrsearch: searchTerm,
+	})
+} 
 
 /**
  * Search using MediaWiki API on Yugipedia to resolve the given searches.
@@ -16,38 +39,68 @@ async function searchYugipedia(searches, qry, dataHandlerCallback) {
 	// Nothing to check beforehand, if we got this far just send requests right away.
 	let apiReqs = []
 	for (const s of searches) {
-		YUGIPEDIA_API_PARAMS.gsrsearch = s.term
-		const req = fetch(`${YUGIPEDIA_API}?` + new URLSearchParams(YUGIPEDIA_API_PARAMS), { signal: AbortSignal.timeout(API_TIMEOUT) })
+		const req = fetch(`${YUGIPEDIA_API}?` + formYugipediaSearchParams(s.term), { signal: AbortSignal.timeout(API_TIMEOUT) })
 			.then(async r => await r.json())
 			.catch(err => {
 				throw new Error(err.message, `Yugipedia API query for term ${s.term} failed.`)
 			})
-
 		apiReqs.push(req)
 	}
-	// Reset the search in the API parameters.
-	delete YUGIPEDIA_API_PARAMS.gsrsearch
 
-	if (apiReqs.length) 
-		apiReqs = await Promise.allSettled(apiReqs)
-
+	let didTitleSearches = false
+	apiReqs = await Promise.allSettled(apiReqs)
 	for (let i = 0; i < apiReqs.length; i++) {
 		const apiResponse = apiReqs[i]
 		if (apiResponse.status === 'rejected') {
 			continue
 		}
 		// These promises return in the same order we sent the requests.
-		// Map this response to its corresponding search that way.
 		const apiSearch = searches[i]
 
 		const responseData = apiResponse.value
-		if (responseData && Object.keys(responseData).length) 
+		if (responseData && Object.keys(responseData).length)  {
 			if ('query' in responseData) {
 				const qryData = responseData.query
 				apiSearch.rawData = qryData
 			}
-		if (apiSearch.rawData === undefined)
-			logger.info(`Yugipedia API query for term ${apiSearch.term} found nothing.`)
+		}
+		if (apiSearch.rawData === undefined) {
+			logger.info(`Yugipedia API query for term ${apiSearch.term} found nothing, will attempt title query.`)
+			// Try title searches as a last resort, it's a bit more robust for incomplete/partial names.
+			const titleReq = fetch(`${YUGIPEDIA_API}?` + formYugipediaSearchParams(apiSearch.term, true), { signal: AbortSignal.timeout(API_TIMEOUT) })
+				.then(async r => await r.json())
+				.catch(err => {
+					throw new Error(err.message, `Yugipedia title query for term ${s.term} failed.`)
+				})
+			apiReqs[i] = titleReq
+			didTitleSearches = true
+		}
+	}
+
+	if (didTitleSearches) {
+		apiReqs = await Promise.allSettled(apiReqs)
+		for (let i = 0; i < apiReqs.length; i++) {
+			// If this search already has data from a previous query, ignore it.
+			const apiSearch = searches[i]
+			if (apiSearch.rawData !== undefined) {
+				continue
+			}
+			const apiResponse = apiReqs[i]
+			if (apiResponse.status === 'rejected') {
+				continue
+			}
+
+			const responseData = apiResponse.value
+			if (responseData && Object.keys(responseData).length) 
+				if ('query' in responseData) {
+					logger.info(`Yugipedia title query for term ${apiSearch.term} got data.`)
+					const qryData = responseData.query
+					apiSearch.rawData = qryData
+				}
+			if (apiSearch.rawData === undefined) {
+				logger.info(`Yugipedia title query for term ${apiSearch.term} found nothing.`)
+			}
+		}
 	}
 
 	dataHandlerCallback(searches, qry)
@@ -103,7 +156,6 @@ async function searchYugipedia(searches, qry, dataHandlerCallback) {
 			.replace(/<br\s*\/?>/gs, '\n')
 			.replace(/{{PAGENAME}}/gs, apiData.title)
 			.replace(/<.*?>/gs, '')
-
 		// Name(s)
 		// EN name is always the title of the page.
 		if (!card.name.get('en'))

@@ -22,21 +22,6 @@ module.exports = {
 	YGORESOURCES_DB_PATH: `${process.cwd()}/data/ygoresources.db`,
 	MASTER_DUEL_API_RESPONSE_PATH: `${process.cwd()}/data/mdm.json`,
 	ARTWORK_REPO_MANIFEST_PATH: `${process.cwd()}/data/artwork_manifest.json`,
-	YUGIPEDIA_API_PARAMS: {
-		action: 'query',
-		format: 'json',
-		formatversion: 2,
-		redirects: true,
-		prop: 'revisions|categories|pageimages',
-		rvprop: 'content',
-		cllimit: 50,
-		piprop: 'original',
-		generator: 'search',
-		gsrlimit: 10,
-		gsrwhat: 'title'
-		// There's also a "gsrsearch" property that is used for the actual search value.
-		// That value is filled in at runtime, per search.
-	},
 	// Seed URLs.
 	KONAMI_REQUEST_LOCALE: `&request_locale=`,
 	KONAMI_CARD_LINK: `https://www.db.yugioh-card.com/yugiohdb/card_search.action?ope=2&cid=`,
