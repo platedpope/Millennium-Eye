@@ -1,4 +1,4 @@
-const { ActionRowBuilder, StringSelectMenuBuilder, ButtonBuilder, SlashCommandBuilder } = require('discord.js')
+const { ActionRowBuilder, StringSelectMenuBuilder, ButtonBuilder, SlashCommandBuilder, MessageFlags } = require('discord.js')
 
 const Query = require('lib/models/Query')
 const Search = require('lib/models/Search')
@@ -44,7 +44,7 @@ function generateArtSelect(selectedSource, selectedId, cardImageData, disable = 
 	for (const id of arts.keys())
 		selectOptions.push(
 			{
-				label: `Art ${id}`,
+				label: selectedSource === 'md' ? `${id}` : `Art ${id}`,
 				value: `${id}`,
 				default: id === `${selectedId}`
 			}
@@ -114,7 +114,7 @@ module.exports = {
 		
 		const artSearch = qry.searches[0]
 		if (!artSearch || !artSearch.data) {
-			await queryRespond(bot, interaction, 'Could not find any art data with the given search.', qry, { ephemeral: true })
+			await queryRespond(bot, interaction, 'Could not find any art data with the given search.', qry, { flags: MessageFlags.Ephemeral })
 			return
 		}
 
@@ -135,7 +135,7 @@ module.exports = {
 			if (!(cardData.imageData.get(viewedSource)) ||
 					!(cardData.imageData.get(viewedSource).get(viewedArt))) 
 			{
-				await queryRespond(bot, interaction, 'Could not find any art data with the given search.', qry, { ephemeral: true })
+				await queryRespond(bot, interaction, 'Could not find any art data with the given search.', qry, { flags: MessageFlags.Ephemeral })
 				return
 			}
 
@@ -151,9 +151,9 @@ module.exports = {
 		}
 
 		// Set sensible defaults to start with if we weren't given any specific values to search for.
-		[viewedSource, viewedArt] = cardData.getFirstValidArt(locale)
+		[viewedSource, viewedArt] = cardData.getFirstValidArt(locale, viewedSource)
 		if (!viewedArt) {
-			await queryRespond(bot, interaction, 'Could not find any art data with the given search.', qry, { ephemeral: true })
+			await queryRespond(bot, interaction, 'Could not find any art data with the given search.', qry, { flags: MessageFlags.Ephemeral })
 			return
 		}
 		
@@ -164,7 +164,7 @@ module.exports = {
 			msgOptions.files = [embedData.attachment]
 
 		msgOptions.components = generateArtSelect(viewedSource, viewedArt, cardData.imageData)
-		msgOptions.ephemeral = true
+		msgOptions['flags'] = MessageFlags.Ephemeral
 
 		const resp = await queryRespond(bot, interaction, '', qry, msgOptions)
 
@@ -173,14 +173,14 @@ module.exports = {
 
 		collector.on('collect', async i => {
 			if (i.user.id !== interaction.user.id) {
-				i.reply({ content: 'Only the user that originally sent the command can interact with these options.', ephemeral: true })
+				i.reply({ content: 'Only the user that originally sent the command can interact with these options.', flags: MessageFlags.Ephemeral })
 				return
 			}
 
 			if (/^source_select/.test(i.customId)) {
 				viewedSource = i.values[0]
 				// Reset selected ID if source was changed so it's not an invalid number for the new source.
-				if (Number(viewedArt) > cardData.imageData.get(viewedSource).size) viewedArt = 1
+				if (Number(viewedArt) > cardData.imageData.get(viewedSource).size || !(cardData.imageData.get(viewedSource).has(viewedArt))) viewedArt = '1'
 
 				const embedData = cardData.generateArtEmbed(locale, qry.official, viewedSource, viewedArt)
 				if ('embed' in embedData)
@@ -193,9 +193,7 @@ module.exports = {
 				collector.resetTimer()
 			}
 			else if (/^art_id_select/.test(i.customId)) {
-				viewedArt = parseInt(i.values[0], 10)
-				if (isNaN(viewedArt))
-					viewedArt = i.values[0]
+				viewedArt = i.values[0]
 				const embedData = cardData.generateArtEmbed(locale, qry.official, viewedSource, viewedArt)
 				if ('embed' in embedData)
 					msgOptions.embeds = [embedData.embed]
@@ -217,7 +215,7 @@ module.exports = {
 		collector.on('end', async () => {
 			if (postToChat) {
 				delete msgOptions.components
-				delete msgOptions.ephemeral
+				delete msgOptions.flags
 				// The followUp responds to the ephemeral message, making the initial command invocation is "invisible".
 				// Add a line indicating who requested the embed to prevent abuse.
 				msgOptions.embeds[0].setDescription(`Requested by: <@${interaction.user.id}>`)
@@ -298,7 +296,7 @@ module.exports = {
 			const artOptions = []
 			if (source && cardData.imageData.get(source)) {
 				cardData.imageData.get(source).forEach((path, aid) => {
-					artOptions.push({ name: `Art ${aid}`, value: aid })
+					artOptions.push({ name: (path === 'md' ? `${aid}` : `Art ${aid}`), value: aid })
 				})
 			}
 			// If no (good) source is given, combine all the ones we can find!

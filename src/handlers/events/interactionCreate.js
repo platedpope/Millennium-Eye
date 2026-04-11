@@ -15,7 +15,7 @@ module.exports = new Event({
 		// Early bail conditions, regardless of interaction type.
 		if (!bot.isReady) {
 			if (interaction.isCommand()) {
-				await interaction.reply( { content: 'The bot was recently booted and is not ready yet. Try again in a bit...', ephemeral: true } )
+				await interaction.reply( { content: 'The bot was recently booted and is not ready yet. Try again in a bit...', flags: Discord.MessageFlags.Ephemeral } )
 			}
 			return
 		}

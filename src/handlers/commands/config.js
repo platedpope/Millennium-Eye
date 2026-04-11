@@ -279,18 +279,18 @@ module.exports = {
 
 				const removed = bot.removeGuildQuery(interaction.guild, rLocale)
 				if (removed === undefined) {
-					await interaction.reply({ content: `Could not find any existing query syntax associated with ${fullLocale} queries, no changes were made.`, ephemeral: true })
+					await interaction.reply({ content: `Could not find any existing query syntax associated with ${fullLocale} queries, no changes were made.`, flags: MessageFlags.Ephemeral })
 				}
 				else {
 					if (rLocale === 'default') {
 						await interaction.reply({ 
 							content: `Removed **${removed.open}** and **${removed.close}** as the default query syntax for this server. ` +
 									 'Note that without a default query syntax set, the bot may not respond to messages unless they use a specific language query syntax.',
-							ephemeral: true
+							flags: MessageFlags.Ephemeral
 						})
 					}
 					else {
-						await interaction.reply({ content: `I will no longer recognize parts of messages between **${removed.open}** and **${removed.close}** as ${fullLocale} queries.`, ephemeral: true })
+						await interaction.reply({ content: `I will no longer recognize parts of messages between **${removed.open}** and **${removed.close}** as ${fullLocale} queries.`, flags: MessageFlags.Ephemeral })
 					}
 				}
 			}
@@ -314,7 +314,7 @@ module.exports = {
 
 			collector.on('collect', async i => {
 				if (i.user.id !== interaction.user.id) {
-					i.reply({ content: 'Only the user that originally sent the command can interact with these options.', ephemeral: true })
+					i.reply({ content: 'Only the user that originally sent the command can interact with these options.', flags: MessageFlags.Ephemeral })
 					return
 				}
 

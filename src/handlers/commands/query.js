@@ -35,7 +35,7 @@ module.exports = {
 				await interaction.reply({
 					content: 'Sorry, you\'ve requested too many searches recently. Please slow down and try again in a minute.',
 					allowedMentions: { repliedUser: false },
-					ephemeral: true
+					flags: MessageFlags.Ephemeral
 				})
 				return
 			}
