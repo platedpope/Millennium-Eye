@@ -24,11 +24,11 @@ class Ruling {
 	 */
 	 async generateEmbed(options) {
 		let embedData = {}
-		// Do not send any of these in "Official" mode.
-		if ('official' in options && options.official)
-			return embedData
 		if ('locale' in options)
 			var locale = options.locale
+		// Official mode should only return ruling data for Japanese locale (the only locale where ruling data exists in an official capacity.)
+		if (locale !== 'ja' && ('official' in options && options.official))
+			return embedData
 		if ('random' in options)
 			var random = options.random
 			

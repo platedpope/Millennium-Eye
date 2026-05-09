@@ -97,7 +97,7 @@ class Card {
 			embedData = this.generatePriceEmbed(locale, official)
 		}
 		else if (type === 'f') {
-			embedData = await this.generateFaqEmbed(locale)
+			embedData = await this.generateFaqEmbed(locale, official)
 		}
 
 		return embedData
@@ -114,9 +114,14 @@ class Card {
 		const embedData = {}
 
 		// We shouldn't be here without data for this locale, but do a final sanity check to make sure we leave if so.
-		if (!this.name.has(locale))
+		if (!this.name.has(locale)) {
 			return embedData
-		
+		}
+		// Official mode should not return data for unreleased cards.
+		if (official && !this.isReleased(locale)) {
+			return embedData
+		}
+
 		const finalEmbed = new EmbedBuilder()
 
 		const cardName = this.name.get(locale)
@@ -251,8 +256,13 @@ class Card {
 		const embedData = {}
 		
 		// We shouldn't be here with no art data, but do a final sanity check to make sure we leave if so.
-		if (!this.imageData.size) 
+		if (!this.imageData.size) {
 			return embedData
+		}
+		// Official mode should not return data for unreleased cards.
+		if (official && !this.isReleased(locale)) {
+			return embedData
+		}
 
 		const finalEmbed = new EmbedBuilder()
 
@@ -283,11 +293,17 @@ class Card {
 		const embedData = {}
 
 		// We shouldn't be here with no print data, but do a final sanity check to make sure we leave if so.
-		if (!this.printData.size)
+		if (!this.printData.size) {
 			return embedData
+		}
 		const allPrints = this.printData.get(locale)
-		if (!allPrints || !allPrints.size)
+		if (!allPrints || !allPrints.size) {
 			return embedData
+		}
+		// Official mode should not return data for unreleased cards.
+		if (official && !this.isReleased(locale)) {
+			return embedData
+		}
 		
 		const finalEmbed = new EmbedBuilder()
 
@@ -385,6 +401,10 @@ class Card {
 		// We shouldn't be here with no price data, but do a final sanity check to make sure we leave if so.
 		if (!this.products.length)
 			return embedData
+		// Official mode should not return price data (TCGPlayer is not an official source).
+		if (official) {
+			return embedData
+		}
 		
 		const finalEmbed = new EmbedBuilder()
 
@@ -485,15 +505,21 @@ class Card {
 	/**
 	 * Generates an embed containing the card's FAQ information.
 	 * @param {String} locale Which locale to use when generating the embed.
+	 * @param {Boolean} official Whether to only include official Konami information.
 	 * @returns The generated EmbedBuilder and its image attachment (if any).
 	 */
-	 async generateFaqEmbed(locale) {
+	 async generateFaqEmbed(locale, official) {
 		const embedData = {}
 
 		// We shouldn't be here without data for this locale, but do a final sanity check to make sure we leave if so.
-		if (!this.faqData.has(locale))
+		if (!this.faqData.has(locale)) {
 			return embedData
-		
+		}
+		// Official mode should only return FAQ data for Japanese locale (the only locale where FAQ data exists in an official capacity.)
+		if (official && locale !== 'ja') {
+			return embedData
+		}
+
 		const finalEmbed = new EmbedBuilder()
 
 		const cardName = this.name.get(locale)

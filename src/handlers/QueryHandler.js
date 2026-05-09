@@ -43,7 +43,7 @@ const processSteps = [
 	{
 		'searchFunction': searchYgoresourcesDb,
 		'dataHandler': convertYgoresourcesDataToSearchData,
-		'useForOfficial': false,
+		'useForOfficial': true,
 		'evaluatesTypes': new Set(['i', 'r', 'a', 'd', 'f', 'q', '$'])
 	},
 	// And another TCGPlayer search step because otherwise card price searches before a card's data is cached result in empty data.
