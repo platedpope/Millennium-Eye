@@ -40,10 +40,10 @@ module.exports = new Event({
 				return
 			}
 			
-			try { await message.channel.sendTyping() }
-			catch (err) {
-				// Probably didn't have permissions. Just ignore this.
-			}
+			// try { await message.channel.sendTyping() }
+			// catch (err) {
+			// 	// Probably didn't have permissions. Just ignore this.
+			// }
 		
 			await processQuery(qry)
 			
